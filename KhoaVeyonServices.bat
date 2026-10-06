@@ -19,6 +19,11 @@ REM  -unmute       unmute the speakers
 REM  -activitylog-start  start recording which app/window is active (no keystrokes, no passwords)
 REM  -activitylog-stop   stop recording
 REM  -exportlog          merge this PC's logs into one CSV file (opens in Excel)
+REM  -lockapp-start      kiosk mode: continuously allow ONLY the apps listed in
+REM                      KeepAppList.xlsx, closing anything else the moment it opens
+REM  -lockapp-stop       turn kiosk mode off
+REM  -clearhistory       close Chrome/Firefox and clear their browsing history
+REM                      (Firefox: this also clears bookmarks, see README)
 REM ============================================================
 
 REM ===== SETTINGS =====
@@ -47,10 +52,13 @@ if /i "%ACT%"=="-unmute"     set "MODE=unmute"
 if /i "%ACT%"=="-activitylog-start" set "MODE=activitylog-start"
 if /i "%ACT%"=="-activitylog-stop"  set "MODE=activitylog-stop"
 if /i "%ACT%"=="-exportlog"         set "MODE=exportlog"
+if /i "%ACT%"=="-lockapp-start"     set "MODE=lockapp-start"
+if /i "%ACT%"=="-lockapp-stop"      set "MODE=lockapp-stop"
+if /i "%ACT%"=="-clearhistory"      set "MODE=clearhistory"
 if not defined MODE goto HELP
 
 REM These run in the kid's own session, so they need no admin rights and no service
-for %%U in (killapp keepapp lockdown unlock mute unmute activitylog-start activitylog-stop exportlog) do if /i "%MODE%"=="%%U" goto RUNPS
+for %%U in (killapp keepapp lockdown unlock mute unmute activitylog-start activitylog-stop exportlog lockapp-start lockapp-stop clearhistory) do if /i "%MODE%"=="%%U" goto RUNPS
 
 REM Already admin / SYSTEM (for example when started by the service)? Do the work now.
 fltmc >nul 2>&1
@@ -82,12 +90,10 @@ for %%M in (blockall allowpage allowall blockapp unblockapp) do (
   sc create KhoaVeyonService_%%M binPath= "cmd.exe /c %SELF% -%%M" start= demand >nul
   sc sdset KhoaVeyonService_%%M "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;LCRPRC;;;IU)" >nul
 )
-REM Normal users may read and run files in this folder but not edit them
-icacls "%~dp0." /inheritance:r /grant:r "SYSTEM:(OI)(CI)F" "Administrators:(OI)(CI)F" "Users:(OI)(CI)RX" >nul
-
-REM Exception: C:\cmd\log must stay writable for students (the activity log is written as them)
+REM NOTE: C:\cmd is left editable by normal users (no icacls lock).
+REM The SYSTEM services below execute these .bat files as SYSTEM, so anyone who can
+REM edit this folder can run arbitrary code as SYSTEM. See the README security note.
 if not exist "C:\cmd\log" mkdir "C:\cmd\log" >nul 2>&1
-icacls "C:\cmd\log" /inheritance:r /grant:r "SYSTEM:(OI)(CI)F" "Administrators:(OI)(CI)F" "Users:(OI)(CI)M" >nul
 
 REM Auto-start activity logging whenever any student logs on (registered once, fires for every logon)
 powershell -NoProfile -Command ^
@@ -114,6 +120,7 @@ if errorlevel 1 (
 call "%SELF%" -allowall
 call "%SELF%" -unblockapp
 call "%SELF%" -activitylog-stop
+call "%SELF%" -lockapp-stop
 for %%M in (blockall allowpage allowall blockapp unblockapp) do (
   sc stop KhoaVeyonService_%%M >nul 2>&1
   sc delete KhoaVeyonService_%%M >nul 2>&1
@@ -134,7 +141,7 @@ powershell -NoProfile -Command ^
 exit /b 0
 
 :HELP
-echo Usage: KhoaVeyonService.bat [-install ^| -uninstall ^| -killapp ^| -blockall ^| -allowpage ^| -allowall ^| -blockapp ^| -unblockapp ^| -keepapp ^| -lockdown ^| -unlock ^| -mute ^| -unmute ^| -activitylog-start ^| -activitylog-stop ^| -exportlog]
+echo Usage: KhoaVeyonService.bat [-install ^| -uninstall ^| -killapp ^| -blockall ^| -allowpage ^| -allowall ^| -blockapp ^| -unblockapp ^| -keepapp ^| -lockdown ^| -unlock ^| -mute ^| -unmute ^| -activitylog-start ^| -activitylog-stop ^| -exportlog ^| -lockapp-start ^| -lockapp-stop ^| -clearhistory]
 exit /b 0
 
 #PS1START
@@ -143,12 +150,14 @@ $mode = $env:KV_MODE
 $dir  = $env:KV_DIR
 $list = $env:KV_LIST
 $log  = Join-Path $dir 'KhoaVeyonService.log'
-if (@('killapp','keepapp','lockdown','unlock','mute','unmute','activitylog-start','activitylog-stop','exportlog') -contains $mode) { $log = Join-Path $env:TEMP 'KhoaVeyonService.log' }
+if (@('killapp','keepapp','lockdown','unlock','mute','unmute','activitylog-start','activitylog-stop','exportlog','lockapp-start','lockapp-stop','clearhistory') -contains $mode) { $log = Join-Path $env:TEMP 'KhoaVeyonService.log' }
 $sid  = '*S-1-5-32-545'
 $pcname   = $env:COMPUTERNAME
 $logdir   = 'C:\cmd\log'
 $stopFlag = Join-Path $logdir ("activity_{0}.stop" -f $pcname)
 $pidFile  = Join-Path $logdir ("activity_{0}.pid" -f $pcname)
+$lockStopFlag = Join-Path $logdir ("lockapp_{0}.stop" -f $pcname)
+$lockPidFile  = Join-Path $logdir ("lockapp_{0}.pid" -f $pcname)
 if (-not (Test-Path $logdir)) { New-Item -ItemType Directory -Path $logdir -Force -ErrorAction SilentlyContinue | Out-Null }
 function TodayCsv { Join-Path $logdir ("activity_{0}_{1}.csv" -f $pcname, (Get-Date -Format 'yyyy-MM-dd')) }
 $actCsv = TodayCsv
@@ -396,6 +405,121 @@ switch ($mode) {
             Log "Closed: $n"
         }
         Log ("Kept names: {0}; kept paths: {1}" -f ($keepNames -join ', '), ($keepPaths -join ', '))
+    }
+
+    'lockapp-start' {
+        # Kiosk mode: continuously allow ONLY the apps in KeepAppList.xlsx. Anything else
+        # with a visible window is closed within a few seconds of opening.
+        $already = $false
+        if (Test-Path $lockPidFile) {
+            $oldPid = (Get-Content $lockPidFile -ErrorAction SilentlyContinue | Select-Object -First 1)
+            if ($oldPid -and (Get-Process -Id $oldPid -ErrorAction SilentlyContinue)) { $already = $true }
+        }
+        if ($already) {
+            Log 'Kiosk mode (lockapp) already running'
+        } else {
+            Remove-Item -LiteralPath $lockStopFlag -ErrorAction SilentlyContinue
+            $keepNames = @(); $keepPaths = @()
+            foreach ($k in @(Read-ColumnA (Join-Path $list 'KeepAppList.xlsx'))) {
+                $k = [Environment]::ExpandEnvironmentVariables($k).Trim('"')
+                if ($k -match '\\') { $keepPaths += $k.TrimEnd('\') }
+                elseif ($k) { $keepNames += ($k -replace '\.exe$', '').ToLower() }
+            }
+            # Pass the resolved whitelist (a snapshot of KeepAppList.xlsx at this moment)
+            # into the background worker. Run -lockapp-stop then -lockapp-start again to
+            # pick up changes made to the Excel file afterward.
+            $namesLit = ($keepNames | ForEach-Object { "'" + ($_ -replace "'", "''") + "'" }) -join ','
+            $pathsLit = ($keepPaths | ForEach-Object { "'" + ($_ -replace "'", "''") + "'" }) -join ','
+            $psCmd = @"
+`$stop  = '$lockStopFlag'
+`$log   = '$log'
+`$mode  = 'lockapp-start'
+`$keepNames = @($namesLit)
+`$keepPaths = @($pathsLit)
+`$protect = @('explorer','cmd','conhost','powershell','pwsh','veyon-server','veyon-worker','veyon-service','veyon-master',
+             'applicationframehost','shellexperiencehost','startmenuexperiencehost','searchhost','textinputhost',
+             'systemsettings','sihost','ctfmon','dwm')
+function Log(`$m) { try { Add-Content -Path `$log -Value ((Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '  [lockapp]  ' + `$m) } catch {} }
+`$session = (Get-Process -Id `$PID).SessionId
+while (-not (Test-Path `$stop)) {
+    try {
+        foreach (`$p in @(Get-Process -ErrorAction SilentlyContinue)) {
+            if (`$p.SessionId -ne `$session -or `$p.MainWindowHandle -eq 0) { continue }
+            `$n = `$p.ProcessName.ToLower()
+            if (`$protect -contains `$n -or `$keepNames -contains `$n) { continue }
+            `$path = `$null
+            try { `$path = `$p.Path } catch {}
+            if (`$path) {
+                `$kept = `$false
+                foreach (`$kp in `$keepPaths) { if (`$path -like "`$kp*") { `$kept = `$true } }
+                if (`$kept) { continue }
+            }
+            Stop-Process -Id `$p.Id -Force -ErrorAction SilentlyContinue
+            Log "Closed (not in KeepAppList): `$n"
+        }
+    } catch {}
+    Start-Sleep -Seconds 3
+}
+"@
+            $tmp = Join-Path $logdir ("lockapp_{0}_worker.ps1" -f $pcname)
+            Set-Content -LiteralPath $tmp -Value $psCmd -Encoding UTF8
+            $p = Start-Process powershell -ArgumentList @('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',$tmp) -WindowStyle Hidden -PassThru
+            Set-Content -LiteralPath $lockPidFile -Value $p.Id
+            Log ("Kiosk mode STARTED (pid $($p.Id)). Allowed: {0} {1}" -f ($keepNames -join ', '), ($keepPaths -join ', '))
+        }
+    }
+
+    'lockapp-stop' {
+        New-Item -ItemType File -Path $lockStopFlag -Force -ErrorAction SilentlyContinue | Out-Null
+        Start-Sleep -Seconds 1
+        if (Test-Path $lockPidFile) {
+            $oldPid = Get-Content $lockPidFile -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($oldPid) { Stop-Process -Id $oldPid -Force -ErrorAction SilentlyContinue }
+            Remove-Item -LiteralPath $lockPidFile -ErrorAction SilentlyContinue
+        }
+        Log 'Kiosk mode (lockapp) STOPPED'
+    }
+
+    'clearhistory' {
+        # Browsers must be closed first: the history file is locked while they run.
+        Get-Process -Name 'chrome','firefox' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+        $cleared = @()
+
+        # Chrome / Chromium-based: delete only the History file(s). Bookmarks live in a
+        # separate "Bookmarks" file and are not touched.
+        $chromeRoot = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'
+        if (Test-Path -LiteralPath $chromeRoot) {
+            Get-ChildItem -LiteralPath $chromeRoot -Directory -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -eq 'Default' -or $_.Name -like 'Profile *' } |
+                ForEach-Object {
+                    foreach ($f in @('History','History-journal')) {
+                        $p = Join-Path $_.FullName $f
+                        if (Test-Path -LiteralPath $p) {
+                            Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+                            $cleared += "Chrome:$($_.Name)"
+                        }
+                    }
+                }
+        }
+
+        # Firefox: history and bookmarks share one file (places.sqlite). There is no
+        # built-in SQLite tool here to remove just the history rows, so the whole file
+        # is deleted, which also clears bookmarks. See README for details.
+        $ffRoot = Join-Path $env:APPDATA 'Mozilla\Firefox\Profiles'
+        if (Test-Path -LiteralPath $ffRoot) {
+            Get-ChildItem -LiteralPath $ffRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+                foreach ($f in @('places.sqlite','places.sqlite-wal','places.sqlite-shm')) {
+                    $p = Join-Path $_.FullName $f
+                    if (Test-Path -LiteralPath $p) {
+                        Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+                        $cleared += "Firefox:$($_.Name)"
+                    }
+                }
+            }
+        }
+
+        Log ("Cleared browsing history: {0}" -f (($cleared | Select-Object -Unique) -join ', '))
     }
 
     'lockdown' {
