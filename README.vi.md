@@ -109,13 +109,14 @@ Windows sẽ hỏi tên và mật khẩu admin (UAC). Khi thấy `Install done` 
 `-install` làm hai việc:
 
 - Tạo một dịch vụ Windows nhỏ cho mỗi chức năng cần quyền admin (`KhoaVeyonService_blockall`, `_allowpage`, `_allowall`, `_blockapp`, `_unblockapp`). Người dùng thường được phép **khởi động** các dịch vụ này nhưng không được sửa chúng.
-- Đặt `C:\cmd` ở chế độ chỉ đọc với người dùng thường, để học sinh không sửa được script hay các danh sách.
+- `C:\cmd` **không bị khóa**: người dùng thường (học sinh) đọc, chạy và cũng **sửa được** mọi thứ trong đó, kể cả chính file `KhoaVeyonService.bat`. Xem [Lưu ý bảo mật](#lưu-ý-bảo-mật) để biết ý nghĩa của việc này.
+- Đăng ký một tác vụ theo lịch (`KhoaVeyonAutoLog`), tự bắt đầu ghi log hoạt động cho bất kỳ học sinh nào đăng nhập (xem [Log hoạt động và xuất dữ liệu](#log-hoạt-động-và-xuất-dữ-liệu)).
 
 ### Bước 4: Khởi chạy ứng dụng từ máy chủ
 
 Từ giờ mọi việc làm từ Veyon Master trên máy chủ. Thêm mỗi chức năng một mục trong Veyon (xem [Thêm chức năng vào Veyon](#thêm-chức-năng-vào-veyon)), chọn các máy học sinh và dùng **Run program** (ở một số phiên bản gọi là **Start application**) để chạy `C:\cmd\KhoaVeyonService.bat` kèm một tham số như `-blockall`.
 
-Khi cần cập nhật script hoặc danh sách, lặp lại Bước 2 từ máy chủ. Vì `C:\cmd` chỉ đọc với học sinh, bạn có thể cần quyền admin trên máy học sinh để ghi đè các file đã có.
+Khi cần cập nhật script hoặc danh sách, lặp lại Bước 2 từ máy chủ.
 
 ## Các tham số
 
@@ -134,10 +135,84 @@ Khi cần cập nhật script hoặc danh sách, lặp lại Bước 2 từ máy
 | `-unlock` | Không | Hoàn tác `-lockdown`. `-unlockdown` cũng dùng được. |
 | `-mute` | Không | Tắt tiếng loa mặc định. |
 | `-unmute` | Không | Bật tiếng lại. |
+| `-activitylog-start` | Không | Bắt đầu ghi lại tên cửa sổ/ứng dụng đang hoạt động, kèm ngày, giờ, tên người dùng và mã máy, vào file CSV. **Không ghi phím bấm, chữ gõ hay mật khẩu.** |
+| `-activitylog-stop` | Không | Dừng ghi. |
+| `-exportlog` | Không | Gộp log hoạt động và log hành động của máy này thành một file CSV, sẵn sàng thu thập và mở bằng Excel. |
+| `-lockapp-start` | Không | **Chế độ kiosk.** Chỉ cho phép dùng các ứng dụng trong `KeepAppList.xlsx`, liên tục giám sát; mọi ứng dụng khác sẽ bị đóng trong vòng vài giây sau khi mở. |
+| `-lockapp-stop` | Không | Tắt chế độ kiosk. |
+| `-clearhistory` | Không | Đóng Chrome và Firefox, sau đó xóa lịch sử duyệt web. **Với Firefox, việc này cũng xóa luôn bookmark** (xem bên dưới). |
+
+> **Về `-activitylog-start`:** chức năng này cố tình chỉ giới hạn ở *cửa sổ/ứng dụng nào đang hoạt động và vào lúc nào*, không ghi nội dung gõ. Ghi phím bấm trên máy tính của trẻ em là rủi ro quyền riêng tư nghiêm trọng, nên dự án này không có chức năng đó. Hãy thông báo cho học sinh và phụ huynh rằng hoạt động được ghi lại, phù hợp với quy định của nhà trường.
 
 Chạy không có tham số (hoặc tham số sai) sẽ in ra dòng hướng dẫn cách dùng.
 
 Việc chặn internet vẫn còn sau khi khởi động lại máy, cho đến khi bạn chạy `-allowall`.
+
+## Ghi log đầy đủ, từ học sinh đến admin
+
+Mọi tham số giờ đều ghi log, từ hành động do học sinh kích hoạt (`-killapp`, `-keepapp`, `-lockdown`, `-mute`...) đến hành động ở mức admin (`-blockall`, `-blockapp`...) và cả `-install` / `-uninstall`. Không có hành động nào chạy âm thầm nữa.
+
+Mỗi dòng log ghi:
+
+```
+<ngày> <giờ>  PC=<tên máy>  Student=<học sinh đang đăng nhập>  RunAs=<tài khoản thực thi>  [<tham số>]  <nội dung>
+```
+
+- **`Student`** luôn là người đang thực sự ngồi trước máy, lấy từ phiên đăng nhập trên màn hình — kể cả khi chính hành động đó chạy dưới quyền SYSTEM (các tham số mức admin) hoặc dưới một tài khoản admin khác (`-install` / `-uninstall`).
+- **`RunAs`** là tài khoản mà đoạn mã thực sự chạy dưới quyền đó (tài khoản học sinh với các tham số chạy trong phiên người dùng, `SYSTEM` với các tham số mức admin chạy qua dịch vụ, hoặc tài khoản admin dùng khi `-install`/`-uninstall`).
+
+Nhờ vậy, chỉ một dòng log đã cho biết đủ: *máy nào*, *học sinh nào đang ở đó*, *ai/cái gì đã thực thi*, và *chuyện gì đã xảy ra* — đầy đủ chuỗi từ thao tác của học sinh đến hành động ở mức admin mà nó kích hoạt.
+
+## Chế độ kiosk (`-lockapp-start` / `-lockapp-stop`)
+
+`-keepapp` (đã nói ở trên) chỉ đóng các ứng dụng ngoài danh sách **một lần**, tại đúng thời điểm bạn chạy lệnh. `-lockapp-start` làm việc tương tự nhưng **liên tục**: chạy nền và đóng ngay bất kỳ ứng dụng nào không có trong `KeepAppList.xlsx` ngay khi nó xuất hiện, cho đến khi bạn tắt chế độ này. Dùng chung danh sách loại trừ (Explorer, Veyon, cmd, PowerShell...) và đúng định dạng `KeepAppList.xlsx` đã mô tả ở trên.
+
+- Thêm vào Veyon: `C:\cmd\KhoaVeyonService.bat -lockapp-start` và `C:\cmd\KhoaVeyonService.bat -lockapp-stop`.
+- Không cần quyền admin, không cần `-install`, giống `-activitylog-start`.
+- **Danh sách chỉ được đọc một lần, lúc bật chế độ kiosk**, không tự đọc lại mỗi lần kiểm tra. Nếu sửa `KeepAppList.xlsx` trong lúc chế độ kiosk đang chạy, hãy chạy `-lockapp-stop` rồi `-lockapp-start` lại để áp dụng thay đổi.
+- Chạy độc lập với log hoạt động; bật/tắt cái này không ảnh hưởng tới cái kia.
+- Học sinh mở một ứng dụng ngoài danh sách sẽ thấy nó hiện ra rồi tự đóng trong vài giây, chứ không bị chặn mở ngay từ đầu. Nếu muốn chặn mở ngay lập tức, dùng `-blockapp` (xem [File danh sách Excel](#file-danh-sách-excel)), vì nó chặn chương trình chạy từ đầu.
+- Mỗi ứng dụng bị đóng đều được ghi log, nên cũng xuất hiện trong file CSV hằng ngày (xem bên dưới).
+
+## Xóa lịch sử duyệt web (`-clearhistory`)
+
+```
+C:\cmd\KhoaVeyonService.bat -clearhistory
+```
+
+- **Đóng Chrome và Firefox trước**, vì file lịch sử bị khóa khi trình duyệt đang chạy. Mọi tab đang mở hoặc việc chưa lưu trong trình duyệt sẽ mất — coi như `-killapp` áp dụng riêng cho 2 app này.
+- **Chrome:** chỉ xóa file `History` (và file journal của nó) trong từng thư mục hồ sơ (`Default`, `Profile 1`, `Profile 2`...). Bookmark nằm ở file `Bookmarks` riêng, **không** bị ảnh hưởng.
+- **Firefox:** lịch sử và bookmark cùng nằm trong 1 file `places.sqlite`, và Windows/PowerShell không có sẵn công cụ SQLite để chỉ xóa riêng các dòng lịch sử. Vì vậy tham số này xóa hẳn `places.sqlite`, **cũng xóa luôn bookmark Firefox**. Nếu học sinh có lưu bookmark Firefox quan trọng, hãy sao lưu trước (menu Firefox → Bookmarks → Manage Bookmarks → Export) hoặc tránh chạy lệnh này trên các hồ sơ Firefox còn bookmark cần giữ.
+- Mật khẩu đã lưu trong trình duyệt, cookie và dữ liệu trang web **không** bị ảnh hưởng, chỉ xóa lịch sử (và với Firefox là cả bookmark).
+- Chạy trong phiên của học sinh, không cần quyền admin.
+
+## Log hoạt động và xuất dữ liệu
+
+Tất cả nằm trong `C:\cmd\log` trên mỗi máy, **mỗi máy mỗi ngày một file CSV**:
+
+```
+C:\cmd\log\activity_<PCNAME>_<yyyy-MM-dd>.csv
+```
+
+Các cột: `Date, Time, PCName, User, Window, Process, Event`. `Event` có 3 loại:
+
+- `change` — cửa sổ/ứng dụng đang hoạt động thay đổi.
+- `autosave` — dòng tự động ghi mỗi 3 phút, để file không bao giờ cũ quá 3 phút, kể cả khi không có gì thay đổi.
+- `action` — sự kiện chặn/cho phép mạng, chặn ứng dụng... được gộp từ log hành động, cột `Window` để trống, nội dung nằm trong `Event` (ví dụ `action: Internet BLOCKED`).
+
+Các dòng chỉ được **thêm vào**, không bao giờ ghi đè, nên file lưu lũy tiến suốt cả ngày. Đến nửa đêm, tiến trình ghi tự chuyển sang file của ngày mới, không cần khởi động lại.
+
+### Tự động chạy khi mở máy
+
+`-install` đăng ký một tác vụ theo lịch (`KhoaVeyonAutoLog`), chạy mỗi khi có người đăng nhập, với bất kỳ tài khoản học sinh nào, và tự chạy `-activitylog-start`. Bạn không cần thêm gì vào Veyon cho việc này; nó tự chạy ngay khi học sinh đăng nhập. `-activitylog-start` sẽ không làm gì nếu đã đang chạy sẵn trên máy đó, nên đăng nhập lại hoặc chạy tay thêm lần nữa cũng không sao.
+
+### `-exportlog` (tùy chọn, chạy tay)
+
+Các dòng `autosave` mỗi 3 phút đã tự giữ file của hôm nay luôn mới. `-exportlog` chỉ hữu ích khi bạn muốn gộp ngay các sự kiện chặn/cho phép mới nhất vào file **ngay lúc đó**, không cần chờ tới 3 phút. Chạy lại nhiều lần vẫn an toàn, vì nó chỉ thêm những dòng chưa được gộp.
+
+### Thu thập file
+
+Dùng tính năng chuyển file của Veyon (chiều tải xuống, nếu phiên bản của bạn hỗ trợ) hoặc chép tay các file `C:\cmd\log\activity_*.csv` từ mỗi máy. Mọi file đều mở trực tiếp bằng Excel, không cần chuyển sang `.xlsx`.
 
 ## File danh sách Excel
 
@@ -183,7 +258,7 @@ C:\Games\KidsLearning
 
 Mặc định các danh sách được đọc từ `C:\cmd\`. Để dùng chung một bản cho mọi máy, hãy đổi `LISTDIR` ở đầu script thành đường dẫn mạng (giữ dấu `\` ở cuối). Thư mục chia sẻ phải đọc được bởi tài khoản máy tính (với các chức năng cần admin) và bởi tài khoản học sinh (với `-keepapp`).
 
-Vì `-install` đặt `C:\cmd` chỉ đọc với người dùng thường, bạn cập nhật danh sách bằng tài khoản quản trị.
+Vì `C:\cmd` không bị khóa, bạn có thể cập nhật danh sách bằng bất kỳ tài khoản nào truy cập được thư mục — nhưng học sinh cũng làm được như vậy, nên hãy coi như danh sách có thể bị học sinh sửa.
 
 ## Thêm chức năng vào Veyon
 
@@ -269,7 +344,11 @@ Lệnh này gỡ việc chặn internet, các chặn ứng dụng và các dịc
 ## Lưu ý bảo mật
 
 - Script **không chứa mật khẩu**. Quyền admin được cấp một lần khi cài đặt, qua hộp thoại UAC của Windows.
-- Các dịch vụ chạy script dưới quyền SYSTEM, nên ai sửa được `C:\cmd` đều có thể chạy lệnh với quyền SYSTEM. Vì vậy `-install` đặt thư mục này chỉ đọc với người dùng thường. Hãy để học sinh dùng tài khoản thường và không cấp quyền ghi vào thư mục này.
+- **`C:\cmd` ghi được với người dùng thường, và các dịch vụ mức admin chạy `KhoaVeyonService.bat` dưới quyền SYSTEM.** Nghĩa là bất kỳ ai sửa được một file trong `C:\cmd` — kể cả học sinh — đều có thể khiến các dịch vụ SYSTEM chạy mã tùy ý ở lần khởi động tiếp theo, đây là lỗ hổng leo thang quyền thực sự. Trước đây dự án khóa thư mục này chỉ đọc chính vì lý do đó; việc khóa đã được gỡ theo yêu cầu. Nếu muốn khôi phục bảo vệ, chạy lại trên từng máy:
+  ```
+  icacls "C:\cmd" /inheritance:r /grant:r "SYSTEM:(OI)(CI)F" "Administrators:(OI)(CI)F" "Users:(OI)(CI)RX" /T
+  ```
+  (chạy với quyền admin; lệnh này cũng xóa quyền ghi hiện có của học sinh, kể cả vào `C:\cmd\log`, nên thêm lại ngoại lệ ghi được cho thư mục đó nếu vẫn muốn dùng log hoạt động: `icacls "C:\cmd\log" /inheritance:r /grant:r "SYSTEM:(OI)(CI)F" "Administrators:(OI)(CI)F" "Users:(OI)(CI)M"`).
 - Hãy thông báo cho học sinh và phụ huynh rằng các công cụ lớp học có thể hạn chế máy tính, phù hợp với quy định của nhà trường.
 
 ## Giấy phép

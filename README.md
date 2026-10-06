@@ -109,13 +109,14 @@ Windows asks for the admin name and password (UAC). You should see `Install done
 `-install` does two things:
 
 - It creates one small Windows service per admin-level action (`KhoaVeyonService_blockall`, `_allowpage`, `_allowall`, `_blockapp`, `_unblockapp`). Standard users may **start** these services but not edit them.
-- It makes `C:\cmd` read-only for normal users, so students cannot change the script or the lists.
+- `C:\cmd` is **not** locked down: normal (student) users can read, run, and also edit everything in it, including `KhoaVeyonService.bat` itself. See [Security notes](#security-notes) for what this means.
+- It registers a logon task (`KhoaVeyonAutoLog`) that starts activity logging automatically for whichever student logs in (see [Activity log and export](#activity-log-and-export)).
 
 ### Step 4: Start applications from the server
 
 From now on everything is done from Veyon Master on the server. Add an entry per action in Veyon (see [Adding the actions to Veyon](#adding-the-actions-to-veyon)), select the student PCs, and use **Run program** (called **Start application** in some versions) to start `C:\cmd\KhoaVeyonService.bat` with a switch such as `-blockall`.
 
-To update the script or the lists later, repeat Step 2 from the server. Because `C:\cmd` is read-only for students, you may need admin rights on the client to overwrite files that are already there.
+To update the script or the lists later, repeat Step 2 from the server.
 
 ## Switches
 
@@ -134,10 +135,84 @@ To update the script or the lists later, repeat Step 2 from the server. Because 
 | `-unlock` | No | Undoes `-lockdown`. `-unlockdown` also works. |
 | `-mute` | No | Mutes the default speakers. |
 | `-unmute` | No | Unmutes them. |
+| `-activitylog-start` | No | Starts recording the active window title, process name, date, time, user and PC name to a CSV file. **Does not record keystrokes, typed text, or passwords.** |
+| `-activitylog-stop` | No | Stops recording. |
+| `-exportlog` | No | Merges this PC's activity log and action log into one CSV file, ready to collect and open in Excel. |
+| `-lockapp-start` | No | **Kiosk mode.** Continuously allows only the apps listed in `KeepAppList.xlsx`; anything else is closed within a few seconds of opening. |
+| `-lockapp-stop` | No | Turns kiosk mode off. |
+| `-clearhistory` | No | Closes Chrome and Firefox, then clears their browsing history. **For Firefox this also clears bookmarks** (see below). |
+
+> **About `-activitylog-start`:** this is intentionally limited to *which window/app was active and when*, not what was typed. Recording keystrokes on children's computers is a serious privacy risk and this project does not include that capability. Tell students and parents that activity is recorded, in line with your school's policy.
 
 Run with no switch (or an unknown one) to print the usage line.
 
 The internet block stays in place after a reboot until you run `-allowall`.
+
+## Full logging coverage
+
+Every switch now writes a log line, from student-triggered actions (`-killapp`, `-keepapp`, `-lockdown`, `-mute`...) through to admin-level actions (`-blockall`, `-blockapp`...) and `-install` / `-uninstall` themselves. Nothing runs silently.
+
+Each line records:
+
+```
+<date> <time>  PC=<computer name>  Student=<logged-in student>  RunAs=<account the code executed as>  [<switch>]  <message>
+```
+
+- **`Student`** is always the person actually sitting at the keyboard, resolved from the active console session — even when the action itself runs as SYSTEM (the admin-level switches) or as a different admin account (`-install` / `-uninstall`).
+- **`RunAs`** is the account the code executed under (the student account for user-session switches, `SYSTEM` for admin-level switches run through the service, or the admin account used for `-install`/`-uninstall`).
+
+This means a single log line always tells you *which PC*, *which student was there*, *what ran it*, and *what happened* — the full chain from student input to the admin-level action it triggered.
+
+## Kiosk mode (`-lockapp-start` / `-lockapp-stop`)
+
+`-keepapp` (covered above) closes everything except the listed apps **once**, at the moment you run it. `-lockapp-start` does the same thing, but **continuously**: it runs in the background and closes anything that is not in `KeepAppList.xlsx` the moment it appears, for as long as it keeps running. It shares the exclusion list (Explorer, Veyon, cmd, PowerShell...) and the same `KeepAppList.xlsx` format described above.
+
+- Add it to Veyon: `C:\cmd\KhoaVeyonService.bat -lockapp-start` and `C:\cmd\KhoaVeyonService.bat -lockapp-stop`.
+- Needs no admin rights and no `-install`, same as `-activitylog-start`.
+- **The whitelist is read once, when you start kiosk mode**, not re-read on every check. If you edit `KeepAppList.xlsx` while kiosk mode is already running, run `-lockapp-stop` then `-lockapp-start` again to pick up the change.
+- Runs independently from the activity log; starting or stopping one does not affect the other.
+- A student opening something not on the list will see it flash open and close within a few seconds, rather than being blocked from opening at all. For an instant block instead, use `-blockapp` (see [Excel list files](#excel-list-files)), which prevents the program from running in the first place.
+- Every closed app is written to the log, so it also shows up in the daily CSV (see below).
+
+## Clear browsing history (`-clearhistory`)
+
+```
+C:\cmd\KhoaVeyonService.bat -clearhistory
+```
+
+- **Closes Chrome and Firefox first**, because the history file is locked while a browser is running. Any open tabs or unsaved work in the browser are lost — treat this the same as `-killapp` for those two apps.
+- **Chrome:** deletes only the `History` file (and its journal) in every profile folder (`Default`, `Profile 1`, `Profile 2`...). Bookmarks live in a separate `Bookmarks` file and are **not** touched.
+- **Firefox:** history and bookmarks are both stored in one file, `places.sqlite`, and there is no SQLite tool built into Windows/PowerShell that can remove just the history rows. So this switch deletes `places.sqlite` entirely, which **also clears Firefox bookmarks**. If your students rely on saved Firefox bookmarks, either back them up first (Firefox menu → Bookmarks → Manage Bookmarks → Export) or avoid running this switch on Firefox profiles that have bookmarks worth keeping.
+- Passwords saved in the browser, cookies and site data are **not** touched by this switch; it only removes history (and, for Firefox, bookmarks).
+- Runs in the student's session, no admin rights needed.
+
+## Activity log and export
+
+Everything lives in `C:\cmd\log` on each client, one CSV file **per PC per day**:
+
+```
+C:\cmd\log\activity_<PCNAME>_<yyyy-MM-dd>.csv
+```
+
+Columns: `Date, Time, PCName, User, Window, Process, Event`. `Event` is one of:
+
+- `change` — the active window/app changed.
+- `autosave` — an automatic row written every 3 minutes, so the file is never more than 3 minutes out of date, even with no change.
+- `action` — a block/allow/app-block/etc. event merged in from the action log, in the `Window` → left blank and the detail placed under `Event` (e.g. `action: Internet BLOCKED`).
+
+Rows are only ever **appended**, never overwritten, so the file accumulates through the whole day. At midnight the worker switches to the next day's file by itself, with no restart needed.
+
+### Starts automatically when the PC turns on
+
+`-install` registers a scheduled task (`KhoaVeyonAutoLog`) that fires at every logon, for any student account, and runs `-activitylog-start`. You do not need to add anything to Veyon for this to work; it runs on its own from the moment a student logs in. `-activitylog-start` does nothing if it is already running on that PC, so a double logon or a manual run afterwards is harmless.
+
+### `-exportlog` (optional, manual)
+
+The 3-minute `autosave` rows already keep today's file current on their own. `-exportlog` is only useful if you want the latest block/allow/app-block events merged in **right now**, without waiting up to 3 minutes. It is safe to run repeatedly; it only adds the lines it has not merged yet.
+
+### Collecting the files
+
+Use Veyon's file transfer (download direction, if your version supports it) or copy `C:\cmd\log\activity_*.csv` from each client. Every file opens directly in Excel; no `.xlsx` conversion is needed.
 
 ## Excel list files
 
@@ -183,7 +258,7 @@ C:\Games\KidsLearning
 
 By default the lists are read from `C:\cmd\`. To use one shared copy for every PC, change `LISTDIR` near the top of the script to a network path (keep the trailing backslash). The share must be readable by the computer accounts (for the admin-level actions) and by the student accounts (for `-keepapp`).
 
-Because `-install` makes `C:\cmd` read-only for normal users, you update the lists as an administrator.
+Since `C:\cmd` is not locked down, you can update the lists as any user who can reach the folder — but so can students, so treat the lists as editable by them too.
 
 ## Adding the actions to Veyon
 
@@ -269,7 +344,11 @@ This removes the internet block, the app blocks and the services. You can then d
 ## Security notes
 
 - The script contains **no passwords**. Admin rights are provided once, at install, through the Windows UAC prompt.
-- The services run the script as SYSTEM, so anyone who can edit `C:\cmd` could run commands as SYSTEM. That is why `-install` makes the folder read-only for normal users. Keep students on standard accounts and do not give them write access to this folder.
+- **`C:\cmd` is writable by normal users, and the admin-level services run `KhoaVeyonService.bat` as SYSTEM.** This means anyone who can edit a file in `C:\cmd` — including a student — can make the SYSTEM services run arbitrary code the next time they are started, which is a genuine privilege-escalation path. This project used to lock the folder read-only for this exact reason; the lock was removed on request. If you need that protection back, re-add it on each PC:
+  ```
+  icacls "C:\cmd" /inheritance:r /grant:r "SYSTEM:(OI)(CI)F" "Administrators:(OI)(CI)F" "Users:(OI)(CI)RX" /T
+  ```
+  (run as administrator; this also removes any write access students currently have, including to `C:\cmd\log`, so re-add a writable exception for that folder if you still want the activity log: `icacls "C:\cmd\log" /inheritance:r /grant:r "SYSTEM:(OI)(CI)F" "Administrators:(OI)(CI)F" "Users:(OI)(CI)M"`).
 - Tell your students and their parents that the classroom tools can restrict the PC, in line with your school's policy.
 
 ## License
