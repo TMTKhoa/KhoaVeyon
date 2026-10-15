@@ -1,7 +1,7 @@
 @echo off
 setlocal
 REM ============================================================
-REM  KhoaVeyonService.bat  -  for Veyon clients (keep in C:\cmd)
+REM  KhoaVeyonServices.bat  -  for Veyon clients (keep in C:\cmd)
 REM
 REM  -install      one-time setup per PC (needs admin password once)
 REM  -uninstall    remove services, rules and app blocks
@@ -22,6 +22,13 @@ REM  -exportlog          merge this PC's logs into one CSV file (opens in Excel)
 REM  -lockapp-start      kiosk mode: continuously allow ONLY the apps listed in
 REM                      KeepAppList.xlsx, closing anything else the moment it opens
 REM  -lockapp-stop       turn kiosk mode off
+REM  -lockrun-start      BLOCK OPENING of every app NOT listed in KeepAppList.xlsx
+REM                      (Windows RestrictRun policy, per user, no admin needed)
+REM  -lockrun-stop       turn that block off again
+REM  -lockall-start      ONE COMMAND: block ALL apps except those in KeepAppList.xlsx
+REM                      (blocks opening + closes anything else + locks Task Manager,
+REM                      Settings, Registry Editor, cmd and PowerShell)
+REM  -lockall-stop       undo all of the above
 REM  -clearhistory       close Chrome/Firefox and clear their browsing history
 REM                      (Firefox: this also clears bookmarks, see README)
 REM ============================================================
@@ -55,10 +62,14 @@ if /i "%ACT%"=="-exportlog"         set "MODE=exportlog"
 if /i "%ACT%"=="-lockapp-start"     set "MODE=lockapp-start"
 if /i "%ACT%"=="-lockapp-stop"      set "MODE=lockapp-stop"
 if /i "%ACT%"=="-clearhistory"      set "MODE=clearhistory"
+if /i "%ACT%"=="-lockrun-start"      set "MODE=lockrun-start"
+if /i "%ACT%"=="-lockrun-stop"       set "MODE=lockrun-stop"
+if /i "%ACT%"=="-lockall-start"      set "MODE=lockall-start"
+if /i "%ACT%"=="-lockall-stop"       set "MODE=lockall-stop"
 if not defined MODE goto HELP
 
 REM These run in the kid's own session, so they need no admin rights and no service
-for %%U in (killapp keepapp lockdown unlock mute unmute activitylog-start activitylog-stop exportlog lockapp-start lockapp-stop clearhistory) do if /i "%MODE%"=="%%U" goto RUNPS
+for %%U in (killapp keepapp lockdown unlock mute unmute activitylog-start activitylog-stop exportlog lockapp-start lockapp-stop clearhistory lockrun-start lockrun-stop lockall-start lockall-stop) do if /i "%MODE%"=="%%U" goto RUNPS
 
 REM Already admin / SYSTEM (for example when started by the service)? Do the work now.
 fltmc >nul 2>&1
@@ -75,7 +86,7 @@ exit /b 0
 :VIAUSER
 REM Normal (kid) account: ask the SYSTEM service to do the work
 sc start KhoaVeyonService_%MODE% >nul 2>&1
-if %errorlevel%==1060 echo Service not installed. Run KhoaVeyonService.bat -install as admin.
+if %errorlevel%==1060 echo Service not installed. Run KhoaVeyonServices.bat -install as admin.
 exit /b 0
 
 :INSTALL
@@ -121,6 +132,7 @@ call "%SELF%" -allowall
 call "%SELF%" -unblockapp
 call "%SELF%" -activitylog-stop
 call "%SELF%" -lockapp-stop
+call "%SELF%" -lockall-stop
 for %%M in (blockall allowpage allowall blockapp unblockapp) do (
   sc stop KhoaVeyonService_%%M >nul 2>&1
   sc delete KhoaVeyonService_%%M >nul 2>&1
@@ -141,7 +153,7 @@ powershell -NoProfile -Command ^
 exit /b 0
 
 :HELP
-echo Usage: KhoaVeyonService.bat [-install ^| -uninstall ^| -killapp ^| -blockall ^| -allowpage ^| -allowall ^| -blockapp ^| -unblockapp ^| -keepapp ^| -lockdown ^| -unlock ^| -mute ^| -unmute ^| -activitylog-start ^| -activitylog-stop ^| -exportlog ^| -lockapp-start ^| -lockapp-stop ^| -clearhistory]
+echo Usage: KhoaVeyonServices.bat [-install ^| -uninstall ^| -killapp ^| -blockall ^| -allowpage ^| -allowall ^| -blockapp ^| -unblockapp ^| -keepapp ^| -lockdown ^| -unlock ^| -mute ^| -unmute ^| -activitylog-start ^| -activitylog-stop ^| -exportlog ^| -lockapp-start ^| -lockapp-stop ^| -lockrun-start ^| -lockrun-stop ^| -lockall-start ^| -lockall-stop ^| -clearhistory]
 exit /b 0
 
 #PS1START
@@ -150,7 +162,7 @@ $mode = $env:KV_MODE
 $dir  = $env:KV_DIR
 $list = $env:KV_LIST
 $log  = Join-Path $dir 'KhoaVeyonService.log'
-if (@('killapp','keepapp','lockdown','unlock','mute','unmute','activitylog-start','activitylog-stop','exportlog','lockapp-start','lockapp-stop','clearhistory') -contains $mode) { $log = Join-Path $env:TEMP 'KhoaVeyonService.log' }
+if (@('killapp','keepapp','lockdown','unlock','mute','unmute','activitylog-start','activitylog-stop','exportlog','lockapp-start','lockapp-stop','clearhistory','lockrun-start','lockrun-stop','lockall-start','lockall-stop') -contains $mode) { $log = Join-Path $env:TEMP 'KhoaVeyonService.log' }
 $sid  = '*S-1-5-32-545'
 $pcname   = $env:COMPUTERNAME
 $logdir   = 'C:\cmd\log'
@@ -180,6 +192,12 @@ function Log($m) {
         Add-Content -Path $log -Value ("{0}  PC={1}  Student={2}  RunAs={3}  [{4}]  {5}" -f `
             (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $pcname, $kvStudent, $kvRunAs, $mode, $m)
     } catch {}
+}
+
+# Explorer only reads the RestrictRun policy when it starts, so restart it (Windows relaunches it by itself)
+function Restart-UserShell {
+    $sess = (Get-Process -Id $PID).SessionId
+    Get-Process -Name explorer -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $sess } | Stop-Process -Force -ErrorAction SilentlyContinue
 }
 
 # ---------- read column A of the first sheet of an .xlsx (Excel not needed) ----------
@@ -430,21 +448,31 @@ switch ($mode) {
             # pick up changes made to the Excel file afterward.
             $namesLit = ($keepNames | ForEach-Object { "'" + ($_ -replace "'", "''") + "'" }) -join ','
             $pathsLit = ($keepPaths | ForEach-Object { "'" + ($_ -replace "'", "''") + "'" }) -join ','
+            # KV_STRICT=1 (set by -lockall-start): cmd, PowerShell, Settings are NOT exempt from closing
+            $prot = @('explorer','veyon-server','veyon-worker','veyon-service','veyon-master','applicationframehost','shellexperiencehost','startmenuexperiencehost','searchhost','textinputhost','sihost','ctfmon','dwm')
+            if ($env:KV_STRICT -ne '1') { $prot += @('cmd','conhost','powershell','pwsh','systemsettings') }
+            $protLit = ($prot | ForEach-Object { "'" + $_ + "'" }) -join ','
+            $strictLit = if ($env:KV_STRICT -eq '1') { '$true' } else { '$false' }
             $psCmd = @"
 `$stop  = '$lockStopFlag'
 `$log   = '$log'
 `$mode  = 'lockapp-start'
 `$keepNames = @($namesLit)
 `$keepPaths = @($pathsLit)
-`$protect = @('explorer','cmd','conhost','powershell','pwsh','veyon-server','veyon-worker','veyon-service','veyon-master',
-             'applicationframehost','shellexperiencehost','startmenuexperiencehost','searchhost','textinputhost',
-             'systemsettings','sihost','ctfmon','dwm')
+`$protect = @($protLit)
+`$strict = $strictLit
 function Log(`$m) { try { Add-Content -Path `$log -Value ((Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '  [lockapp]  ' + `$m) } catch {} }
 `$session = (Get-Process -Id `$PID).SessionId
 while (-not (Test-Path `$stop)) {
     try {
         foreach (`$p in @(Get-Process -ErrorAction SilentlyContinue)) {
-            if (`$p.SessionId -ne `$session -or `$p.MainWindowHandle -eq 0) { continue }
+            if (`$p.SessionId -ne `$session) { continue }
+            if (`$p.MainWindowHandle -eq 0) {
+                if (-not `$strict) { continue }
+                `$pp = `$null
+                try { `$pp = `$p.Path } catch {}
+                if (-not `$pp -or `$pp -notlike '*\WindowsApps\*') { continue }
+            }
             `$n = `$p.ProcessName.ToLower()
             if (`$protect -contains `$n -or `$keepNames -contains `$n) { continue }
             `$path = `$null
@@ -520,6 +548,90 @@ while (-not (Test-Path `$stop)) {
         }
 
         Log ("Cleared browsing history: {0}" -f (($cleared | Select-Object -Unique) -join ', '))
+    }
+
+    'lockrun-start' {
+        # Stops apps from OPENING at all (Windows "RestrictRun" policy). Only the apps in
+        # KeepAppList.xlsx (plus a few system/Veyon ones) can be launched from Explorer,
+        # Start menu, desktop icons, etc. Others show "This operation has been cancelled".
+        # Entries: process name (chrome / chrome.exe) or a folder path (every .exe inside it).
+        try {
+            $ErrorActionPreference = 'Stop'
+            $names = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            $kl = @(Read-ColumnA (Join-Path $list 'KeepAppList.xlsx'))
+            if ($kl.Count -eq 0) { Log 'WARNING: KeepAppList.xlsx is empty or not found, only system apps will be allowed' }
+            foreach ($k in $kl) {
+                $k = [Environment]::ExpandEnvironmentVariables($k).Trim('"')
+                if ($k -match '\\') {
+                    $root = $k.TrimEnd('\')
+                    if (Test-Path -LiteralPath $root -PathType Container) {
+                        Get-ChildItem -LiteralPath $root -Filter *.exe -Recurse -ErrorAction SilentlyContinue | ForEach-Object { [void]$names.Add($_.Name) }
+                    } elseif (Test-Path -LiteralPath $root -PathType Leaf) {
+                        [void]$names.Add([IO.Path]::GetFileName($root))
+                    } else { Log "Not found: $root" }
+                } elseif ($k) {
+                    if ($k -notmatch '\.exe$') { $k = $k + '.exe' }
+                    [void]$names.Add($k)
+                }
+            }
+            foreach ($n in @('explorer.exe','ctfmon.exe','veyon-server.exe','veyon-worker.exe','veyon-service.exe','veyon-master.exe','veyon-configurator.exe')) { [void]$names.Add($n) }
+
+            $pol = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer'
+            $rr  = $pol + '\RestrictRun'
+            if (-not (Test-Path $pol)) { New-Item -Path $pol -Force | Out-Null }
+            if (Test-Path $rr) { Remove-Item -Path $rr -Recurse -Force }
+            New-Item -Path $rr -Force | Out-Null
+            $i = 1
+            foreach ($n in @($names | Sort-Object)) {
+                New-ItemProperty -Path $rr -Name ([string]$i) -Value $n -PropertyType String -Force | Out-Null
+                $i++
+            }
+            New-ItemProperty -Path $pol -Name RestrictRun -Value 1 -PropertyType DWord -Force | Out-Null
+            $ErrorActionPreference = 'Continue'
+            Restart-UserShell
+            Log ("Open-block ON (RestrictRun). {0} exe(s) allowed: {1}" -f $names.Count, (@($names | Sort-Object) -join ', '))
+        } catch {
+            Log ("ERROR in lockrun-start: " + $_.Exception.Message)
+        }
+    }
+
+    'lockrun-stop' {
+        $pol = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer'
+        Remove-ItemProperty -Path $pol -Name RestrictRun -ErrorAction SilentlyContinue
+        Remove-Item -Path ($pol + '\RestrictRun') -Recurse -Force -ErrorAction SilentlyContinue
+        Restart-UserShell
+        Log 'Open-block OFF (RestrictRun removed)'
+    }
+
+    'lockall-start' {
+        # ONE command = block all apps except KeepAppList.xlsx:
+        #  1) lockdown: Task Manager + Settings off     2) Registry Editor off (so the rules cannot be removed)
+        #  3) lockrun : apps cannot be OPENED           4) kiosk (strict): anything else that appears is closed in ~3 s
+        $self = $env:KV_SELF
+        & $self '-lockapp-stop'
+        & $self '-lockdown'
+        $sys = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\System'
+        if (-not (Test-Path $sys)) { New-Item -Path $sys -Force | Out-Null }
+        New-ItemProperty -Path $sys -Name DisableRegistryTools -Value 1 -PropertyType DWord -Force | Out-Null
+        & $self '-lockrun-start'
+        $env:KV_STRICT = '1'
+        & $self '-lockapp-start'
+        $env:KV_STRICT = $null
+        Start-Sleep -Seconds 1
+        $chk = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer' -Name RestrictRun -ErrorAction SilentlyContinue).RestrictRun
+        $kp = $null
+        if (Test-Path $lockPidFile) { $kp = Get-Content $lockPidFile -ErrorAction SilentlyContinue | Select-Object -First 1 }
+        $alive = [bool]($kp -and (Get-Process -Id $kp -ErrorAction SilentlyContinue))
+        Log ("LOCKALL ON. CHECK: RestrictRun={0}, kiosk worker running={1}" -f $chk, $alive)
+    }
+
+    'lockall-stop' {
+        $self = $env:KV_SELF
+        Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\System' -Name DisableRegistryTools -ErrorAction SilentlyContinue
+        & $self '-lockrun-stop'
+        & $self '-lockapp-stop'
+        & $self '-unlock'
+        Log 'LOCKALL OFF'
     }
 
     'lockdown' {
