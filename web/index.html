@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KhoaVeyon</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232563eb'/%3E%3Cpath d='M16 20h32v20H16zM26 46h12' stroke='white' stroke-width='5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f4f6fb; --card:#fff; --line:#e5e9f2; --text:#1b2437; --muted:#6b778c;
+  --primary:#2563eb; --primary-d:#1d4ed8; --primary-l:#e8effe;
+  --ok:#16a34a; --ok-l:#e8f7ee; --warn:#ea580c; --warn-l:#fff1e6; --err:#dc2626; --err-l:#fdecec;
+  --side:#0f1b33; --side-2:#16264a; --side-text:#c5d0e6;
+  --radius:14px; --shadow:0 1px 2px rgba(15,27,51,.06),0 6px 20px rgba(15,27,51,.05);
+  --side-w:250px; --log-h:230px;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;font-size:14.5px;color:var(--text);background:var(--bg);overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+.hidden{display:none!important}
+.muted{color:var(--muted)}
+
+/* ---------- bố cục ---------- */
+.app{display:flex;height:100%}
+.side{width:var(--side-w);background:linear-gradient(180deg,var(--side),var(--side-2));color:var(--side-text);display:flex;flex-direction:column;padding:18px 14px;flex-shrink:0}
+.brand{display:flex;align-items:center;gap:12px;padding:6px 8px 22px}
+.brand .logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#3b82f6,#2563eb);display:grid;place-items:center;box-shadow:0 6px 16px rgba(37,99,235,.45)}
+.brand .logo svg{width:24px;height:24px}
+.brand b{display:block;color:#fff;font-size:18px;letter-spacing:.2px}
+.brand small{color:#8fa1c4;font-size:12px}
+.nav{display:flex;flex-direction:column;gap:4px}
+.nav .grp{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#6f83ab;padding:14px 12px 6px}
+.nav button{display:flex;align-items:center;gap:12px;background:none;border:0;border-radius:10px;padding:11px 12px;color:var(--side-text);cursor:pointer;text-align:left;transition:.15s}
+.nav button .ic{width:24px;text-align:center;font-size:17px}
+.nav button:hover{background:rgba(255,255,255,.07);color:#fff}
+.nav button.on{background:var(--primary);color:#fff;box-shadow:0 6px 16px rgba(37,99,235,.35)}
+.side-foot{margin-top:auto;display:flex;flex-direction:column;gap:10px}
+.status{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.06);cursor:pointer}
+.dot{width:9px;height:9px;border-radius:50%;background:#64748b;flex-shrink:0}
+.dot.ok{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.25)}
+.dot.bad{background:#f97316;box-shadow:0 0 0 3px rgba(249,115,22,.25)}
+.quit{background:rgba(255,255,255,.08);border:0;color:#dbe4f5;border-radius:10px;padding:10px;cursor:pointer}
+.quit:hover{background:rgba(220,38,38,.85);color:#fff}
+
+.main{flex:1;min-width:0;overflow:auto;padding:26px 32px calc(var(--log-h) + 40px)}
+.main.logclosed{padding-bottom:90px}
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:22px}
+.top h1{margin:0;font-size:26px;letter-spacing:-.2px}
+.top p{margin:6px 0 0;color:var(--muted)}
+.pill{display:inline-flex;align-items:center;gap:8px;background:var(--primary-l);color:var(--primary-d);padding:7px 14px;border-radius:99px;font-weight:600;font-size:13px}
+.spin{width:12px;height:12px;border-radius:50%;border:2px solid #93b4fb;border-top-color:var(--primary);animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ---------- thẻ, nút ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)}
+.card h3{margin:0 0 14px;font-size:16px;display:flex;align-items:center;gap:10px}
+.card .sub{margin:-8px 0 14px;color:var(--muted);font-size:13.5px}
+.stack{display:flex;flex-direction:column;gap:18px}
+.badge{background:var(--primary-l);color:var(--primary-d);border-radius:99px;font-size:12px;font-weight:700;padding:2px 10px}
+.btn{border:0;border-radius:10px;padding:10px 18px;font-weight:600;cursor:pointer;background:#e9edf5;color:var(--text);transition:.15s;display:inline-flex;align-items:center;gap:8px}
+.btn:hover{background:#dde3ef}
+.btn.primary{background:var(--primary);color:#fff;box-shadow:0 4px 12px rgba(37,99,235,.28)}
+.btn.primary:hover{background:var(--primary-d)}
+.btn.ok{background:var(--ok);color:#fff}
+.btn.danger{background:var(--err);color:#fff}
+.btn.ghost{background:transparent;border:1px solid var(--line)}
+.btn.sm{padding:7px 12px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:default}
+.link{background:none;border:0;color:var(--primary);cursor:pointer;padding:0;font-weight:600}
+.link:hover{text-decoration:underline}
+input[type=text],input[type=search],select,textarea{width:100%;border:1px solid #d3dae8;border-radius:10px;padding:10px 12px;background:#fff;outline:none;transition:.15s}
+input[type=text]:focus,input[type=search]:focus,select:focus,textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+textarea{min-height:170px;font-family:Consolas,monospace;font-size:13.5px}
+label.field{display:block;font-weight:600;margin:0 0 6px}
+.hint{color:var(--muted);font-size:13px;line-height:1.5}
+.note{background:var(--primary-l);color:#1e3a8a;border-radius:10px;padding:12px 14px;font-size:13.5px;line-height:1.5}
+.note.warn{background:var(--warn-l);color:#9a3412}
+
+/* toggle */
+.switch{display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none}
+.switch input{display:none}
+.switch .tr{width:44px;height:25px;border-radius:99px;background:#cbd3e1;position:relative;transition:.2s;flex-shrink:0}
+.switch .tr::after{content:"";position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:.2s}
+.switch input:checked + .tr{background:var(--primary)}
+.switch input:checked + .tr::after{left:22px}
+
+/* ---------- Điều khiển lớp ---------- */
+.grid-control{display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start}
+.addhost{display:flex;gap:8px;margin-bottom:12px}
+.hosttools{display:flex;align-items:center;gap:14px;margin:6px 0 10px;font-size:13px}
+.hostlist{list-style:none;margin:0;padding:0;max-height:420px;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.hostlist li{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fbfcfe}
+.hostlist li.sel{border-color:var(--primary);background:var(--primary-l)}
+.hostlist label{display:flex;align-items:center;gap:10px;cursor:pointer;flex:1;font-weight:600}
+.hostlist input{width:17px;height:17px;accent-color:var(--primary)}
+.x{background:none;border:0;color:#94a3b8;font-size:20px;line-height:1;cursor:pointer;border-radius:6px;padding:2px 8px}
+.x:hover{background:var(--err-l);color:var(--err)}
+.empty{border:2px dashed var(--line);border-radius:12px;padding:22px;text-align:center;color:var(--muted)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.tile{display:flex;align-items:center;gap:12px;text-align:left;border:1px solid var(--line);background:#f8fafc;border-radius:12px;padding:13px 14px;cursor:pointer;transition:.15s;font-weight:600}
+.tile .ico{font-size:22px;width:34px;height:34px;display:grid;place-items:center;border-radius:10px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08);flex-shrink:0}
+.tile:hover{transform:translateY(-2px);box-shadow:0 8px 18px rgba(15,27,51,.1)}
+.tile.lock{background:var(--warn-l);border-color:#fed7b8}
+.tile.lock:hover{border-color:var(--warn)}
+.tile.free{background:var(--ok-l);border-color:#bfe6cc}
+.tile.free:hover{border-color:var(--ok)}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+
+/* ---------- Danh sách ---------- */
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.toolbar .grow{flex:1;min-width:200px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1px dashed #b8c4dc;background:#fff;border-radius:99px;padding:6px 14px;font-size:13px;cursor:pointer;font-weight:600;color:var(--primary-d)}
+.chip:hover{background:var(--primary-l);border-style:solid}
+.tbl{width:100%;border-collapse:separate;border-spacing:0}
+.tbl th{position:sticky;top:-26px;z-index:2;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);background:#f8fafd;padding:10px 12px;border-bottom:1px solid var(--line)}
+.tbl th:first-child{border-top-left-radius:10px}.tbl th:last-child{border-top-right-radius:10px}
+.tbl td{padding:6px 8px;border-bottom:1px solid #eef1f7;vertical-align:middle}
+.tbl tr:hover td{background:#fafcff}
+.tbl td.num{width:44px;color:#9aa6bd;text-align:center;font-size:13px}
+.tbl td.act{width:150px;white-space:nowrap;text-align:right}
+.cell{border:1px solid transparent!important;background:transparent!important;padding:8px 10px!important}
+.cell:hover{border-color:#d3dae8!important}
+.cell:focus{background:#fff!important}
+.iconbtn{background:none;border:0;border-radius:8px;width:30px;height:30px;cursor:pointer;color:#7a879f;font-size:15px}
+.iconbtn:hover{background:#eaeff8;color:var(--text)}
+.iconbtn.del:hover{background:var(--err-l);color:var(--err)}
+.warnmark{display:inline-block;color:var(--warn);cursor:help;font-size:16px;margin-right:4px}
+.savebar{position:sticky;bottom:-26px;margin-top:18px;background:rgba(255,255,255,.96);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:14px;padding:14px 18px;display:flex;align-items:center;gap:12px;box-shadow:0 -6px 22px rgba(15,27,51,.08);flex-wrap:wrap}
+.savebar .grow{flex:1;min-width:220px}
+.dirty{color:var(--warn);font-weight:700}
+
+/* ---------- Phân phối ---------- */
+.steps{display:flex;flex-direction:column;gap:18px;max-width:980px}
+.stepno{width:28px;height:28px;border-radius:50%;background:var(--primary);color:#fff;display:inline-grid;place-items:center;font-size:14px;font-weight:700}
+.files{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+.file{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:#fbfcfe}
+.file input{width:17px;height:17px;accent-color:var(--primary)}
+.file .nm{flex:1;font-weight:600;word-break:break-all}
+.file .sz{color:var(--muted);font-size:12.5px}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.radiocards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.rc{border:2px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;background:#fff;transition:.15s}
+.rc:hover{border-color:#b8c8ee}
+.rc.on{border-color:var(--primary);background:var(--primary-l)}
+.rc b{display:block;margin-bottom:4px}
+.rc span{color:var(--muted);font-size:13px}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.formgrid .full{grid-column:1/-1}
+
+/* ---------- nhật ký ---------- */
+.logdock{position:fixed;left:var(--side-w);right:0;bottom:0;height:var(--log-h);background:#0d1424;color:#d6deef;display:flex;flex-direction:column;box-shadow:0 -10px 30px rgba(10,16,32,.28);z-index:20;border-top:1px solid #1d2a47}
+.logdock.closed{height:46px}
+.loghead{display:flex;align-items:center;gap:12px;padding:0 18px;height:46px;flex-shrink:0;cursor:pointer;user-select:none}
+.loghead b{font-size:14px}
+.loghead .sp{flex:1}
+.loghead button{background:rgba(255,255,255,.1);border:0;color:#cbd5ea;border-radius:8px;padding:5px 12px;cursor:pointer;font-size:12.5px}
+.loghead button:hover{background:rgba(255,255,255,.2)}
+.logbody{flex:1;overflow:auto;padding:4px 18px 12px;font-family:Consolas,"Cascadia Mono",monospace;font-size:13px;line-height:1.55}
+.ln{white-space:pre-wrap;word-break:break-word}
+.ln .t{color:#5f6f93;margin-right:10px}
+.ln.ok{color:#86efac}.ln.err{color:#fca5a5}.ln.head{color:#93c5fd;font-weight:700}.ln.warn{color:#fcd34d}
+
+/* ---------- hộp thoại, thông báo ---------- */
+.modalbg{position:fixed;inset:0;background:rgba(10,16,32,.5);display:grid;place-items:center;z-index:50;animation:fade .15s}
+.modalbox{background:#fff;border-radius:16px;width:min(560px,92vw);max-height:90vh;overflow:auto;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.35);animation:pop .18s}
+.modalbox h3{margin:0 0 12px;font-size:19px}
+.modalbox .body{line-height:1.6;margin-bottom:20px}
+.modalbox .btns{display:flex;justify-content:flex-end;gap:10px}
+@keyframes fade{from{opacity:0}}
+@keyframes pop{from{transform:translateY(10px) scale(.97);opacity:0}}
+#toasts{position:fixed;top:18px;right:18px;display:flex;flex-direction:column;gap:10px;z-index:60}
+.toast{background:#1b2437;color:#fff;border-radius:12px;padding:13px 18px;box-shadow:0 10px 30px rgba(0,0,0,.25);max-width:420px;animation:pop .2s;display:flex;gap:10px;line-height:1.45}
+.toast.ok{background:#15803d}.toast.err{background:#b91c1c}.toast.warn{background:#c2410c}
+.bye{position:fixed;inset:0;background:var(--bg);display:grid;place-items:center;text-align:center;z-index:100}
+
+@media (max-width:1080px){
+  :root{--side-w:76px}
+  .brand div,.nav button span.tx,.nav .grp,.status span,.quit span{display:none}
+  .brand{justify-content:center;padding:6px 0 18px}
+  .nav button{justify-content:center}
+  .grid-control{grid-template-columns:1fr}
+  .radiocards{grid-template-columns:1fr}
+  .formgrid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><rect x="10" y="14" width="44" height="30" rx="4"/><path d="M24 54h16M32 44v10"/></svg></div>
+      <div><b>KhoaVeyon</b><small id="verTxt">Quản lý lớp học</small></div>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot">
+      <div class="status" id="status" title=""><span class="dot" id="statusDot"></span><span id="statusTxt">Đang kiểm tra...</span></div>
+      <button class="quit" id="quitBtn">⏻ <span>Thoát chương trình</span></button>
+    </div>
+  </aside>
+
+  <main class="main" id="main">
+    <header class="top">
+      <div><h1 id="title"></h1><p id="sub"></p></div>
+      <div><span class="pill hidden" id="busy"><i class="spin"></i>Đang thực hiện...</span></div>
+    </header>
+    <div id="updbar" class="note hidden" style="margin-bottom:18px"></div>
+    <div id="view"></div>
+  </main>
+</div>
+
+<section class="logdock" id="logdock">
+  <div class="loghead" id="loghead">
+    <span>📋</span><b>Nhật ký</b><span class="muted" id="logcount"></span><span class="sp"></span>
+    <button id="logClear">Xóa</button><button id="logToggle">Thu gọn ▾</button>
+  </div>
+  <div class="logbody" id="logbody"></div>
+</section>
+<div id="toasts"></div>
+<div id="modalroot"></div>
+
+<script>
+const TOKEN = '__TOKEN__';
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function api(path, body) {
+  const init = {method: body === undefined ? 'GET' : 'POST', headers: {'X-Token': TOKEN}};
+  if (body !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
+  let r;
+  try { r = await fetch(path, init); } catch (e) { throw new Error('Mất kết nối với chương trình. Hãy mở lại bằng Chay-KhoaVeyon.bat'); }
+  const data = await r.json().catch(() => ({error: 'Phản hồi không hợp lệ'}));
+  if (!r.ok || data.error) throw new Error(data.error || ('Lỗi ' + r.status));
+  return data;
+}
+
+const PAGES = [
+  {id:'setup', ic:'🚀', name:'Thiết lập ban đầu', title:'Thiết lập ban đầu', sub:'Một nút để chuẩn bị mọi thứ cần thiết trước khi dùng lần đầu.'},
+  {id:'control', ic:'🎛️', name:'Điều khiển lớp', title:'Điều khiển lớp học', sub:'Chọn máy học sinh rồi bấm một nút để khóa máy, chặn web hoặc chặn ứng dụng.'},
+  {id:'vcfg', ic:'🛠️', name:'Cấu hình Veyon', title:'Cấu hình Veyon', sub:'Sao lưu, so sánh, khôi phục và đẩy cấu hình xuống máy học sinh, thêm máy vào Veyon Master.'},
+  {id:'dist', ic:'📦', name:'Phân phối & chạy', title:'Phân phối và chạy ứng dụng', sub:'Chép file sang máy học sinh rồi chạy ứng dụng chỉ với một nút bấm.'},
+  {grp:'Danh sách'},
+  {id:'keep', ic:'✅', name:'Ứng dụng được phép', list:'keep'},
+  {id:'allow', ic:'🌐', name:'Trang web được phép', list:'allow'},
+  {id:'block', ic:'⛔', name:'Ứng dụng bị chặn', list:'block'},
+  {grp:'Hệ thống'},
+  {id:'settings', ic:'⚙️', name:'Cài đặt', title:'Cài đặt', sub:'Đường dẫn, mẫu lệnh Veyon và tên các mục điều khiển.'},
+];
+
+const S = {setup:null, st:null, hosts:[], sel:new Set(), page:'control', lists:{}, payload:[], logSeq:0, logOpen:true, busy:false};
+
+/* ---------- tiện ích giao diện ---------- */
+function toast(msg, kind = '') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + kind;
+  el.textContent = msg;
+  $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), kind === 'err' ? 7000 : 3800);
+}
+
+function modal({title, html, ok = 'Đồng ý', cancel = 'Hủy', danger = false, collect = null, noCancel = false}) {
+  return new Promise(resolve => {
+    const root = $('#modalroot');
+    root.innerHTML = `<div class="modalbg"><div class="modalbox" role="dialog"><h3>${esc(title)}</h3><div class="body">${html}</div>
+      <div class="btns">${noCancel ? '' : `<button class="btn" data-m="cancel">${esc(cancel)}</button>`}<button class="btn ${danger ? 'danger' : 'primary'}" data-m="ok">${esc(ok)}</button></div></div></div>`;
+    const done = v => { root.innerHTML = ''; document.removeEventListener('keydown', onKey); resolve(v); };
+    const onKey = e => { if (e.key === 'Escape') done(null); };
+    document.addEventListener('keydown', onKey);
+    root.querySelector('[data-m=ok]').onclick = () => done(collect ? collect(root) : true);
+    const c = root.querySelector('[data-m=cancel]'); if (c) c.onclick = () => done(null);
+    root.querySelector('.modalbg').addEventListener('mousedown', e => { if (e.target.classList.contains('modalbg')) done(null); });
+    const f = root.querySelector('textarea,input'); if (f) f.focus(); else root.querySelector('[data-m=ok]').focus();
+  });
+}
+
+/* ---------- máy học sinh ---------- */
+async function saveHosts() { try { await api('/api/hosts', {hosts: S.hosts}); } catch (e) { toast(e.message, 'err'); } }
+
+function addHosts(text) {
+  let n = 0;
+  for (const h of String(text).split(/[,\s;]+/)) {
+    if (h && !S.hosts.includes(h)) { S.hosts.push(h); S.sel.add(h); n++; }
+  }
+  if (n) saveHosts();
+  return n;
+}
+
+function targets() {
+  const sel = S.hosts.filter(h => S.sel.has(h));
+  return sel.length ? {hosts: sel, all: false} : {hosts: S.hosts.slice(), all: true};
+}
+
+async function resolveTargets() {
+  if (!S.hosts.length) { toast('Hãy thêm máy học sinh trước ở trang "Điều khiển lớp".', 'warn'); return null; }
+  const t = targets();
+  if (t.all) {
+    const ok = await modal({title: 'Áp dụng cho tất cả máy?', html: `Chưa chọn máy nào. Áp dụng cho <b>tất cả ${t.hosts.length} máy</b>?`, ok: 'Áp dụng cho tất cả'});
+    if (!ok) return null;
+  }
+  return t.hosts;
+}
+
+function action(key) { return S.st.actions.find(a => a.key === key); }
+
+async function confirmRisky(a, n) {
+  if (!a.confirm) return true;
+  return !!(await modal({title: 'Xác nhận', danger: true, ok: 'Tiếp tục',
+    html: `<b>${esc(a.label)}</b> trên ${n} máy.<br>Ứng dụng đang mở của học sinh có thể bị đóng, bài chưa lưu sẽ mất.`}));
+}
+
+async function runAction(key) {
+  const a = action(key);
+  const hosts = await resolveTargets(); if (!hosts) return;
+  if (!(await confirmRisky(a, hosts.length))) return;
+  try { await api('/api/run', {key, hosts}); toast(`Đã gửi lệnh "${a.label}" tới ${hosts.length} máy`, 'ok'); openLog(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+
+
+/* ---------- trang: Thiết lập ban đầu ---------- */
+async function loadSetup() { S.setup = await api('/api/setup_status'); }
+
+function viewSetup() {
+  const u = S.setup, c = S.st.cfg;
+  const row = (ok, title, desc, btn) => `<div class="file" style="align-items:flex-start;gap:14px">
+    <span style="font-size:20px;line-height:1.3">${ok === true ? '✅' : ok === false ? '⚠️' : '⏳'}</span>
+    <div class="nm" style="font-weight:600">${title}<div class="hint" style="font-weight:400">${desc}</div></div>${btn || ''}</div>`;
+  const b = (act, text, extra = '') => `<button class="btn sm" data-act="${act}" ${extra}>${text}</button>`;
+  const itemsOk = u.items_have === u.items_total;
+  const scriptOk = u.script_in_payload || u.script_found;
+  return `<div class="steps">
+    <section class="card">
+      <h3>Thiết lập máy giáo viên</h3>
+      <p class="sub">Tạo sẵn 3 file danh sách mẫu (không ghi đè file có sẵn), tạo file thiết lập cho máy học sinh và tự thêm ${u.items_total} mục điều khiển vào Veyon. Không động tới máy học sinh.</p>
+      <div class="row"><button class="btn primary" data-act="setupall">🚀 Thiết lập máy giáo viên</button>
+        <button class="btn" data-act="scan">🔎 Tìm máy học sinh trong mạng</button>
+        ${u.done ? '<span class="badge" style="background:var(--ok-l);color:var(--ok)">Đã thiết lập</span>' : ''}</div>
+      ${u.windows ? '' : '<div class="note warn" style="margin-top:12px">Bạn đang không chạy trên Windows nên các bước Veyon, chép file và schtasks chỉ chạy được trên máy giáo viên Windows.</div>'}
+    </section>
+    <section class="card">
+      <h3>Trạng thái từng bước</h3>
+      <div class="files">
+        ${row(u.cli, 'Tìm thấy veyon-cli', u.cli ? esc(u.cli_path) : 'Chưa thấy. Cài Veyon (Master) trên máy này hoặc đặt đường dẫn ở trang Cài đặt.', u.cli ? '' : b('gosettings', 'Mở Cài đặt'))}
+        ${row(itemsOk, `Mục điều khiển trong Veyon (${u.items_have}/${u.items_total})`, itemsOk ? 'Đã đủ. Các nút ở trang Điều khiển lớp dùng được.' : (u.items_err ? 'Chưa đọc được: ' + esc(u.items_err) : 'Chưa đủ. Bấm tạo tự động, Windows sẽ hỏi quyền quản trị' + (u.admin ? '' : ' (hộp thoại UAC)') + '.'), b('setupveyon', itemsOk ? 'Cập nhật lại' : 'Tạo mục trong Veyon'))}
+        ${row(u.lists_ok === u.lists_total, `Danh sách Excel (${u.lists_ok}/${u.lists_total} file)`, 'Tạo file mẫu (Chrome, ONLYOFFICE, Paint cho ứng dụng được phép; vài trang học tập; game phổ biến để chặn). Không ghi đè file đã có.', u.lists_ok === u.lists_total ? '' : b('setuplists', 'Tạo file mẫu'))}
+        ${row(scriptOk, esc(u.script_name) + ' để gửi cho máy học sinh', scriptOk ? (u.script_in_payload ? 'Đã có trong thư mục payload.' : 'Tìm thấy trên máy này, sẽ tự chép vào payload.') : 'Chưa tìm thấy. Thêm file này vào thư mục payload (trang Phân phối &amp; chạy, nút Thêm file).', b('setuppayload', 'Chuẩn bị file'))}
+        ${row(u.student_bat, 'Setup-MayHocSinh.bat cho máy học sinh', 'Chạy <b>một lần</b> trên mỗi máy học sinh bằng quyền quản trị: tạo C:\\cmd, mở tường lửa chia sẻ file và Task Scheduler từ xa, bật Veyon Service. Sau bước này mọi thứ còn lại làm từ máy giáo viên.', b('openpayload', 'Mở thư mục payload'))}
+        ${row(u.hosts > 0, `Danh sách máy học sinh (${u.hosts} máy)`, u.hosts ? 'Có thể thêm bớt ở trang Điều khiển lớp.' : 'Bấm "Tìm máy học sinh trong mạng" (tìm máy đang mở cổng Veyon) hoặc nhập thủ công.', '')}
+      </div>
+      <div class="row" style="margin-top:14px"><button class="btn ghost" data-act="refreshsetup">↻ Làm mới trạng thái</button></div>
+    </section>
+    <section class="card">
+      <h3>Thiết lập máy học sinh</h3>
+      <p class="sub">Áp dụng cho <b>${targets().all ? 'tất cả ' + targets().hosts.length : targets().hosts.length}</b> máy ${targets().all ? '(chưa tick máy nào ở Điều khiển lớp)' : 'đã tick'}. Máy nào đã thiết lập đủ thì được bỏ qua, nên bấm lại nhiều lần không sao.</p>
+      <div class="row"><button class="btn primary" data-act="pushsetup">▶ Thiết lập máy học sinh</button>
+        <button class="btn" data-act="diagnose">🩺 Chỉ kiểm tra</button></div>
+      <div class="row" style="margin-top:12px"><button class="btn" data-act="lockcmd">🔒 Khóa thư mục C:\\cmd</button><button class="btn ghost" data-act="unlockcmd">🔓 Mở khóa</button></div>
+      <label class="switch" style="margin-top:12px"><input type="checkbox" data-cfg="auto_lock" ${S.st.cfg.auto_lock ? 'checked' : ''}><span class="tr"></span><span>Tự khóa C:\\cmd sau khi thiết lập máy học sinh</span></label>
+      <p class="hint">Khóa: học sinh chỉ đọc và chạy được trong <code>C:\\cmd</code>, giáo viên vẫn chép và sửa file bằng quyền quản trị, thư mục <code>log</code> vẫn cho ghi để nhật ký hoạt động chạy tiếp. Mở khóa trả quyền về mặc định.</p>
+      <p class="hint">Mỗi máy được kiểm tra Veyon Service, chia sẻ C$, Task Scheduler từ xa, script và dịch vụ. Máy thiếu thì tự chép file vào <code>C:\\cmd</code> và chạy <code>-install</code>. Máy chưa mở được chia sẻ (máy mới chưa từng cấu hình) cần chạy <code>Setup-MayHocSinh.bat</code> một lần bằng quyền quản trị, kết quả từng máy xem ở Nhật ký.</p>
+    </section>
+  </div>`;
+}
+
+async function refreshSetup() { try { await loadSetup(); if (S.page === 'setup') render(); } catch (e) { toast(e.message, 'err'); } }
+
+async function setupStep(step, needHosts) {
+  let hosts = [];
+  if (needHosts) { hosts = await resolveTargets(); if (!hosts) return; }
+  else hosts = targets().hosts;
+  try {
+    await api('/api/setup_run', {step, hosts});
+    openLog();
+    if (step === 'all') toast('Đang thiết lập máy giáo viên. Nếu Windows hỏi quyền quản trị, bấm Yes.', 'ok');
+    setTimeout(refreshSetup, step === 'all' || step === 'veyon' ? 6000 : 700);
+    if (step === 'all' || step === 'veyon') setTimeout(refreshSetup, 20000);
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function scanHosts() {
+  toast('Đang quét mạng, mất vài giây...', '');
+  try {
+    const r = await api('/api/setup_scan', {});
+    S.hosts = r.hosts.slice(); r.found.forEach(h => S.sel.add(h));
+    S.st.cfg.hosts = S.hosts.slice();
+    toast(r.found.length ? `Thấy ${r.found.length} máy chạy Veyon, thêm mới ${r.added}` : 'Không thấy máy nào mở cổng Veyon (11100). Kiểm tra Veyon Service và tường lửa trên máy học sinh.', r.found.length ? 'ok' : 'warn');
+    await refreshSetup();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+/* ---------- trang: Điều khiển lớp ---------- */
+function viewControl() {
+  const st = S.st;
+  const tile = k => { const a = action(k); return `<button class="tile ${a.kind}" data-act="run" data-key="${esc(k)}"><span class="ico">${a.icon}</span><span>${esc(a.label)}</span></button>`; };
+  const groups = st.groups.map(g => `<section class="card"><h3>${esc(g.title)}</h3><div class="tiles">${g.keys.map(tile).join('')}</div></section>`).join('');
+  const hostItems = S.hosts.map((h, i) => `<li class="${S.sel.has(h) ? 'sel' : ''}"><label><input type="checkbox" data-host="${i}" ${S.sel.has(h) ? 'checked' : ''}><span>${esc(h)}</span></label><button class="x" title="Xóa máy này" data-act="rmhost" data-i="${i}">×</button></li>`).join('');
+  const opts = st.actions.map(a => `<option value="${esc(a.key)}">${esc(a.label)}</option>`).join('');
+  return `<div class="grid-control">
+    <section class="card">
+      <h3>Máy học sinh <span class="badge">${S.hosts.length}</span></h3>
+      <form class="addhost" data-form="addhost"><input type="text" id="hostInput" placeholder="Tên máy hoặc IP, ví dụ PC01" autocomplete="off"><button class="btn primary">Thêm</button></form>
+      <div class="hosttools"><button class="link" data-act="selall">Chọn tất cả</button><button class="link" data-act="selnone">Bỏ chọn</button><span class="muted">Đã chọn ${S.hosts.filter(h => S.sel.has(h)).length}/${S.hosts.length}</span></div>
+      ${S.hosts.length ? `<ul class="hostlist">${hostItems}</ul>` : `<div class="empty">Chưa có máy nào.<br>Nhập tên máy hoặc IP ở trên, có thể dán nhiều máy cách nhau bằng dấu phẩy hoặc dấu cách.</div>`}
+      <p class="hint" style="margin-bottom:0">Không chọn máy nào nghĩa là áp dụng cho tất cả máy trong danh sách.</p>
+    </section>
+    <div class="stack">
+      <div class="legend"><span><i style="background:#fb923c"></i>Cam: bật hạn chế</span><span><i style="background:#4ade80"></i>Xanh lá: gỡ hạn chế</span><span><i style="background:#cbd5e1"></i>Xám: việc khác</span></div>
+      <section class="card">
+        <h3>Chụp màn hình</h3>
+        <p class="sub">Chụp màn hình người đang đăng nhập trên các máy đang chọn, ảnh lưu ở thư mục <code>data\\screenshots</code> trên máy này (mỗi lần một thư mục theo giờ).</p>
+        <div class="row"><button class="btn primary" data-act="shot">📸 Chụp màn hình các máy</button><button class="btn ghost" data-act="openshots">Mở thư mục ảnh</button></div>
+        <label class="switch" style="margin-top:12px"><input type="checkbox" data-cfg="shot_before_lock" ${st.cfg.shot_before_lock ? 'checked' : ''}><span class="tr"></span><span>Tự chụp màn hình trước khi bấm nút khóa, chặn hoặc đóng ứng dụng</span></label>
+      </section>
+      <section class="card">
+        <h3>Giám sát vi phạm (tự chụp ảnh)</h3>
+        <p class="sub">Khi cửa sổ đang mở là <b>trang web không có trong AllowPage</b> hoặc <b>ứng dụng không có trong KeepAppList</b>, máy học sinh tự chụp màn hình. Danh sách Excel được đọc lại mỗi 30 giây. Không ghi phím gõ.</p>
+        <div class="row"><button class="btn primary" data-act="watch_start">👁 Bật giám sát</button><button class="btn" data-act="watch_stop">Tắt giám sát</button><button class="btn" data-act="watch_fetch">⬇ Lấy ảnh vi phạm về</button><button class="btn ghost" data-act="openevidence">Mở thư mục ảnh</button></div>
+        <div class="formgrid" style="margin-top:12px"><div><label class="field">Chụp lại sau (giây) nếu vẫn ở trang đó</label><input type="text" data-cfg="watch_repeat" value="${esc(st.cfg.watch_repeat)}"></div><div><label class="field">Số ảnh tối đa mỗi lần vi phạm</label><input type="text" data-cfg="watch_max" value="${esc(st.cfg.watch_max)}"></div></div>
+        <p class="hint">Ảnh nằm tạm trên máy học sinh (<code>C:\\Users\\Public\\KhoaVeyonEvidence</code>) nên học sinh có thể xóa. Hãy bấm “Lấy ảnh vi phạm về” thường xuyên, ảnh về <code>data\\evidence\\TÊNMÁY</code> kèm file <code>evidence.csv</code> (giờ, trang hoặc ứng dụng, tiêu đề cửa sổ).</p>
+      </section>
+      ${groups}
+      <section class="card">
+        <h3>Nâng cao: lấy lệnh để dán vào Veyon</h3>
+        <p class="sub">Dùng khi bạn muốn tạo nút "Run program" trong Veyon Master thay vì bấm ở đây.</p>
+        <div class="row"><select id="copySel" style="flex:1;min-width:240px">${opts}</select><button class="btn" data-act="copycmd">Sao chép lệnh</button></div>
+      </section>
+    </div>
+  </div>`;
+}
+
+/* ---------- trang: danh sách Excel ---------- */
+async function loadList(kind) {
+  const r = await api('/api/list?kind=' + kind);
+  S.lists[kind] = {rows: r.rows.map(x => ({a: x[0], b: x[1]})), warn: Object.fromEntries(r.warnings.map(w => [w.row, w.msg])), dirty: false, path: r.path, exists: r.exists, filter: ''};
+}
+
+function viewList(kind) {
+  const L = S.lists[kind], m = S.st.lists[kind];
+  const presets = Object.keys(m.presets).map(n => `<button class="chip" data-act="preset" data-name="${esc(n)}">+ ${esc(n)}</button>`).join('');
+  const rows = L.rows.map((r, i) => `<tr data-i="${i}"><td class="num">${i + 1}</td>
+      <td><input type="text" class="cell" data-f="a" data-i="${i}" value="${esc(r.a)}" placeholder="${esc(m.col_a)}" spellcheck="false"></td>
+      <td><input type="text" class="cell" data-f="b" data-i="${i}" value="${esc(r.b)}" placeholder="Ghi chú (không bắt buộc)"></td>
+      <td class="act"><span class="warnslot" data-i="${i}">${warnHtml(L.warn[i])}</span><button class="iconbtn" title="Lên" data-act="up" data-i="${i}">↑</button><button class="iconbtn" title="Xuống" data-act="down" data-i="${i}">↓</button><button class="iconbtn del" title="Xóa dòng" data-act="delrow" data-i="${i}">✕</button></td></tr>`).join('');
+  const t = targets();
+  const pushInfo = S.st.cfg.auto_push
+    ? `Khi lưu, file sẽ tự gửi xuống <b>${t.all ? 'tất cả ' + t.hosts.length : t.hosts.length}</b> máy học sinh${S.hosts.length ? '' : ' (chưa có máy nào)'}.`
+    : 'Tự gửi file xuống máy học sinh đang tắt (bật ở trang Phân phối & chạy).';
+  return `<div class="stack">
+    <div class="note">${esc(m.hint)}</div>
+    <section class="card">
+      <div class="toolbar">
+        <input type="search" class="grow" id="filter" placeholder="Tìm trong danh sách..." value="${esc(L.filter)}">
+        <button class="btn primary" data-act="addrow">＋ Thêm dòng</button>
+        <button class="btn" data-act="paste">📋 Dán nhiều dòng</button>
+        <button class="btn ghost" data-act="reload">↻ Tải lại</button>
+      </div>
+      ${presets ? `<div class="toolbar"><span class="muted">Thêm nhanh:</span><div class="chips">${presets}</div></div>` : ''}
+      ${L.rows.length ? `<table class="tbl"><thead><tr><th>#</th><th>${esc(m.col_a)}</th><th>Ghi chú</th><th></th></tr></thead><tbody id="rows">${rows}</tbody></table>`
+        : `<div class="empty">Danh sách đang trống.<br>Bấm "Thêm dòng", "Dán nhiều dòng" hoặc chọn một nhóm có sẵn ở trên.</div>`}
+    </section>
+    <div class="savebar">
+      <div class="grow"><span id="dirtyTxt">${L.dirty ? '<span class="dirty">● Có thay đổi chưa lưu</span>' : '<span class="muted">Đã lưu</span>'}</span><br><span class="hint">${pushInfo}<br>File: ${esc(L.path)}</span></div>
+      <button class="btn" data-act="save">💾 Lưu</button>
+      <button class="btn primary" data-act="saveapply">▶ Lưu và áp dụng (${esc(m.apply_label)})</button>
+    </div>
+  </div>`;
+}
+
+function warnHtml(w) { return w ? `<span class="warnmark" title="${esc(w)}">⚠</span>` : ''; }
+
+function markDirty(kind) {
+  S.lists[kind].dirty = true;
+  const el = $('#dirtyTxt'); if (el) el.innerHTML = '<span class="dirty">● Có thay đổi chưa lưu</span>';
+}
+
+let checkTimer = null;
+function scheduleCheck(kind) {
+  clearTimeout(checkTimer);
+  checkTimer = setTimeout(async () => {
+    try {
+      const L = S.lists[kind];
+      const r = await api('/api/check', {kind, rows: L.rows.map(x => [x.a, x.b])});
+      L.warn = Object.fromEntries(r.warnings.map(w => [w.row, w.msg]));
+      document.querySelectorAll('.warnslot').forEach(el => { el.innerHTML = warnHtml(L.warn[el.dataset.i]); });
+    } catch (e) { /* bỏ qua */ }
+  }, 350);
+}
+
+function applyFilter(kind) {
+  const L = S.lists[kind], q = L.filter.trim().toLowerCase();
+  document.querySelectorAll('#rows tr').forEach(tr => {
+    const r = L.rows[tr.dataset.i];
+    tr.classList.toggle('hidden', !!q && !((r.a + ' ' + r.b).toLowerCase().includes(q)));
+  });
+}
+
+function addRows(kind, items) {
+  const L = S.lists[kind], have = new Set(L.rows.map(r => r.a.toLowerCase()));
+  let n = 0;
+  for (const [a, b] of items) {
+    if (a && !have.has(a.toLowerCase())) { L.rows.push({a, b: b || ''}); have.add(a.toLowerCase()); n++; }
+  }
+  if (n) { markDirty(kind); scheduleCheck(kind); }
+  return n;
+}
+
+async function saveList(kind, apply) {
+  const L = S.lists[kind], m = S.st.lists[kind];
+  let hosts;
+  if (apply) {
+    hosts = await resolveTargets(); if (!hosts) return;
+    if (!(await confirmRisky(action(m.apply), hosts.length))) return;
+  } else {
+    hosts = targets().hosts;
+  }
+  try {
+    const r = await api('/api/list', {kind, rows: L.rows.map(x => [x.a.trim(), x.b.trim()]), hosts, apply: !!apply});
+    L.rows = L.rows.filter(x => x.a.trim()).map(x => ({a: x.a.trim(), b: x.b.trim()}));
+    L.warn = Object.fromEntries(r.warnings.map(w => [w.row, w.msg]));
+    L.dirty = false; L.exists = true;
+    let msg = `Đã lưu ${r.count} dòng`;
+    if (r.pushed) msg += `, đang gửi xuống ${r.pushed} máy`;
+    if (r.applied) msg += `, đang áp dụng lệnh`;
+    toast(msg, 'ok');
+    if (r.warnings.length) toast(`${r.warnings.length} dòng có thể bị script bỏ qua (xem dấu ⚠)`, 'warn');
+    if (r.pushed || r.applied) openLog();
+    render();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+/* ---------- trang: Phân phối & chạy ---------- */
+function fmtSize(n) { return n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n > 1024 ? Math.round(n / 1024) + ' KB' : n + ' B'; }
+
+function viewDist() {
+  const c = S.st.cfg, skip = new Set(c.dist_payload_skip || []);
+  const files = S.payload.map((f, i) => `<div class="file"><input type="checkbox" data-pl="${i}" ${skip.has(f.name) ? '' : 'checked'}><span>${f.dir ? '📁' : '📄'}</span><span class="nm">${esc(f.name)}</span><span class="sz">${f.dir ? 'thư mục' : fmtSize(f.size)}</span><button class="iconbtn del" title="Xóa khỏi thư mục payload" data-act="delpl" data-i="${i}">✕</button></div>`).join('');
+  const extra = (c.dist_files || []).map((p, i) => `<div class="file"><span>📎</span><span class="nm">${esc(p)}</span><button class="iconbtn del" data-act="delextra" data-i="${i}">✕</button></div>`).join('');
+  const opts = S.st.actions.map(a => `<option value="${esc(a.key)}" ${a.key === c.dist_action ? 'selected' : ''}>${esc(a.label)}</option>`).join('');
+  const t = targets();
+  const mode = c.dist_mode;
+  const rc = (v, t1, d) => `<div class="rc ${mode === v ? 'on' : ''}" data-act="mode" data-v="${v}"><b>${t1}</b><span>${d}</span></div>`;
+  return `<div class="steps">
+    <section class="card">
+      <h3><span class="stepno">1</span>Chọn nội dung cần chép</h3>
+      <label class="switch" style="margin-bottom:12px"><input type="checkbox" data-cfg="dist_include_lists" ${c.dist_include_lists ? 'checked' : ''}><span class="tr"></span><span>Kèm 3 file Excel danh sách (ứng dụng được phép, trang web được phép, ứng dụng bị chặn)</span></label>
+      <div class="hint">File trong thư mục <b>payload</b> của chương trình (bỏ tick để không chép):</div>
+      <div class="files">${files || '<div class="empty">Thư mục payload đang trống. Bấm "Thêm file" để tải file lên, ví dụ KhoaVeyonServices.bat.</div>'}${extra}</div>
+      <div class="row"><button class="btn primary sm" data-act="upload">＋ Thêm file</button><input type="file" id="fileInput" multiple class="hidden"><button class="btn sm" data-act="addextra">Thêm theo đường dẫn</button><button class="btn ghost sm" data-act="openpayload">Mở thư mục payload</button></div>
+      <div style="margin-top:16px"><label class="field">Thư mục đích trên máy học sinh</label>
+        <input type="text" data-cfg="dist_target" value="${esc(c.dist_target)}" style="max-width:360px">
+        <div class="hint" style="margin-top:6px">Chép qua chia sẻ quản trị (\\\\máy\\C$), nên tài khoản đang đăng nhập trên máy này phải là quản trị viên trên máy học sinh.</div></div>
+    </section>
+    <section class="card">
+      <h3><span class="stepno">2</span>Chọn cách chạy sau khi chép</h3>
+      <div class="radiocards">
+        ${rc('none', 'Chỉ chép file', 'Không chạy gì thêm.')}
+        ${rc('schtasks', 'Chạy lệnh Windows', 'Tạo tác vụ trên máy học sinh rồi chạy ngay (schtasks).')}
+        ${rc('veyon', 'Kích hoạt mục Veyon', 'Dùng veyon-cli như các nút ở trang Điều khiển lớp.')}
+      </div>
+      <div style="margin-top:16px">
+      ${mode === 'schtasks' ? `<label class="field">Lệnh chạy trên máy học sinh</label><input type="text" data-cfg="dist_cmd" value="${esc(c.dist_cmd)}">
+        <label class="switch" style="margin-top:12px"><input type="checkbox" data-cfg="dist_interactive" ${c.dist_interactive ? 'checked' : ''}><span class="tr"></span><span>Hiện cửa sổ cho học sinh (chạy bằng tài khoản đang đăng nhập, chưa kiểm chứng)</span></label>
+        <p class="hint">Mặc định chạy bằng quyền SYSTEM nên học sinh không thấy cửa sổ, phù hợp script nền như KhoaVeyonServices.bat. Muốn mở ứng dụng có giao diện thì bật tùy chọn trên.</p>` : ''}
+      ${mode === 'veyon' ? `<label class="field">Mục Veyon cần kích hoạt</label><select data-cfg="dist_action">${opts}</select>` : ''}
+      </div>
+    </section>
+    <section class="card">
+      <h3><span class="stepno">3</span>Thực hiện</h3>
+      <p class="sub">Áp dụng cho <b>${t.all ? 'tất cả ' + t.hosts.length : t.hosts.length}</b> máy ${t.all ? '(chưa chọn máy cụ thể ở trang Điều khiển lớp)' : 'đã chọn'}.</p>
+      <div class="row"><button class="btn primary" data-act="dist" data-copy="1" data-run="1">▶ Phân phối rồi chạy</button><button class="btn" data-act="dist" data-copy="1" data-run="0">Chỉ phân phối</button><button class="btn" data-act="dist" data-copy="0" data-run="1">Chỉ chạy</button></div>
+      <div style="margin-top:18px"><label class="switch"><input type="checkbox" data-cfg="auto_push" ${c.auto_push ? 'checked' : ''}><span class="tr"></span><span>Tự động gửi file danh sách xuống máy học sinh mỗi khi bấm Lưu ở các trang danh sách</span></label></div>
+    </section>
+  </div>`;
+}
+
+async function loadPayload() { S.payload = (await api('/api/payload')).items; }
+
+async function saveCfg(part) {
+  try { await api('/api/settings', part); Object.assign(S.st.cfg, part); }
+  catch (e) { toast(e.message, 'err'); }
+}
+
+async function runDist(copy, run) {
+  const c = S.st.cfg;
+  const hosts = await resolveTargets(); if (!hosts) return;
+  const skip = new Set(c.dist_payload_skip || []);
+  const payload = S.payload.filter(f => !skip.has(f.name)).map(f => f.name);
+  const mode = c.dist_mode;
+  if (run && mode === 'none') { toast('Hãy chọn cách chạy ở bước 2.', 'warn'); return; }
+  const steps = [];
+  if (copy) steps.push(`chép file sang <b>${esc(c.dist_target)}</b>`);
+  if (run && mode === 'schtasks') steps.push(`chạy lệnh <code>${esc(c.dist_cmd)}</code>`);
+  if (run && mode === 'veyon') steps.push(`kích hoạt mục Veyon "<b>${esc(action(c.dist_action).label)}</b>"`);
+  const ok = await modal({title: 'Xác nhận', ok: 'Thực hiện', html: `Trên <b>${hosts.length}</b> máy sẽ:<ul style="margin:8px 0 0;padding-left:20px"><li>${steps.join('</li><li>')}</li></ul>`});
+  if (!ok) return;
+  try {
+    await api('/api/dist', {copy, run, mode, hosts, include_lists: c.dist_include_lists, payload, extra: c.dist_files || [],
+      target: c.dist_target, cmd: c.dist_cmd, action: c.dist_action, interactive: c.dist_interactive});
+    toast('Đã bắt đầu, xem kết quả từng máy ở Nhật ký', 'ok'); openLog();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function uploadFiles(files) {
+  for (const f of files) {
+    try {
+      const r = await fetch('/api/upload?name=' + encodeURIComponent(f.name), {method: 'PUT', headers: {'X-Token': TOKEN}, body: f});
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Lỗi tải lên');
+      toast('Đã thêm ' + f.name, 'ok');
+    } catch (e) { toast(f.name + ': ' + e.message, 'err'); }
+  }
+  await loadPayload(); render();
+}
+
+/* ---------- trang: Cài đặt ---------- */
+function viewSettings() {
+  const c = S.st.cfg;
+  const f = (k, label, hint) => `<div><label class="field">${label}</label><input type="text" data-set="${k}" value="${esc(c[k])}">${hint ? `<div class="hint" style="margin-top:5px">${hint}</div>` : ''}</div>`;
+  const feats = S.st.actions.map(a => `<tr><td style="width:46%">${a.icon} ${esc(a.label)}</td><td><input type="text" class="cell" style="border:1px solid #d3dae8!important" data-feat="${esc(a.key)}" value="${esc(c.features[a.key] || '')}"></td></tr>`).join('');
+  return `<div class="steps">
+    <section class="card"><h3>Đường dẫn</h3><div class="formgrid">
+      ${f('list_dir', 'Thư mục chứa 3 file Excel', 'Có thể ghi đường dẫn tương đối (ví dụ lists) hoặc đầy đủ (ví dụ C:\\cmd).')}
+      ${f('script_path', 'Đường dẫn script trên máy học sinh', 'Dùng khi sao chép lệnh để dán vào Veyon.')}
+      ${f('veyon_cli', 'veyon-cli.exe', 'Tự tìm nếu để trống hoặc sai: thư mục veyon cạnh chương trình, PATH, Program Files.')}
+      ${f('sync_dir', 'Thư mục đồng bộ (tùy chọn)', 'Thư mục chia sẻ mà máy học sinh đọc danh sách.')}
+    </div>
+    <div style="margin-top:16px"><label class="switch"><input type="checkbox" data-set="auto_sync" ${c.auto_sync ? 'checked' : ''}><span class="tr"></span><span>Tự đồng bộ sang thư mục đồng bộ mỗi khi bấm Lưu ở trang danh sách</span></label></div>
+    <div class="row" style="margin-top:16px"><button class="btn" data-act="syncnow">Đồng bộ ngay</button><button class="btn ghost" data-act="openlists">Mở thư mục danh sách</button><button class="btn ghost" data-act="opendata">Mở thư mục dữ liệu</button></div></section>
+    <section class="card"><h3>Mẫu lệnh Veyon</h3><div class="formgrid">
+      <div class="full">${f('run_template', 'Lệnh chạy một mục', 'Dùng {cli} {host} {feature}. Cú pháp veyon-cli có thể khác theo phiên bản Veyon, nên hãy thử bằng nút bên dưới.')}</div>
+      <div class="full">${f('list_template', 'Lệnh liệt kê các mục', '')}</div></div>
+      <div class="row" style="margin-top:14px"><button class="btn" data-act="veyonlist">Kiểm tra kết nối Veyon (liệt kê mục của máy đầu tiên)</button></div></section>
+    <section class="card"><h3>Tên các mục trong Veyon</h3><p class="sub">Tên mục "Programs &amp; websites" mà bạn đã tạo trong Veyon Master cho từng chức năng.</p>
+      <table class="tbl"><tbody>${feats}</tbody></table></section>
+    <section class="card"><h3>Cập nhật phần mềm</h3>
+      <p class="sub">Đang dùng phiên bản <b>${esc(S.st.version)}</b>. Chương trình hỏi mục Releases của kho GitHub (kho công khai) xem có bản mới không, chỉ thay file chương trình, giữ nguyên cài đặt, danh sách và payload.</p>
+      <div class="formgrid"><div><label class="field">Kho GitHub</label><input type="text" data-set="update_repo" value="${esc(c.update_repo)}" placeholder="chủ-sở-hữu/tên-kho"><div class="hint" style="margin-top:5px">Mặc định TMTKhoa/KhoaVeyon. Mỗi bản mới cần tạo một Release có tag lớn hơn (v1.1.0) và đính kèm file zip.</div></div></div>
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:12px">
+        <label class="switch"><input type="checkbox" data-set="update_check" ${c.update_check ? 'checked' : ''}><span class="tr"></span><span>Tự kiểm tra bản mới mỗi lần khởi động</span></label>
+        <label class="switch"><input type="checkbox" data-set="update_auto" ${c.update_auto ? 'checked' : ''}><span class="tr"></span><span>Tự cài và khởi động lại khi có bản mới (không khuyến khích, nên xem trước rồi bấm cập nhật)</span></label></div>
+      <div class="row" style="margin-top:14px"><button class="btn" data-act="checkupd">Kiểm tra bản mới</button></div>
+      <p class="hint">Bản cập nhật chạy bằng quyền của bạn và có thể gửi lệnh xuống máy học sinh. Chỉ dùng kho của chính bạn và bảo vệ tài khoản GitHub bằng xác thực hai bước.</p></section>
+    <div class="savebar"><div class="grow hint">Cài đặt lưu tại: ${esc(S.st.config_path)}</div><button class="btn primary" data-act="savesettings">💾 Lưu cài đặt</button></div>
+  </div>`;
+}
+
+async function saveSettings() {
+  const part = {features: {}};
+  document.querySelectorAll('[data-set]').forEach(el => { part[el.dataset.set] = el.type === 'checkbox' ? el.checked : el.value; });
+  document.querySelectorAll('[data-feat]').forEach(el => { part.features[el.dataset.feat] = el.value; });
+  try {
+    await api('/api/settings', part);
+    S.st = await api('/api/state');
+    S.lists = {};
+    toast('Đã lưu cài đặt', 'ok'); render(true);
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+
+function showUpdate() {
+  const bar = $('#updbar'), u = S.st.update;
+  if (!u || !u.newer) { bar.classList.add('hidden'); return; }
+  bar.classList.remove('hidden');
+  bar.innerHTML = `🔔 Có bản mới <b>${esc(u.latest)}</b> (đang dùng ${esc(u.current)}). <button class="btn primary sm" data-act="applyupd" style="margin-left:10px">Cập nhật ngay</button> <button class="link" data-act="notesupd" style="margin-left:8px">Xem thay đổi</button>`;
+}
+
+async function checkUpdate() {
+  try {
+    await saveSettings();
+    const u = await api('/api/update_check');
+    S.st.update = u; showUpdate();
+    toast(u.newer ? `Có bản mới ${u.latest}` : `Đang dùng bản mới nhất (${u.current})`, u.newer ? 'warn' : 'ok');
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function applyUpdate() {
+  const u = S.st.update;
+  if (!(await modal({title: 'Cập nhật lên ' + u.latest + '?', ok: 'Cập nhật', html: 'Chương trình sẽ tải bản mới, thay file chương trình (bản cũ được sao lưu trong data\\backup-' + esc(u.current) + ') rồi tự khởi động lại. Không mất cài đặt và danh sách.'}))) return;
+  try {
+    await api('/api/update_apply', {});
+    openLog(); toast('Đang cập nhật, cửa sổ mới sẽ tự mở sau vài giây', 'ok');
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+/* ---------- trang: Cấu hình Veyon ---------- */
+async function loadVcfg() { S.vcfg = await api('/api/vcfg_info'); }
+
+function viewVcfg() {
+  const v = S.vcfg, hosts = targets().hosts;
+  const opt = (val, text, cur) => `<option value="${esc(val)}" ${cur === val ? 'selected' : ''}>${esc(text)}</option>`;
+  const refs = (cur) => `<option value="">— chọn —</option>${opt('master', 'Máy master (hiện tại)', cur)}${hosts.map(h => opt('host:' + h, h + ' (đọc trực tiếp)', cur)).join('')}${v.backups.map(f => opt(f.name, f.name + ' · ' + f.time, cur)).join('')}`;
+  const files = `<option value="">— chọn file sao lưu —</option>${v.backups.map(f => opt(f.name, f.name + ' · ' + f.time, S.vcF)).join('')}`;
+  const rows = v.push.map((r, i) => `<div class="row" style="margin-bottom:8px"><input type="text" style="flex:2" data-vk="${i}" placeholder="Nhóm/Tên khóa" value="${esc(r.key)}"><input type="text" style="flex:1" data-vv="${i}" placeholder="Giá trị" value="${esc(r.value)}"><button class="btn sm ghost" data-act="vc_delrow" data-i="${i}">✕</button></div>`).join('');
+  const presets = `<option value="">+ Thêm khóa gợi ý…</option>${v.presets.map((p, i) => `<option value="${i}">${esc(p.key)} = ${esc(p.value)} · ${esc(p.desc)}</option>`).join('')}`;
+  return `<div class="steps">
+    <section class="card"><h3>Sao lưu, so sánh, khôi phục</h3>
+      <p class="sub">Mỗi bản sao lưu là file JSON do <code>veyon-cli config export</code> tạo, lưu trong <code>${esc(v.dir)}</code>. Máy học sinh đọc từ xa qua <code>schtasks</code> và <code>\\\\máy\\C$</code> nên cần đủ điều kiện như ở trang Thiết lập ban đầu.</p>
+      <div class="row"><button class="btn primary" data-act="vc_backup_master">💾 Sao lưu master</button>
+        <button class="btn" data-act="vc_backup_clients">💾 Sao lưu ${targets().all ? 'tất cả ' : ''}${hosts.length} máy học sinh</button></div>
+      <div class="row" style="margin-top:16px"><select data-vc="a">${refs(S.vcA)}</select><span>↔</span><select data-vc="b">${refs(S.vcB)}</select>
+        <button class="btn" data-act="vc_compare">🔍 So sánh</button></div>
+      <div class="row" style="margin-top:16px"><select data-vc="f" style="flex:1">${files}</select>
+        <button class="btn" data-act="vc_restore_master">↩ Khôi phục master</button>
+        <button class="btn" data-act="vc_restore_clients">↩ Khôi phục ${hosts.length} máy</button></div>
+      <p class="hint">So sánh hiện kết quả ở Nhật ký (~ khác giá trị, + chỉ có ở B, - chỉ có ở A). Khôi phục dùng <code>config import</code> nên <b>thay toàn bộ</b> cấu hình; trước đó chương trình tự lưu cấu hình cũ của máy đó vào cùng thư mục.</p>
+    </section>
+    <section class="card"><h3>Đẩy cấu hình Veyon Service xuống máy học sinh</h3>
+      <p class="sub">Ghi từng khóa bằng <code>veyon-cli config set</code> trên máy học sinh (giữ nguyên các khóa khác), sau đó tùy chọn khởi động lại Veyon Service. Cấu hình cũ của mỗi máy được lưu trước khi đẩy.</p>
+      ${rows || '<p class="hint">Chưa có khóa nào. Thêm khóa gợi ý hoặc bấm “Thêm dòng”.</p>'}
+      <div class="row"><select data-vc="preset">${presets}</select><button class="btn sm" data-act="vc_addrow">+ Thêm dòng</button></div>
+      <label class="switch" style="margin-top:12px"><input type="checkbox" data-vc="restart" ${v.restart ? 'checked' : ''}><span class="tr"></span><span>Khởi động lại Veyon Service sau khi đẩy (kết nối Veyon tới máy đó ngắt vài giây)</span></label>
+      <div class="formgrid" style="margin-top:12px"><div><label class="field">veyon-cli.exe trên máy học sinh</label><input type="text" data-vc="cli" value="${esc(v.client_cli)}"></div></div>
+      <div class="row" style="margin-top:14px"><button class="btn" data-act="vc_savepush">Lưu danh sách khóa</button>
+        <button class="btn primary" data-act="vc_push">▶ Đẩy xuống ${targets().all ? 'tất cả ' : ''}${hosts.length} máy</button></div>
+      <p class="hint">Tên khóa gợi ý chưa được kiểm chứng trên Veyon thật. Sau khi đẩy, dùng “So sánh” giữa máy học sinh và bản sao lưu trước đó để xem khóa nào thật sự đổi.</p>
+    </section>
+    <section class="card"><h3>Danh sách máy của Veyon Master</h3>
+      <p class="sub">Thêm các máy học sinh đang chọn vào danh sách máy của Veyon Master (<code>veyon-cli networkobject add</code>). Máy đã có thì bỏ qua. Dùng sau khi “Tìm máy học sinh trong mạng”.</p>
+      <div class="formgrid"><div><label class="field">Tên nhóm (location) trong Master</label><input type="text" data-vc="loc" value="${esc(v.location)}"><div class="hint" style="margin-top:5px">Để trống nếu không muốn gom nhóm.</div></div></div>
+      <div class="row" style="margin-top:14px"><button class="btn primary" data-act="vc_netobj">➕ Thêm ${targets().all ? 'tất cả ' : ''}${hosts.length} máy vào Veyon Master</button></div>
+      <p class="hint">Cần quyền quản trị nên Windows có thể hiện hộp thoại UAC. Chưa kiểm chứng định dạng kết quả của <code>networkobject list</code>, nên việc nhận biết máy “đã có” dựa vào việc tên máy xuất hiện trong kết quả đó.</p>
+    </section>
+  </div>`;
+}
+
+function vcCollect() {
+  const q = k => document.querySelector(`[data-vc="${k}"]`);
+  const v = S.vcfg;
+  if (q('restart')) v.restart = q('restart').checked;
+  if (q('cli')) v.client_cli = q('cli').value;
+  if (q('loc')) v.location = q('loc').value;
+  return {push: v.push, restart: v.restart, location: v.location, client_cli: v.client_cli};
+}
+
+async function vcRun(body, okMsg) {
+  try { await api('/api/vcfg_run', body); openLog(); toast(okMsg, 'ok'); setTimeout(() => go('vcfg'), 4000); }
+  catch (e) { toast(e.message, 'err'); }
+}
+
+async function vcAction(act, el) {
+  const v = S.vcfg;
+  if (act === 'vc_addrow') { vcCollect(); v.push.push({key: '', value: ''}); render(); return; }
+  if (act === 'vc_delrow') { vcCollect(); v.push.splice(+el.dataset.i, 1); render(); return; }
+  if (act === 'vc_savepush') { try { await api('/api/vcfg_save', vcCollect()); toast('Đã lưu', 'ok'); } catch (e) { toast(e.message, 'err'); } return; }
+  if (act === 'vc_backup_master') return vcRun({step: 'backup_master'}, 'Đang sao lưu cấu hình master');
+  if (act === 'vc_compare') { if (!S.vcA || !S.vcB) { toast('Chọn hai bên để so sánh', 'warn'); return; } return vcRun({step: 'compare', a: S.vcA, b: S.vcB}, 'Đang so sánh, kết quả ở Nhật ký'); }
+  const hosts = await resolveTargets(); if (!hosts) return;
+  if (act === 'vc_backup_clients') return vcRun({step: 'backup_clients', hosts}, `Đang sao lưu ${hosts.length} máy`);
+  if (act === 'vc_restore_master' || act === 'vc_restore_clients') {
+    if (!S.vcF) { toast('Chọn file sao lưu để khôi phục', 'warn'); return; }
+    const m = act === 'vc_restore_master';
+    if (!(await modal({title: 'Khôi phục cấu hình Veyon?', danger: true, ok: 'Khôi phục', html: `File <b>${esc(S.vcF)}</b> sẽ <b>thay toàn bộ</b> cấu hình Veyon của ${m ? 'máy master (cần quyền quản trị)' : hosts.length + ' máy học sinh, Veyon Service sẽ khởi động lại'}. Cấu hình hiện tại được lưu trước.`}))) return;
+    return vcRun({step: m ? 'restore_master' : 'restore_clients', file: S.vcF, hosts: m ? [] : hosts}, 'Đang khôi phục');
+  }
+  if (act === 'vc_push') {
+    const c = vcCollect();
+    if (!(await modal({title: 'Đẩy cấu hình xuống máy học sinh?', ok: 'Đẩy', html: `Ghi ${c.push.filter(r => r.key.trim()).length} khóa vào ${hosts.length} máy${c.restart ? ', rồi khởi động lại Veyon Service' : ''}.`}))) return;
+    try { await api('/api/vcfg_save', c); } catch (e) { toast(e.message, 'err'); return; }
+    return vcRun({step: 'push', hosts, push: c.push, restart: c.restart}, 'Đang đẩy cấu hình');
+  }
+  if (act === 'vc_netobj') { const c = vcCollect(); try { await api('/api/vcfg_save', c); } catch (e) { toast(e.message, 'err'); return; } return vcRun({step: 'netobj', hosts, location: c.location}, 'Đang thêm máy vào Veyon Master. Nếu Windows hỏi quyền quản trị, bấm Yes.'); }
+}
+
+document.addEventListener('input', e => {
+  const t = e.target; if (!S.vcfg) return;
+  if (t.dataset && t.dataset.vk !== undefined) S.vcfg.push[+t.dataset.vk].key = t.value;
+  else if (t.dataset && t.dataset.vv !== undefined) S.vcfg.push[+t.dataset.vv].value = t.value;
+});
+document.addEventListener('change', e => {
+  const t = e.target; if (!t.dataset || t.dataset.vc === undefined) return;
+  if (t.dataset.vc === 'a') S.vcA = t.value;
+  else if (t.dataset.vc === 'b') S.vcB = t.value;
+  else if (t.dataset.vc === 'f') S.vcF = t.value;
+  else if (t.dataset.vc === 'preset' && t.value !== '') {
+    const p = S.vcfg.presets[+t.value]; vcCollect();
+    if (!S.vcfg.push.some(r => r.key === p.key)) S.vcfg.push.push({key: p.key, value: p.value});
+    render();
+  }
+});
+
+/* ---------- điều hướng và vẽ lại ---------- */
+function buildNav() {
+  $('#nav').innerHTML = PAGES.map(p => p.grp ? `<div class="grp">${p.grp}</div>`
+    : `<button data-page="${p.id}" class="${S.page === p.id ? 'on' : ''}"><span class="ic">${p.ic}</span><span class="tx">${esc(p.name)}</span></button>`).join('');
+}
+
+async function go(id) {
+  S.page = id;
+  const p = PAGES.find(x => x.id === id);
+  try {
+    if (p.list && !S.lists[p.list]) await loadList(p.list);
+    if (id === 'dist') await loadPayload();
+    if (id === 'setup') await loadSetup();
+    if (id === 'vcfg') await loadVcfg();
+  } catch (e) { toast(e.message, 'err'); }
+  buildNav(); render(true);
+}
+
+function render(top) {
+  const main = $('#main'), keep = main.scrollTop;
+  const p = PAGES.find(x => x.id === S.page);
+  const m = p.list ? S.st.lists[p.list] : null;
+  $('#title').textContent = m ? m.title : p.title;
+  $('#sub').textContent = m ? 'Sửa nội dung file Excel bằng giao diện, không cần mở Excel.' : p.sub;
+  const v = $('#view');
+  if (S.page === 'setup') v.innerHTML = viewSetup();
+  else if (S.page === 'control') v.innerHTML = viewControl();
+  else if (S.page === 'dist') v.innerHTML = viewDist();
+  else if (S.page === 'vcfg') v.innerHTML = viewVcfg();
+  else if (S.page === 'settings') v.innerHTML = viewSettings();
+  else v.innerHTML = viewList(p.list);
+  if (p.list) applyFilter(p.list);
+  main.scrollTop = top ? 0 : keep;
+  const st = S.st;
+  showUpdate(); $('#verTxt').textContent = 'Quản lý lớp học · v' + st.version;
+  $('#statusDot').className = 'dot ' + (st.veyon_cli_found ? 'ok' : 'bad');
+  $('#statusTxt').textContent = st.veyon_cli_found ? 'Đã tìm thấy veyon-cli' : 'Chưa thấy veyon-cli';
+  $('#status').title = st.veyon_cli_path + (st.veyon_cli_found ? '' : ' (không tồn tại, bấm để mở Cài đặt)');
+}
+
+/* ---------- sự kiện ---------- */
+document.addEventListener('click', async e => {
+  const nav = e.target.closest('[data-page]');
+  if (nav) { go(nav.dataset.page); return; }
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const act = el.dataset.act, i = +el.dataset.i;
+  const p = PAGES.find(x => x.id === S.page), kind = p.list;
+  switch (act) {
+    case 'setupall': setupStep('all', false); break;
+    case 'setupveyon': setupStep('veyon', false); break;
+    case 'setuplists': setupStep('lists', false); break;
+    case 'setuppayload': setupStep('payload', false); break;
+    case 'diagnose': setupStep('diagnose', true); break;
+    case 'pushsetup': setupStep('push', true); break;
+    case 'lockcmd': if (await modal({title: 'Khóa thư mục C:\\cmd?', ok: 'Khóa', html: 'Học sinh sẽ chỉ đọc và chạy được file trong C:\\cmd, không sửa hay xóa được. Giáo viên vẫn cập nhật qua KhoaVeyon. Máy học sinh phải dùng tài khoản người dùng thường.'})) setupStep('lock', true); break;
+    case 'unlockcmd': setupStep('unlock', true); break;
+    case 'scan': scanHosts(); break;
+    case 'shot': { const hs = await resolveTargets(); if (!hs) break; try { await api('/api/shot', {hosts: hs}); openLog(); toast(`Đang chụp màn hình ${hs.length} máy`, 'ok'); } catch (err) { toast(err.message, 'err'); } break; }
+    case 'watch_start': case 'watch_stop': case 'watch_fetch': { const hs = await resolveTargets(); if (!hs) break; const step = act.slice(6); try { await api('/api/watch', {step, hosts: hs}); openLog(); toast(`Đã gửi lệnh tới ${hs.length} máy`, 'ok'); } catch (err) { toast(err.message, 'err'); } break; }
+    case 'openevidence': api('/api/open', {what: 'evidence'}).catch(err => toast(err.message, 'warn')); break;
+    case 'openshots': api('/api/open', {what: 'shots'}).catch(err => toast(err.message, 'warn')); break;
+    case 'vc_backup_master': case 'vc_backup_clients': case 'vc_compare': case 'vc_restore_master': case 'vc_restore_clients':
+    case 'vc_addrow': case 'vc_delrow': case 'vc_savepush': case 'vc_push': case 'vc_netobj': vcAction(act, el); break;
+    case 'refreshsetup': refreshSetup(); break;
+    case 'gosettings': go('settings'); break;
+    case 'checkupd': checkUpdate(); break;
+    case 'applyupd': applyUpdate(); break;
+    case 'notesupd': modal({title: 'Thay đổi ' + S.st.update.latest, noCancel: true, ok: 'Đóng', html: '<div style="white-space:pre-wrap">' + esc(S.st.update.notes || 'Không có ghi chú.') + '</div>'}); break;
+    case 'run': runAction(el.dataset.key); break;
+    case 'selall': S.hosts.forEach(h => S.sel.add(h)); render(); break;
+    case 'selnone': S.sel.clear(); render(); break;
+    case 'rmhost': S.sel.delete(S.hosts[i]); S.hosts.splice(i, 1); saveHosts(); render(); break;
+    case 'copycmd': {
+      const a = action($('#copySel').value);
+      const text = 'cmd.exe /c ' + S.st.cfg.script_path + ' ' + a.switch;
+      try { await navigator.clipboard.writeText(text); toast('Đã sao chép: ' + text, 'ok'); }
+      catch (err) { await modal({title: 'Sao chép lệnh', noCancel: true, ok: 'Đóng', html: `<input type="text" value="${esc(text)}" readonly onfocus="this.select()">`}); }
+      break;
+    }
+    case 'addrow': { const L = S.lists[kind]; L.rows.push({a: '', b: ''}); markDirty(kind); render();
+      const ins = document.querySelectorAll('#rows input[data-f=a]'); if (ins.length) ins[ins.length - 1].focus(); break; }
+    case 'delrow': S.lists[kind].rows.splice(i, 1); markDirty(kind); scheduleCheck(kind); render(); break;
+    case 'up': case 'down': {
+      const rows = S.lists[kind].rows, j = act === 'up' ? i - 1 : i + 1;
+      if (j >= 0 && j < rows.length) { [rows[i], rows[j]] = [rows[j], rows[i]]; markDirty(kind); scheduleCheck(kind); render(); }
+      break;
+    }
+    case 'preset': { const n = addRows(kind, S.st.lists[kind].presets[el.dataset.name]); toast(n ? `Đã thêm ${n} dòng` : 'Các dòng này đã có trong danh sách', n ? 'ok' : 'warn'); render(); break; }
+    case 'paste': {
+      const text = await modal({title: 'Dán nhiều dòng', ok: 'Thêm vào danh sách',
+        html: `<p class="hint" style="margin-top:0">Mỗi dòng một mục. Có thể dán từ Excel (cột A và cột B) hoặc từ Notepad.</p><textarea id="pasteTxt" placeholder="chrome&#10;mspaint&#10;notepad"></textarea>`,
+        collect: r => r.querySelector('#pasteTxt').value});
+      if (text) {
+        const items = text.split(/\r?\n/).map(l => l.split('\t')).map(c => [(c[0] || '').trim(), (c[1] || '').trim()]).filter(c => c[0]);
+        const n = addRows(kind, items); toast(n ? `Đã thêm ${n} dòng` : 'Không có dòng mới để thêm', n ? 'ok' : 'warn'); render();
+      }
+      break;
+    }
+    case 'reload': {
+      if (S.lists[kind].dirty && !(await modal({title: 'Bỏ thay đổi?', html: 'Các thay đổi chưa lưu sẽ bị mất.', ok: 'Tải lại', danger: true}))) break;
+      try { await loadList(kind); render(); toast('Đã tải lại từ file', 'ok'); } catch (err) { toast(err.message, 'err'); }
+      break;
+    }
+    case 'save': saveList(kind, false); break;
+    case 'saveapply': saveList(kind, true); break;
+    case 'mode': await saveCfg({dist_mode: el.dataset.v}); render(); break;
+    case 'upload': $('#fileInput').click(); break;
+    case 'addextra': {
+      const v = await modal({title: 'Thêm theo đường dẫn', ok: 'Thêm', html: '<p class="hint" style="margin-top:0">Đường dẫn đầy đủ của file hoặc thư mục trên máy này, ví dụ D:\\Phanmem\\setup.exe</p><input type="text" id="pathTxt" placeholder="D:\\Phanmem\\setup.exe">', collect: r => r.querySelector('#pathTxt').value.trim()});
+      if (v) { const l = (S.st.cfg.dist_files || []).concat([v.replace(/^"|"$/g, '')]); await saveCfg({dist_files: l}); render(); }
+      break;
+    }
+    case 'delextra': { const l = S.st.cfg.dist_files.slice(); l.splice(i, 1); await saveCfg({dist_files: l}); render(); break; }
+    case 'delpl': {
+      const f = S.payload[i];
+      if (await modal({title: 'Xóa file?', danger: true, ok: 'Xóa', html: `Xóa <b>${esc(f.name)}</b> khỏi thư mục payload trên máy này?`})) {
+        try { await api('/api/payload_delete', {name: f.name}); await loadPayload(); render(); } catch (err) { toast(err.message, 'err'); }
+      }
+      break;
+    }
+    case 'openpayload': api('/api/open', {what: 'payload'}).catch(err => toast(err.message, 'warn')); break;
+    case 'openlists': api('/api/open', {what: 'lists'}).catch(err => toast(err.message, 'warn')); break;
+    case 'opendata': api('/api/open', {what: 'data'}).catch(err => toast(err.message, 'warn')); break;
+    case 'dist': runDist(el.dataset.copy === '1', el.dataset.run === '1'); break;
+    case 'savesettings': saveSettings(); break;
+    case 'syncnow': {
+      try { await saveSettings(); const r = await api('/api/sync', {}); toast(`Đã đồng bộ ${r.count} file`, 'ok'); openLog(); } catch (err) { toast(err.message, 'err'); }
+      break;
+    }
+    case 'veyonlist': {
+      try { await api('/api/veyon_list', {host: S.hosts[0] || ''}); toast('Đang chạy, xem kết quả ở Nhật ký', 'ok'); openLog(); } catch (err) { toast(err.message, 'err'); }
+      break;
+    }
+  }
+});
+
+document.addEventListener('submit', e => {
+  e.preventDefault();
+  if (e.target.dataset.form === 'addhost') {
+    const inp = $('#hostInput'), n = addHosts(inp.value);
+    if (!n && inp.value.trim()) toast('Máy này đã có trong danh sách', 'warn');
+    render(); const x = $('#hostInput'); if (x) x.focus();
+  }
+});
+
+document.addEventListener('input', e => {
+  const t = e.target;
+  const p = PAGES.find(x => x.id === S.page);
+  if (t.dataset.f && p.list) { S.lists[p.list].rows[+t.dataset.i][t.dataset.f] = t.value; markDirty(p.list); if (t.dataset.f === 'a') scheduleCheck(p.list); }
+  else if (t.id === 'filter') { S.lists[p.list].filter = t.value; applyFilter(p.list); }
+});
+
+document.addEventListener('change', async e => {
+  const t = e.target;
+  if (t.dataset.host !== undefined) { const h = S.hosts[+t.dataset.host]; t.checked ? S.sel.add(h) : S.sel.delete(h); render(); }
+  else if (t.dataset.pl !== undefined) {
+    const skip = new Set(S.st.cfg.dist_payload_skip || []), name = S.payload[+t.dataset.pl].name;
+    t.checked ? skip.delete(name) : skip.add(name);
+    await saveCfg({dist_payload_skip: [...skip]});
+  }
+  else if (t.dataset.cfg) { await saveCfg({[t.dataset.cfg]: t.type === 'checkbox' ? t.checked : t.value}); if (t.dataset.cfg === 'auto_push') render(); }
+  else if (t.id === 'fileInput') { await uploadFiles(t.files); t.value = ''; }
+});
+
+$('#status').onclick = () => go('settings');
+$('#quitBtn').onclick = async () => {
+  if (!(await modal({title: 'Thoát KhoaVeyon?', html: 'Cửa sổ sẽ đóng. Các lệnh đang chạy nền có thể bị dừng.', ok: 'Thoát', danger: true}))) return;
+  try { await api('/api/quit', {}); } catch (e) { /* đang đóng */ }
+  document.body.insertAdjacentHTML('beforeend', '<div class="bye"><div><div style="font-size:54px">👋</div><h2>Đã thoát KhoaVeyon</h2><p class="muted">Bạn có thể đóng cửa sổ này.</p></div></div>');
+  setTimeout(() => window.close(), 600);
+};
+
+/* ---------- nhật ký ---------- */
+function openLog() { if (!S.logOpen) toggleLog(true); }
+function toggleLog(v) {
+  S.logOpen = v === undefined ? !S.logOpen : v;
+  $('#logdock').classList.toggle('closed', !S.logOpen);
+  $('#main').classList.toggle('logclosed', !S.logOpen);
+  $('#logToggle').textContent = S.logOpen ? 'Thu gọn ▾' : 'Mở rộng ▴';
+}
+$('#loghead').onclick = e => { if (!e.target.closest('#logClear')) toggleLog(); };
+$('#logClear').onclick = () => { $('#logbody').innerHTML = ''; $('#logcount').textContent = ''; };
+
+let logLines = 0;
+async function pollLog() {
+  try {
+    const r = await api('/api/log?since=' + S.logSeq);
+    S.logSeq = r.last;
+    if (r.items.length) {
+      const body = $('#logbody'), atEnd = body.scrollTop + body.clientHeight >= body.scrollHeight - 30;
+      body.insertAdjacentHTML('beforeend', r.items.map(x => `<div class="ln ${x.kind}"><span class="t">${x.t}</span>${esc(x.msg)}</div>`).join(''));
+      logLines += r.items.length; $('#logcount').textContent = logLines + ' dòng';
+      if (atEnd) body.scrollTop = body.scrollHeight;
+    }
+    $('#busy').classList.toggle('hidden', !r.busy);
+  } catch (e) { /* mất kết nối tạm thời */ }
+}
+
+/* ---------- khởi động ---------- */
+(async function init() {
+  try {
+    S.st = await api('/api/state');
+  } catch (e) {
+    $('#view').innerHTML = `<div class="note warn">${esc(e.message)}</div>`; return;
+  }
+  S.hosts = S.st.cfg.hosts.slice();
+  S.page = S.st.cfg.setup_done ? 'control' : 'setup';
+  if (S.page === 'setup') { try { await loadSetup(); } catch (e) { toast(e.message, 'err'); } }
+  buildNav(); render(true);
+  pollLog(); setInterval(pollLog, 900);
+  setTimeout(async () => { try { S.st.update = (await api('/api/state')).update; showUpdate(); } catch (e) { /* bỏ qua */ } }, 6000);
+})();
+</script>
+</body>
+</html>
