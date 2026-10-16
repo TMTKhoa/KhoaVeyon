@@ -19,7 +19,7 @@ import threading
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Border, Side
 
-VERSION = '1.4.0'
+VERSION = '1.6.0'
 APP_TITLE = 'KhoaVeyon - Hỗ trợ quản lý lớp học'
 APP_DIR = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__))
 LEGACY_CONFIG_PATH = os.path.join(APP_DIR, 'KhoaVeyon.json')
@@ -137,6 +137,7 @@ DEFAULT_CONFIG = {
     'auto_push': True,   # bấm Lưu ở tab danh sách thì gửi file vừa sửa xuống máy học sinh
     'update_repo': 'TMTKhoa/KhoaVeyon',  # GitHub, dạng chủ-sở-hữu/tên-kho
     'update_check': True,  # tự kiểm tra bản mới mỗi lần khởi động (khi đã điền kho GitHub)
+    'update_skip': '',   # bản mới mà giáo viên chọn "Bỏ qua bản này" (không hỏi lại cho đến khi có bản mới hơn)
     'update_auto': False,  # tự cài và khởi động lại khi có bản mới (mặc định tắt, nên xem trước rồi bấm cập nhật)
     'auto_lock': False,  # sau khi thiết lập máy học sinh thì khóa C:\\cmd (học sinh chỉ đọc)
     'client_veyon_cli': r'C:\Program Files\Veyon\veyon-cli.exe',  # đường dẫn veyon-cli trên máy học sinh
@@ -486,7 +487,7 @@ LOCK_KEYS = {'lockall-start', 'lockrun-start', 'lockapp-start', 'blockall', 'all
 FREE_KEYS = {'lockall-stop', 'lockrun-stop', 'lockapp-stop', 'allowall', 'unblockapp', 'unlock'}
 
 STR_KEYS = ['list_dir', 'script_path', 'veyon_cli', 'run_template', 'list_template', 'sync_dir',
-            'dist_target', 'dist_mode', 'dist_cmd', 'dist_action', 'update_repo', 'watch_repeat', 'watch_max', 'alert_poll', 'alert_group_sec', 'keep_days']
+            'dist_target', 'dist_mode', 'dist_cmd', 'dist_action', 'update_repo', 'update_skip', 'watch_repeat', 'watch_max', 'alert_poll', 'alert_group_sec', 'keep_days']
 BOOL_KEYS = ['auto_sync', 'auto_push', 'dist_include_lists', 'dist_interactive', 'setup_done', 'auto_lock', 'update_check', 'update_auto', 'shot_before_lock', 'alert_sound', 'alert_popup', 'watch_autostart']
 LIST_KEYS = ['dist_files', 'dist_payload_skip']
 
@@ -2086,7 +2087,8 @@ SCHOOL_MANUAL_MIN = 45     # "đặt làm lớp hiện tại" có hiệu lực c
 SCHOOL_DAYS = ['THỨ HAI', 'THỨ BA', 'THỨ TƯ', 'THỨ NĂM', 'THỨ SÁU', 'THỨ BẢY', 'CHỦ NHẬT']
 SCHOOL_DAY_SHORT = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
 SCHOOL = {'classes': {}, 'layouts': {}, 'slots': [], 'from': '', 'auto': True, 'override': None, 'manual': '',
-          'classes_file': '', 'classes_at': '', 'timetable_file': '', 'timetable_at': '', 'teacher': '', 'subject': ''}
+          'classes_file': '', 'classes_at': '', 'timetable_file': '', 'timetable_at': '', 'teacher': '', 'subject': '',
+          'attendance': {}, 'attend_notify': True, 'auto_announce': False}
 
 
 def school_path():
@@ -2370,6 +2372,364 @@ def school_student_for(host, cls):
         return (lay.get('seats') or {}).get(str(no), ''), no
 
 
+# ---------------------------------------------------------------- thông báo chỗ ngồi, điểm danh vắng, tự dồn chỗ
+SEAT_PS1_NAME = 'kvseat.ps1'
+SEAT_JSON_NAME = 'kvseat.json'
+SEAT_TASK = 'KhoaVeyonSeat'
+SEAT_PS1 = r'''param([string]$Json)
+# KhoaVeyonSeat: chay trong phien dang nhap cua hoc sinh. Hien bang "May nay cua ai" (noi dung doc tu file json UTF-8).
+# Dang chay roi thi ban moi chi can ghi lai file json, ban cu tu doc lai va doi noi dung.
+$ErrorActionPreference = 'SilentlyContinue'
+$created = $false
+$mx = New-Object System.Threading.Mutex($true, 'Local\KhoaVeyonSeat', [ref]$created)
+if (-not $created) { exit }
+Add-Type -AssemblyName System.Windows.Forms,System.Drawing
+Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class KvDpiSeat { [DllImport("user32.dll")] public static extern bool SetProcessDPIAware(); }'
+[KvDpiSeat]::SetProcessDPIAware() | Out-Null
+function Read-Cfg {
+    try { return (Get-Content -LiteralPath $Json -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return $null }
+}
+$script:stamp = ''
+$script:mode = 'big'
+$script:since = Get-Date
+$script:cfg = $null
+$form = New-Object System.Windows.Forms.Form
+$form.FormBorderStyle = 'None'
+$form.TopMost = $true
+$form.ShowInTaskbar = $false
+$form.StartPosition = 'Manual'
+$form.BackColor = [System.Drawing.Color]::FromArgb(30, 64, 175)
+$l3 = New-Object System.Windows.Forms.Label
+$l3.Dock = 'Bottom'; $l3.TextAlign = 'MiddleCenter'; $l3.ForeColor = [System.Drawing.Color]::FromArgb(219, 234, 254)
+$l1 = New-Object System.Windows.Forms.Label
+$l1.Dock = 'Top'; $l1.TextAlign = 'MiddleCenter'; $l1.ForeColor = [System.Drawing.Color]::FromArgb(219, 234, 254)
+$l2 = New-Object System.Windows.Forms.Label
+$l2.Dock = 'Fill'; $l2.TextAlign = 'MiddleCenter'; $l2.ForeColor = [System.Drawing.Color]::White
+$form.Controls.Add($l2); $form.Controls.Add($l1); $form.Controls.Add($l3)
+function Set-Layout {
+    $wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+    if ($script:mode -eq 'big') {
+        $form.Size = New-Object System.Drawing.Size(820, 320)
+        $form.Location = New-Object System.Drawing.Point(($wa.Left + [int](($wa.Width - 820) / 2)), ($wa.Top + [int](($wa.Height - 320) / 2)))
+        $l1.Height = 70; $l3.Height = 70
+        $l1.Font = New-Object System.Drawing.Font('Segoe UI', 20)
+        $l3.Font = New-Object System.Drawing.Font('Segoe UI', 18)
+        $sz = 44; if ($l2.Text.Length -gt 22) { $sz = 30 }
+        $l2.Font = New-Object System.Drawing.Font('Segoe UI', $sz, [System.Drawing.FontStyle]::Bold)
+    } else {
+        $form.Size = New-Object System.Drawing.Size(300, 92)
+        $form.Location = New-Object System.Drawing.Point(($wa.Right - 316), ($wa.Top + 12))
+        $l1.Height = 22; $l3.Height = 20
+        $l1.Font = New-Object System.Drawing.Font('Segoe UI', 8)
+        $l3.Font = New-Object System.Drawing.Font('Segoe UI', 8)
+        $sz = 15; if ($l2.Text.Length -gt 20) { $sz = 11 }
+        $l2.Font = New-Object System.Drawing.Font('Segoe UI', $sz, [System.Drawing.FontStyle]::Bold)
+    }
+}
+function Dismiss {
+    if ($script:mode -eq 'big' -and $script:cfg -and $script:cfg.keep) { $script:mode = 'label'; Set-Layout } else { if ($script:mode -eq 'big') { $form.Close() } }
+}
+$form.Add_Click({ Dismiss }); $l1.Add_Click({ Dismiss }); $l2.Add_Click({ Dismiss }); $l3.Add_Click({ Dismiss })
+$timer = New-Object System.Windows.Forms.Timer
+$timer.Interval = 1500
+$timer.Add_Tick({
+    $c = Read-Cfg
+    if ($c -eq $null) { return }
+    if ($c.clear) { $form.Close(); return }
+    if ($c.stamp -ne $script:stamp) {
+        $script:stamp = $c.stamp; $script:cfg = $c
+        $l1.Text = [string]$c.title; $l2.Text = [string]$c.name; $l3.Text = [string]$c.detail
+        $script:since = Get-Date
+        if ([int]$c.seconds -gt 0) { $script:mode = 'big' } else { $script:mode = 'label' }
+        Set-Layout
+        $form.Show(); $form.TopMost = $true
+    } elseif ($script:mode -eq 'big' -and $script:cfg) {
+        if (((Get-Date) - $script:since).TotalSeconds -ge [int]$script:cfg.seconds) {
+            if ($script:cfg.keep) { $script:mode = 'label'; Set-Layout } else { $form.Close() }
+        }
+    }
+    if ($script:mode -eq 'label') { $form.TopMost = $true }
+})
+$form.Add_Shown({ $form.Activate() })
+$form.Opacity = 0.97
+$c0 = Read-Cfg
+if ($c0 -eq $null -or $c0.clear) { exit }
+$script:stamp = $c0.stamp; $script:cfg = $c0
+$l1.Text = [string]$c0.title; $l2.Text = [string]$c0.name; $l3.Text = [string]$c0.detail
+if ([int]$c0.seconds -gt 0) { $script:mode = 'big' } else { $script:mode = 'label' }
+Set-Layout
+$timer.Start()
+[System.Windows.Forms.Application]::Run($form)
+'''
+
+
+def seat_grid(lay):
+    """Vị trí (hàng, dãy) của từng số máy, giống cách giao diện đánh số: hàng 0 gần bàn giáo viên, đánh số theo từng dãy."""
+    cols, per = int(lay.get('cols', 4)), int(lay.get('per', 10))
+    order = list(range(cols))
+    if lay.get('first') == 'right':
+        order.reverse()
+    pos, n = {}, 0
+    for c in order:
+        rows = list(range(per))
+        if lay.get('from') == 'door':
+            rows.reverse()
+        for r in rows:
+            n += 1
+            pos[n] = (r, c)
+    return pos
+
+
+def seat_host_map(lay):
+    """{số máy: tên máy} theo Tên máy mẫu hoặc thứ tự danh sách máy ở trang Điều khiển lớp."""
+    with CFG_LOCK:
+        hosts = [str(h).strip() for h in CFG.get('hosts') or [] if str(h).strip()]
+    out = {}
+    for h in hosts:
+        no = school_seat_no(h, lay)
+        if no and no not in out:
+            out[no] = h
+    pat = (lay.get('pattern') or '').strip()
+    if pat and '{n}' in pat:
+        for no in range(1, int(lay.get('cols', 4)) * int(lay.get('per', 10)) + 1):
+            out.setdefault(no, pat.replace('{n}', str(no)))
+    return out
+
+
+def seat_online_map(lay, hmap=None):
+    """{số máy: bật/tắt} cho các máy có tên máy. Máy không có tên máy thì không có trong kết quả (coi như dùng được)."""
+    hmap = seat_host_map(lay) if hmap is None else hmap
+    if not hmap:
+        return {}
+    out = {}
+    with ThreadPoolExecutor(max_workers=32) as ex:
+        futs = {ex.submit(tcp_open, h, VEYON_PORT, 0.6): no for no, h in hmap.items()}
+        for fut in as_completed(futs):
+            try:
+                out[futs[fut]] = bool(fut.result())
+            except Exception:  # noqa
+                out[futs[fut]] = False
+    return out
+
+
+def seats_effective(base, absent, moves):
+    """Chỗ ngồi thực tế hôm nay: bỏ em vắng, em được chuyển thì ngồi chỗ mới. {số máy (chuỗi): tên}."""
+    gone = set(absent) | set(moves)
+    seats = {k: v for k, v in (base or {}).items() if v not in gone}
+    for name, no in (moves or {}).items():
+        seats[str(no)] = name
+    return seats
+
+
+def plan_moves(lay, class_names, absent, online):
+    """Em có mặt mà máy không dùng được (máy hỏng, máy tắt) hoặc chưa có chỗ thì chuyển sang máy trống gần nhất
+    (gần theo sơ đồ: hàng và dãy). Máy trống là máy dùng được mà không ai có mặt ngồi, thường là máy của em vắng.
+    Trả về ({tên: số máy mới}, [tên không còn máy trống])."""
+    cols, per = int(lay.get('cols', 4)), int(lay.get('per', 10))
+    total = cols * per
+    pos = seat_grid(lay)
+    broken = {int(x) for x in lay.get('broken') or []}
+    base = {int(k): v for k, v in (lay.get('seats') or {}).items()}
+    absent = set(absent)
+
+    def usable(s):
+        return s not in broken and online.get(s, True)
+    present_at = {s: n for s, n in base.items() if n not in absent}
+    free = [s for s in range(1, total + 1) if usable(s) and s not in present_at]
+    seated = set(base.values())
+    todo = [(s, n) for s, n in sorted(present_at.items()) if not usable(s)]
+    todo += [(0, n) for n in class_names if n not in seated and n not in absent]
+    moves, unplaced = {}, []
+    for s, n in todo:
+        if not free:
+            unplaced.append(n)
+            continue
+        ref = pos.get(s) or pos.get(1) or (0, 0)
+        best = min(free, key=lambda f: (abs(pos[f][0] - ref[0]) + abs(pos[f][1] - ref[1]), f))
+        free.remove(best)
+        moves[n] = best
+    return moves, unplaced
+
+
+def att_today():
+    return datetime.date.today().strftime('%Y-%m-%d')
+
+
+def att_state(cls):
+    """Điểm danh hôm nay của một lớp, kèm chỗ ngồi thực tế."""
+    cls = _cls_norm(cls)
+    with SCHOOL_LOCK:
+        e = (SCHOOL['attendance'].get('%s|%s' % (att_today(), cls)) or {})
+        lay = SCHOOL['layouts'].get(cls) or {}
+        names = list(SCHOOL['classes'].get(cls, []))
+        absent = [n for n in e.get('absent', []) if n in names]
+        moves = dict(e.get('moves', {}))
+        seats = seats_effective(lay.get('seats'), absent, moves)
+        return {'cls': cls, 'date': att_today(), 'absent': absent, 'moves': moves, 'seats': seats,
+                'offline': list(e.get('offline', [])), 'unplaced': list(e.get('unplaced', [])),
+                'checked_at': e.get('checked_at', ''), 'silent': bool(e.get('silent')), 'notify': bool(SCHOOL.get('attend_notify', True)),
+                'auto_announce': bool(SCHOOL.get('auto_announce', False))}
+
+
+def api_school_attendance(q):
+    cls = _cls_norm(q.get('cls'))
+    with SCHOOL_LOCK:
+        if cls not in SCHOOL['classes']:
+            raise ApiError('Lớp không có trong danh sách lớp')
+    return att_state(cls)
+
+
+def att_recompute(cls):
+    """Kiểm tra máy nào đang bật rồi tính lại chỗ ngồi hôm nay. Trả về {tên: số máy} của các em bị đổi chỗ so với lần trước."""
+    key = '%s|%s' % (att_today(), cls)
+    with SCHOOL_LOCK:
+        lay = json.loads(json.dumps(SCHOOL['layouts'].get(cls) or dict(LAYOUT_DEFAULT)))
+        names = list(SCHOOL['classes'].get(cls, []))
+        e = SCHOOL['attendance'].get(key) or {}
+        absent, prev = list(e.get('absent', [])), dict(e.get('moves', {}))
+    lay = dict(LAYOUT_DEFAULT, **lay)
+    hmap = seat_host_map(lay)
+    online = seat_online_map(lay, hmap)  # chạy ngoài khóa vì có chờ mạng
+    silent = bool(online) and not any(online.values())  # không máy nào trả lời: nhiều khả năng chưa bật máy hoặc sai tên máy, không dồn chỗ theo trạng thái bật/tắt
+    if silent:
+        online = {}
+    if lay.get('seats'):
+        moves, unplaced = plan_moves(lay, names, absent, online)
+    else:  # lớp chưa xếp chỗ thì không tự xếp
+        moves, unplaced = {}, []
+    with SCHOOL_LOCK:
+        ent = SCHOOL['attendance'].setdefault(key, {})
+        ent.update({'absent': absent, 'moves': moves, 'unplaced': unplaced,
+                    'offline': sorted(s for s, ok in online.items() if not ok), 'silent': silent, 'checked_at': time.strftime('%H:%M:%S')})
+        old = (datetime.date.today() - datetime.timedelta(days=60)).strftime('%Y-%m-%d')
+        for k in [k for k in SCHOOL['attendance'] if k.split('|', 1)[0] < old]:
+            del SCHOOL['attendance'][k]
+    school_save()
+    return {n: s for n, s in moves.items() if prev.get(n) != s}
+
+
+def api_school_attendance_set(b):
+    """action: toggle (đổi vắng/có mặt của một em), present (cả lớp có mặt), recheck (kiểm tra lại máy và dồn chỗ),
+    setting (bật tắt: notify, auto_announce)."""
+    cls = _cls_norm(b.get('cls'))
+    act = str(b.get('action') or '')
+    key = '%s|%s' % (att_today(), cls)
+    with SCHOOL_LOCK:
+        if cls not in SCHOOL['classes']:
+            raise ApiError('Lớp không có trong danh sách lớp')
+        names = SCHOOL['classes'][cls]
+        ent = SCHOOL['attendance'].setdefault(key, {})
+        if act == 'toggle':
+            n = str(b.get('name') or '')
+            if n not in names:
+                raise ApiError('Học sinh không có trong lớp')
+            ab = list(ent.get('absent', []))
+            if n in ab:
+                ab.remove(n)
+            else:
+                ab.append(n)
+            ent['absent'] = ab
+        elif act == 'present':
+            ent['absent'] = []
+        elif act == 'setting':
+            if 'notify' in b:
+                SCHOOL['attend_notify'] = bool(b.get('notify'))
+            if 'auto_announce' in b:
+                SCHOOL['auto_announce'] = bool(b.get('auto_announce'))
+        elif act != 'recheck':
+            raise ApiError('Thao tác không hợp lệ')
+    if act == 'setting':
+        school_save()
+        return att_state(cls)
+    changed = att_recompute(cls)
+    st = att_state(cls)
+    if act == 'toggle':
+        n = str(b.get('name') or '')
+        log('Điểm danh lớp %s: %s %s' % (cls, n, 'VẮNG' if n in st['absent'] else 'có mặt'), 'head')
+    for n, s in changed.items():
+        log('Chuyển chỗ lớp %s: %s -> máy %d (máy trống gần nhất)' % (cls, n, s), 'head')
+    if st['unplaced']:
+        log('Lớp %s: không còn máy trống cho %s' % (cls, ', '.join(st['unplaced'])), 'warn')
+    if changed and st['notify']:
+        start_job(job_announce, cls, list(changed), 15, True, False, True)
+    st['changed'] = changed
+    return st
+
+
+def seat_notice_payload(cls, name, no, moved, seconds, keep):
+    title = 'BẠN ĐƯỢC CHUYỂN SANG MÁY NÀY' if moved else 'MÁY NÀY LÀ CỦA'
+    return {'stamp': '%.3f' % time.time(), 'title': title, 'name': name,
+            'detail': 'Lớp %s · Máy %d' % (cls, no), 'seconds': int(seconds), 'keep': bool(keep), 'clear': False}
+
+
+def seat_notice_one(cfg, host, payload):
+    rdir = vcfg_remote_dir(cfg)
+    tmp = tempfile.mkdtemp(prefix='kvseat')
+    try:
+        jp = os.path.join(tmp, SEAT_JSON_NAME)
+        with open(jp, 'w', encoding='utf-8', newline='') as f:
+            json.dump(payload, f, ensure_ascii=False)
+        files = [jp]
+        if not payload.get('clear'):
+            sp = os.path.join(tmp, SEAT_PS1_NAME)
+            with open(sp, 'w', encoding='utf-8-sig', newline='') as f:  # BOM để PowerShell 5 đọc đúng
+                f.write(SEAT_PS1.replace('\r\n', '\n').replace('\n', '\r\n'))
+            files.append(sp)
+        distribute_to_host(host, files, rdir)
+    except Exception as e:  # noqa
+        return False, 'không chép được thông báo: %s' % e
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    if payload.get('clear'):
+        return True, 'đã gỡ nhãn chỗ ngồi'
+    cmd = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File %s -Json %s' % (
+        _q(rdir + '\\' + SEAT_PS1_NAME), _q(rdir + '\\' + SEAT_JSON_NAME))
+    rc, out = remote_run(host, cmd, interactive=True, name=SEAT_TASK)
+    if rc != 0:
+        return False, out
+    return True, 'đã báo: %s (%s)' % (payload['name'], payload['detail'])
+
+
+def job_announce(cls, only, seconds, keep, clear, moved=False):
+    """Hiện bảng "Máy này của ai" trên từng máy học sinh. only: chỉ các em này (rỗng = cả lớp có mặt). clear: gỡ nhãn trên mọi máy."""
+    with CFG_LOCK:
+        cfg = json.loads(json.dumps(CFG))
+    if clear:
+        hosts = clean_hosts(cfg.get('hosts') or [])
+        log('>>> Gỡ nhãn chỗ ngồi (%d máy)' % len(hosts), 'head')
+        pool_run(lambda h: seat_notice_one(cfg, h, {'stamp': '%.3f' % time.time(), 'clear': True}), hosts)
+        return
+    st = att_state(cls)
+    with SCHOOL_LOCK:
+        lay = dict(LAYOUT_DEFAULT, **(SCHOOL['layouts'].get(cls) or {}))
+    hmap = seat_host_map(lay)
+    items = {}
+    for no, name in st['seats'].items():
+        if only and name not in only:
+            continue
+        h = hmap.get(int(no))
+        if h:
+            items[h] = seat_notice_payload(cls, name, int(no), moved, seconds, keep)
+    if not items:
+        log('Không có máy nào để thông báo: lớp %s chưa xếp chỗ, hoặc số máy chưa khớp tên máy (xem Tên máy mẫu ở sơ đồ chỗ ngồi)' % cls, 'warn')
+        return
+    log('>>> Thông báo chỗ ngồi lớp %s (%d máy)' % (cls, len(items)), 'head')
+    pool_run(lambda h: seat_notice_one(cfg, h, items[h]), sorted(items))
+
+
+def api_school_announce(b):
+    cls = _cls_norm(b.get('cls'))
+    with SCHOOL_LOCK:
+        if cls not in SCHOOL['classes']:
+            raise ApiError('Lớp không có trong danh sách lớp')
+    try:
+        seconds = max(3, min(300, int(b.get('seconds') or 15)))
+    except (TypeError, ValueError):
+        raise ApiError('Số giây phải là số')
+    start_job(job_announce, cls, [], seconds, bool(b.get('keep', True)), bool(b.get('clear')), False)
+    return {'ok': True}
+
+
 def school_brief():
     n = school_now()
     return {'current': (n['current'] or {}).get('cls', ''), 'source': n['source'],
@@ -2379,7 +2739,7 @@ def school_brief():
 def api_school(_q=None):
     with SCHOOL_LOCK:
         d = {k: SCHOOL[k] for k in ('slots', 'from', 'auto', 'manual', 'classes_file', 'classes_at', 'timetable_file',
-                                   'timetable_at', 'teacher', 'subject')}
+                                   'timetable_at', 'teacher', 'subject', 'attend_notify', 'auto_announce')}
         d['classes'] = [{'name': n, 'count': len(v)} for n, v in sorted(SCHOOL['classes'].items())]
         d['layouts'] = json.loads(json.dumps(SCHOOL['layouts']))
         known = set(SCHOOL['classes'])
@@ -2451,6 +2811,8 @@ def school_loop():
             c = (school_now()['current'] or {}).get('cls', '')
             if last is not None and c != last:
                 log('Chuyển lớp: %s' % (('đang dạy lớp ' + c) if c else 'hết tiết'), 'head')
+                if c and SCHOOL.get('auto_announce') and c in SCHOOL['classes']:
+                    start_job(job_announce, c, [], 15, True, False, False)
             last = c
         except Exception:  # noqa
             pass
@@ -2467,7 +2829,7 @@ def api_alerts(q):
         last = ALERT_SEQ[0]
     with CFG_LOCK:
         watching = len(CFG.get('watch_hosts') or [])
-    return {'items': items[-200:], 'last': last, 'watching': watching, 'school': school_brief()}
+    return {'items': items[-200:], 'last': last, 'watching': watching, 'school': school_brief(), 'update': update_brief()}
 
 
 def api_alerts_clear(_b=None):
@@ -2711,7 +3073,7 @@ def api_report_export(b):
 import zipfile
 import tempfile
 
-UPDATE_FILES = ('KhoaVeyon.py', 'Chay-KhoaVeyon.bat', 'README-KhoaVeyon.md', 'requirements.txt')
+UPDATE_FILES = ('KhoaVeyon.py', 'Chay-KhoaVeyon.bat', 'Tao-ShortCut.bat', 'README-KhoaVeyon.md', 'requirements.txt')
 UPDATE_DIRS = ('web',)          # chỉ ghi đè mã chương trình; data, lists, payload, runtime của bạn không bị đụng tới
 UPDATE_MAX = 60 * 1024 * 1024
 UPDATE_HOSTS = ('github.com', 'githubusercontent.com')
@@ -2824,7 +3186,11 @@ def restart_self():
         threading.Timer(0.8, srv.shutdown).start()
 
 
-def startup_update_check():
+UPDATE_EVERY = 6 * 3600   # hỏi GitHub lại mỗi 6 giờ khi chương trình chạy lâu (không tải gì về, chỉ hỏi số bản mới nhất)
+
+
+def update_check_once():
+    """Hỏi GitHub một lần. Có bản mới thì ghi vào STATE['update'] để giao diện hiện hộp thoại hỏi giáo viên."""
     with CFG_LOCK:
         repo, auto = CFG.get('update_repo', ''), CFG.get('update_auto')
     try:
@@ -2832,10 +3198,12 @@ def startup_update_check():
     except Exception as e:  # noqa
         log('Kiểm tra bản mới lỗi: %s' % e, 'warn')
         return
+    old = STATE.get('update') or {}
     STATE['update'] = info
     if not info['newer']:
         return
-    log('Có bản mới %s (đang dùng %s).' % (info['latest'], info['current']), 'warn')
+    if old.get('latest') != info['latest']:
+        log('Có bản mới %s (đang dùng %s).' % (info['latest'], info['current']), 'warn')
     if auto and info['url']:
         try:
             files = apply_update(info['url'])
@@ -2843,6 +3211,31 @@ def startup_update_check():
             restart_self()
         except Exception as e:  # noqa
             log('Tự cập nhật lỗi, giữ nguyên bản cũ: %s' % e, 'err')
+
+
+def update_loop():
+    """Chạy nền: kiểm tra khi mở chương trình, rồi định kỳ nếu bật \"Tự kiểm tra bản mới\" và đã điền kho GitHub."""
+    time.sleep(8)
+    while True:
+        with CFG_LOCK:
+            on = CFG.get('update_check') and (CFG.get('update_repo') or '').strip()
+        if on:
+            try:
+                update_check_once()
+            except Exception:  # noqa
+                pass
+        time.sleep(UPDATE_EVERY)
+
+
+def update_brief():
+    """Thông tin bản mới gửi cho giao diện (rỗng nếu không có hoặc giáo viên đã bỏ qua đúng bản này)."""
+    u = STATE.get('update') or {}
+    with CFG_LOCK:
+        skip = CFG.get('update_skip', '')
+    if not u.get('newer'):
+        return None
+    return {'latest': u['latest'], 'current': u['current'], 'notes': u.get('notes', ''), 'page': u.get('page', ''),
+            'skipped': bool(skip) and skip == u['latest'], 'can_apply': bool(u.get('url'))}
 
 
 # ---------------------------------------------------------------- API
@@ -3257,8 +3650,8 @@ def api_quit(_b=None):
 
 
 GET_ROUTES = {'/api/update_check': api_update_check, '/api/setup_status': api_setup_status, '/api/state': api_state, '/api/list': api_list_get, '/api/payload': api_payload,
-              '/api/log': api_log, '/api/school': api_school, '/api/school_students': api_school_students, '/api/alerts': api_alerts, '/api/report': api_report, '/api/ping': api_ping, '/api/vcfg_info': api_vcfg_info}
-POST_ROUTES = {'/api/school_set': api_school_set, '/api/school_layout': api_school_layout, '/api/update_apply': api_update_apply, '/api/setup_run': api_setup_run, '/api/setup_scan': api_setup_scan, '/api/setup_done': api_setup_done,
+              '/api/log': api_log, '/api/school': api_school, '/api/school_students': api_school_students, '/api/school_attendance': api_school_attendance, '/api/alerts': api_alerts, '/api/report': api_report, '/api/ping': api_ping, '/api/vcfg_info': api_vcfg_info}
+POST_ROUTES = {'/api/school_set': api_school_set, '/api/school_attendance_set': api_school_attendance_set, '/api/school_announce': api_school_announce, '/api/school_layout': api_school_layout, '/api/update_apply': api_update_apply, '/api/setup_run': api_setup_run, '/api/setup_scan': api_setup_scan, '/api/setup_done': api_setup_done,
                '/api/list': api_list_save, '/api/check': api_check, '/api/hosts': api_hosts, '/api/run': api_run,
                '/api/settings': api_settings, '/api/dist': api_dist, '/api/open': api_open,
                '/api/veyon_list': api_veyon_list, '/api/sync': api_sync, '/api/quit': api_quit,
@@ -3539,8 +3932,7 @@ def main(argv=None):
     threading.Thread(target=school_loop, daemon=True).start()
     threading.Thread(target=alert_loop, daemon=True).start()
     threading.Thread(target=watchdog, args=(srv,), daemon=True).start()
-    if CFG.get('update_check') and (CFG.get('update_repo') or '').strip():
-        threading.Thread(target=startup_update_check, daemon=True).start()
+    threading.Thread(target=update_loop, daemon=True).start()
     if '--no-browser' in argv:
         if sys.stdout:
             print(url, flush=True)

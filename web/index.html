@@ -64,6 +64,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 .seats{display:grid;gap:8px;justify-content:center}.seat{width:104px;min-height:56px;border:1px solid #d3dae8;border-radius:10px;background:#fff;padding:5px 6px;cursor:pointer;text-align:left;line-height:1.25}.seat:hover{border-color:var(--primary)}.seat b{font-size:12px;color:var(--muted)}.seat span{display:block;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.seat.bad{background:#fde8e8;border-color:#f3b4b4}.seat.bad b{color:#b91c1c}.seat.bad span{color:#b91c1c}.seat.guest{background:#fff4e0;border-color:#f5cf8f}.seat.guest b{color:#b45309}
 .frontrow{display:flex;gap:10px;margin-bottom:10px}.frontrow>div{flex:1;display:flex;flex-direction:column;gap:6px;align-items:center}.frontrow .tdesk,.frontrow .tdoor2{width:100%;margin:0}.tdoor2{text-align:center;background:#e8f3ec;border-radius:10px;padding:7px;font-weight:700;font-size:13px;color:#2f6b4a}
 .seat.full{background:var(--primary-l);border-color:#b8cdfa}.seat.full b{color:var(--primary-d)}
+.seat.absent{background:#f1f2f5;border-color:#d9dce3;border-style:dashed}.seat.absent span{color:#8a92a6;text-decoration:line-through}.seat.moved{background:#e6f6ec;border-color:#9bd4b0}.seat.moved b{color:#1f7a45}.seat.off b::after{content:' · tắt';color:#b45309}
+.achips{display:flex;flex-wrap:wrap;gap:6px}.achip{border:1px solid #d3dae8;background:#fff;border-radius:99px;padding:5px 12px;cursor:pointer;font-size:13px;font-weight:600}.achip:hover{border-color:var(--primary)}.achip.ab{background:#fde8e8;border-color:#f3b4b4;color:#b91c1c;text-decoration:line-through}
 .cchips{display:flex;flex-wrap:wrap;gap:8px}.cchip{border:1px solid #d3dae8;background:#fff;border-radius:10px;padding:7px 12px;cursor:pointer;font-weight:700}.cchip small{color:var(--muted);font-weight:500;margin-left:6px}.cchip:hover{border-color:var(--primary)}.cchip.on{background:var(--primary-l);border-color:var(--primary);color:var(--primary-d)}
 .badge{background:var(--primary-l);color:var(--primary-d);border-radius:99px;font-size:12px;font-weight:700;padding:2px 10px}
 .btn{border:0;border-radius:10px;padding:10px 18px;font-weight:600;cursor:pointer;background:#e9edf5;color:var(--text);transition:.15s;display:inline-flex;align-items:center;gap:8px}
@@ -296,7 +298,7 @@ const PAGES = [
 ];
 
 const S = {setup:null, st:null, hosts:[], sel:new Set(), page:'control', lists:{}, payload:[], logSeq:0, logOpen:true, busy:false,
-  school:null, schoolBrief:null, seatCls:'', stu:{}, violCls:'', report:null, reportRange:'today', groupToasts:{}, alerts:[], alertSeq:0, alertInit:false, unseen:0, watching:0, violHost:''};
+  school:null, att:null, schoolBrief:null, seatCls:'', stu:{}, violCls:'', report:null, reportRange:'today', groupToasts:{}, alerts:[], alertSeq:0, alertInit:false, unseen:0, watching:0, violHost:''};
 
 /* ---------- tiện ích giao diện ---------- */
 function toast(msg, kind = '') {
@@ -307,16 +309,17 @@ function toast(msg, kind = '') {
   setTimeout(() => el.remove(), kind === 'err' ? 7000 : 3800);
 }
 
-function modal({title, html, ok = 'Đồng ý', cancel = 'Hủy', danger = false, collect = null, noCancel = false}) {
+function modal({title, html, ok = 'Đồng ý', cancel = 'Hủy', danger = false, collect = null, noCancel = false, third = null}) {
   return new Promise(resolve => {
     const root = $('#modalroot');
     root.innerHTML = `<div class="modalbg"><div class="modalbox" role="dialog"><h3>${esc(title)}</h3><div class="body">${html}</div>
-      <div class="btns">${noCancel ? '' : `<button class="btn" data-m="cancel">${esc(cancel)}</button>`}<button class="btn ${danger ? 'danger' : 'primary'}" data-m="ok">${esc(ok)}</button></div></div></div>`;
+      <div class="btns">${noCancel ? '' : `<button class="btn" data-m="cancel">${esc(cancel)}</button>`}${third ? `<button class="btn ghost" data-m="third">${esc(third.label)}</button>` : ''}<button class="btn ${danger ? 'danger' : 'primary'}" data-m="ok">${esc(ok)}</button></div></div></div>`;
     const done = v => { root.innerHTML = ''; document.removeEventListener('keydown', onKey); resolve(v); };
     const onKey = e => { if (e.key === 'Escape') done(null); };
     document.addEventListener('keydown', onKey);
     root.querySelector('[data-m=ok]').onclick = () => done(collect ? collect(root) : true);
     const c = root.querySelector('[data-m=cancel]'); if (c) c.onclick = () => done(null);
+    const t3 = root.querySelector('[data-m=third]'); if (t3) t3.onclick = () => done(third.value);
     root.querySelector('.modalbg').addEventListener('mousedown', e => { if (e.target.classList.contains('modalbg')) done(null); });
     const f = root.querySelector('textarea,input'); if (f) f.focus(); else root.querySelector('[data-m=ok]').focus();
   });
@@ -723,6 +726,28 @@ async function checkUpdate() {
   } catch (e) { toast(e.message, 'err'); }
 }
 
+/* hộp thoại hỏi khi GitHub có bản mới: hỏi một lần cho mỗi bản, "Để sau" thì hỏi lại sau 4 giờ, "Bỏ qua" thì không hỏi nữa */
+let updAsking = false;
+async function maybeAskUpdate(u) {
+  if (!u || u.skipped || !u.can_apply || updAsking) return;
+  if (S.updAsked && S.updAsked.v === u.latest && Date.now() - S.updAsked.t < 4 * 3600 * 1000) return;
+  if ($('#modalroot').innerHTML || S.busy) return;           // đang mở hộp thoại khác hoặc đang chạy lệnh: để lần sau
+  updAsking = true;
+  try {
+    S.st.update = Object.assign({}, S.st.update, {newer: true, latest: u.latest, current: u.current, notes: u.notes, page: u.page}); showUpdate();
+    const warn = S.watching ? `<div class="note warn" style="margin:10px 0 0">Đang giám sát ${S.watching} máy. Chương trình sẽ khởi động lại trong vài giây, phần giám sát trên máy học sinh vẫn chạy, ảnh vi phạm sẽ được nhận lại sau khi mở lại.</div>` : '';
+    const r = await modal({title: `Có bản mới ${u.latest}`, ok: 'Cập nhật ngay', cancel: 'Để sau', third: {label: 'Bỏ qua bản này', value: 'skip'},
+      html: `<p style="margin-top:0">KhoaVeyon trên GitHub của bạn vừa có bản <b>${esc(u.latest)}</b> (đang dùng ${esc(u.current)}). Bạn có muốn cập nhật không?</p>
+        ${u.notes ? `<div class="muted" style="margin-bottom:4px">Thay đổi:</div><div style="white-space:pre-wrap;max-height:34vh;overflow:auto;background:#f3f6fb;border-radius:10px;padding:10px 12px;font-size:13px">${esc(u.notes)}</div>` : ''}
+        <p class="hint" style="margin-bottom:0">Danh sách, lớp, sơ đồ chỗ ngồi và cài đặt của bạn được giữ nguyên. Bản cũ được sao lưu trước khi thay.</p>${warn}`});
+    S.updAsked = {v: u.latest, t: Date.now()};
+    if (r === 'skip') { await saveCfg({update_skip: u.latest}); toast('Sẽ không hỏi lại bản ' + u.latest + ' (có bản mới hơn thì hỏi tiếp)', 'ok'); }
+    else if (r) {
+      try { await api('/api/update_apply', {}); openLog(); toast('Đang cập nhật, cửa sổ mới sẽ tự mở sau vài giây', 'ok'); } catch (e) { toast(e.message, 'err'); }
+    }
+  } finally { updAsking = false; }
+}
+
 async function applyUpdate() {
   const u = S.st.update;
   if (!(await modal({title: 'Cập nhật lên ' + u.latest + '?', ok: 'Cập nhật', html: 'Chương trình sẽ tải bản mới, thay file chương trình (bản cũ được sao lưu trong data\\backup-' + esc(u.current) + ') rồi tự khởi động lại. Không mất cài đặt và danh sách.'}))) return;
@@ -880,7 +905,7 @@ function flashTitle(text) {
 async function pollAlerts() {
   try {
     const r = await api('/api/alerts?since=' + S.alertSeq);
-    S.watching = r.watching; updWatchInfo(); S.schoolBrief = r.school; updClassBadge();
+    S.watching = r.watching; updWatchInfo(); S.schoolBrief = r.school; updClassBadge(); maybeAskUpdate(r.update);
     if (!S.alertInit) {                       // lần đầu: nạp lịch sử, không báo động lại việc cũ
       S.alerts = r.items; S.alertSeq = r.last; S.seenSeq = r.last; S.freshFrom = r.last; S.alertInit = true; return;
     }
@@ -953,7 +978,52 @@ async function loadSchool() {
   S.school = await api('/api/school');
   const cls = S.school.classes || [];
   if (cls.length && (!S.seatCls || !cls.some(c => c.name === S.seatCls))) S.seatCls = (S.school.current && cls.some(c => c.name === S.school.current.cls)) ? S.school.current.cls : cls[0].name;
-  if (S.seatCls) { try { await seatNames(); } catch (e) { /* bỏ qua */ } }
+  if (S.seatCls) { try { await seatNames(); } catch (e) { /* bỏ qua */ } await loadAtt(); }
+}
+
+async function loadAtt() {
+  if (!S.seatCls) { S.att = null; return; }
+  try { S.att = await api('/api/school_attendance?cls=' + encodeURIComponent(S.seatCls)); } catch (e) { S.att = null; }
+}
+
+async function attAct(body) {
+  try {
+    S.att = await api('/api/school_attendance_set', Object.assign({cls: S.seatCls}, body));
+    const ch = Object.entries(S.att.changed || {});
+    if (ch.length) toast('Đã chuyển chỗ: ' + ch.map(([n, m]) => `${n} → máy ${m}`).join('; '), 'ok');
+    if ((S.att.unplaced || []).length) toast('Hết máy trống cho: ' + S.att.unplaced.join(', '), 'warn');
+  } catch (err) { toast(err.message, 'err'); }
+  render();
+}
+
+async function seatAnnounce(clear) {
+  const sec = parseInt(($('#annSec') || {}).value) || 15, keep = !!($('#annKeep') || {}).checked;
+  try { await api('/api/school_announce', {cls: S.seatCls, seconds: sec, keep, clear: !!clear}); toast(clear ? 'Đang gỡ nhãn chỗ ngồi trên các máy' : 'Đang gửi thông báo chỗ ngồi xuống các máy, xem kết quả ở Nhật ký', 'ok'); }
+  catch (err) { toast(err.message, 'err'); }
+}
+
+function viewAttendance() {
+  const a = S.att; if (!a || a.cls !== S.seatCls) return '';
+  const names = S.stu[S.seatCls] || [], ab = new Set(a.absent || []), moves = Object.entries(a.moves || {});
+  const info = [];
+  if (moves.length) info.push(`<div class="note">Đã tự chuyển sang máy trống gần nhất: ${moves.map(([n, m]) => `<b>${esc(n)}</b> → máy ${m}`).join(', ')}</div>`);
+  if ((a.unplaced || []).length) info.push(`<div class="note warn">Hết máy trống cho: <b>${a.unplaced.map(esc).join(', ')}</b></div>`);
+  if (a.silent) info.push(`<div class="note warn">Không máy nào trả lời (lúc ${esc(a.checked_at)}), nên chưa dồn chỗ theo máy tắt. Hãy bật máy học sinh và kiểm tra tên máy ở sơ đồ, rồi bấm <b>Kiểm tra máy và dồn chỗ</b>.</div>`);
+  if ((a.offline || []).length) info.push(`<div class="muted" style="font-size:12.5px">Máy đang tắt hoặc không kết nối được (kiểm tra lúc ${esc(a.checked_at)}): ${a.offline.join(', ')}</div>`);
+  return `<section class="card"><div class="toolbar" style="margin-bottom:10px"><b>Điểm danh hôm nay</b><span class="muted">${esc(a.date.split('-').reverse().join('/'))} · lớp ${esc(a.cls)} · vắng ${ab.size}/${names.length}</span><span class="grow"></span>
+      <button class="btn" data-act="attpresent">Cả lớp có mặt</button><button class="btn" data-act="attrecheck" title="Kiểm tra máy nào đang bật rồi dồn chỗ lại">Kiểm tra máy và dồn chỗ</button></div>
+    <div class="achips">${names.map(n => `<span class="achip ${ab.has(n) ? 'ab' : ''}" data-act="attoggle" data-name="${esc(n)}" title="${ab.has(n) ? 'Đang vắng, bấm để đánh dấu có mặt' : 'Bấm để đánh dấu vắng'}">${esc(n)}</span>`).join('') || '<span class="muted">Chưa có danh sách học sinh</span>'}</div>
+    <div class="stack" style="gap:8px;margin-top:10px">${info.join('')}</div>
+    <div class="row" style="gap:22px;margin-top:10px;flex-wrap:wrap">
+      <label class="switch"><input type="checkbox" data-attset="notify" ${a.notify ? 'checked' : ''}><span class="tr"></span><span>Tự báo cho em bị chuyển chỗ</span></label></div>
+    <p class="hint" style="margin-bottom:0">Bấm tên em để đánh dấu <b>vắng</b>. Em có mặt mà máy hỏng, máy đang tắt hoặc chưa có chỗ sẽ được chuyển sang <b>máy trống gần nhất</b> (thường là máy của em vắng), tính theo hàng và dãy trên sơ đồ. Chỗ đổi chỉ áp dụng cho hôm nay, sơ đồ gốc không bị sửa. Máy được biết là tắt khi không mở được cổng Veyon, nên hãy bật máy rồi bấm <b>Kiểm tra máy và dồn chỗ</b>.</p></section>
+  <section class="card"><div class="toolbar" style="margin-bottom:10px"><b>Thông báo vị trí máy</b><span class="muted">Hiện trên màn hình từng em: “Máy này của ai”</span></div>
+    <div class="row" style="gap:16px;flex-wrap:wrap">
+      <label class="row" style="gap:6px"><span class="muted">Hiện lớn</span><input type="number" min="3" max="300" id="annSec" value="15" style="width:70px"><span class="muted">giây</span></label>
+      <label class="switch"><input type="checkbox" id="annKeep" checked><span class="tr"></span><span>Sau đó giữ nhãn nhỏ ở góc màn hình</span></label>
+      <button class="btn primary" data-act="announce">📢 Thông báo cho cả lớp</button><button class="btn ghost" data-act="announceclear">Gỡ nhãn trên các máy</button></div>
+    <div class="row" style="gap:22px;margin-top:10px"><label class="switch"><input type="checkbox" data-attset="auto_announce" ${a.auto_announce ? 'checked' : ''}><span class="tr"></span><span>Tự thông báo khi sang tiết mới (theo thời khóa biểu)</span></label></div>
+    <p class="hint" style="margin-bottom:0">Chỉ báo cho máy có người ngồi (em vắng thì không). Cần có người đang đăng nhập trên máy học sinh. Số máy phải khớp tên máy (điền <b>Tên máy mẫu</b> ở sơ đồ, hoặc thứ tự danh sách máy ở trang Điều khiển lớp). Bảng tự đóng nếu chọn không giữ nhãn; học sinh cũng bấm vào bảng lớn để thu nhỏ.</p></section>`;
 }
 
 function updClassBadge() {
@@ -1054,16 +1124,20 @@ function viewSeats() {
   const lay = curLay(), num = seatNumbers(lay), cnt = (cls.find(c => c.name === S.seatCls) || {}).count || 0;
   const by = lay.seats, inCls0 = new Set(S.stu[S.seatCls] || []), filled = Object.values(by).filter(v => !inCls0.size || inCls0.has(v)).length;
   const bad = new Set(lay.broken || []), inCls = new Set(S.stu[S.seatCls] || []);
+  const att = (S.att && S.att.cls === S.seatCls) ? S.att : null, eff = att ? att.seats : by, off = new Set(att ? att.offline : []);
   const cells = num.map(row => row.map(n => {
-    const isBad = bad.has(n), guest = by[n] && inCls.size && !inCls.has(by[n]);
-    return `<button class="seat ${isBad ? 'bad' : guest ? 'guest' : by[n] ? 'full' : ''}" data-act="seatpick" data-n="${n}" title="${esc(isBad ? 'Máy hỏng' : by[n] || 'Chưa xếp')}"><b>Máy ${n}${isBad ? ' · hỏng' : ''}</b><span>${esc(isBad ? '' : by[n] || '')}${guest ? ' (ngoài lớp)' : ''}</span></button>`; }).join('')).join('');
+    const isBad = bad.has(n), shown = eff[n] || '', guest = shown && inCls.size && !inCls.has(shown);
+    const moved = att && shown && att.moves[shown] === n, gone = att && !moved && by[n] && att.absent.includes(by[n]);
+    const cl = isBad ? 'bad' : moved ? 'moved' : gone ? 'absent' : guest ? 'guest' : shown ? 'full' : '';
+    const label = isBad ? '' : gone ? by[n] : shown;
+    return `<button class="seat ${cl} ${off.has(n) && !isBad ? 'off' : ''}" data-act="seatpick" data-n="${n}" title="${esc(isBad ? 'Máy hỏng' : gone ? 'Vắng: ' + by[n] : moved ? shown + ' (được chuyển đến)' : shown || 'Chưa xếp')}"><b>Máy ${n}${isBad ? ' · hỏng' : gone ? ' · vắng' : moved ? ' · mới' : ''}</b><span>${esc(label)}${guest ? ' (ngoài lớp)' : ''}</span></button>`; }).join('')).join('');
   const slot = {left: [], center: [], right: []};
   slot[lay.gv].push('<div class="tdesk">🖥 Bàn giáo viên</div>');
   if (lay.door === 'tl') slot.left.push('<div class="tdoor2">🚪 Cửa ra vào</div>');
   if (lay.door === 'tr') slot.right.push('<div class="tdoor2">🚪 Cửa ra vào</div>');
   const front = `<div class="frontrow" style="width:${lay.cols * 104 + (lay.cols - 1) * 8}px;margin-left:auto;margin-right:auto">${['left', 'center', 'right'].map(k => `<div>${slot[k].join('')}</div>`).join('')}</div>`;
   const opt = (v, cur, t) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${t}</option>`;
-  return `<section class="card"><div class="toolbar" style="margin-bottom:12px"><b>Sơ đồ chỗ ngồi</b>
+  return `${viewAttendance()}<section class="card"><div class="toolbar" style="margin-bottom:12px"><b>Sơ đồ chỗ ngồi</b>
       <select id="seatClsSel">${cls.map(c => `<option value="${esc(c.name)}" ${c.name === S.seatCls ? 'selected' : ''}>Lớp ${esc(c.name)}</option>`).join('')}</select>
       <span class="muted">${filled}/${cnt} học sinh đã có chỗ · ${lay.cols * lay.per - bad.size} máy dùng được${bad.size ? ` · ${bad.size} máy hỏng` : ''}</span><span class="grow"></span>
       <button class="btn" data-act="seatauto">Tự xếp theo danh sách</button><button class="btn ghost" data-act="seatclear">Xóa chỗ ngồi</button></div>
@@ -1319,6 +1393,11 @@ document.addEventListener('click', async e => {
     case 'schoolimport': $('#schoolFile_' + el.dataset.kind).click(); break;
     case 'schoolset': await schoolSet({action: 'set', cls: el.dataset.cls}); break;
     case 'seatpick': await seatPick(+el.dataset.n); break;
+    case 'attoggle': await attAct({action: 'toggle', name: el.dataset.name}); break;
+    case 'attpresent': await attAct({action: 'present'}); break;
+    case 'attrecheck': toast('Đang kiểm tra máy bật/tắt...'); await attAct({action: 'recheck'}); break;
+    case 'announce': await seatAnnounce(false); break;
+    case 'announceclear': await seatAnnounce(true); break;
     case 'seatauto': await seatAuto(); break;
     case 'seatclear': await seatSave({seats: {}}); break;
     case 'seatall': await seatSave({}, true); toast('Đã áp dụng kiểu phòng này cho tất cả các lớp', 'ok'); break;
@@ -1385,7 +1464,8 @@ document.addEventListener('change', async e => {
     await saveCfg({dist_payload_skip: [...skip]});
   }
   else if (t.id === 'violFilter') { S.violHost = t.value; render(); }
-  else if (t.id === 'seatClsSel') { S.seatCls = t.value; try { await seatNames(); } catch (err) { /* bỏ qua */ } render(); }
+  else if (t.id === 'seatClsSel') { S.seatCls = t.value; try { await seatNames(); } catch (err) { /* bỏ qua */ } await loadAtt(); render(); }
+  else if (t.dataset.attset) { await attAct({action: 'setting', [t.dataset.attset]: t.checked}); }
   else if (t.dataset.lay) { await seatSave({[t.dataset.lay]: t.value}); }
   else if (t.id === 'violCls') { S.violCls = t.value; render(); }
   else if (t.dataset.schoolfile) { await schoolUpload(t.dataset.schoolfile, t.files[0]); t.value = ''; }
@@ -1426,7 +1506,7 @@ async function pollLog() {
       logLines += r.items.length; $('#logcount').textContent = logLines + ' dòng';
       if (atEnd) body.scrollTop = body.scrollHeight;
     }
-    $('#busy').classList.toggle('hidden', !r.busy);
+    S.busy = !!r.busy; $('#busy').classList.toggle('hidden', !r.busy);
   } catch (e) { /* mất kết nối tạm thời */ }
 }
 

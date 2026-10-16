@@ -84,6 +84,22 @@ Nút **Tìm máy học sinh trong mạng** quét dải /24 của mạng hiện t
 - Tác vụ tự chạy lại (nhóm Users, kích hoạt khi đăng nhập, tạo từ XML qua `schtasks /Create /S máy /XML`) chưa thử trên Windows thật; nếu Nhật ký báo chưa cài được, hãy gửi nội dung lỗi để chỉnh. Thử bằng cách bật giám sát, khởi động lại máy học sinh, đăng nhập rồi mở một trang ngoài danh sách.
 - Phần báo động và tự nhận ảnh (1.3.0) đã được thử logic với thư mục giả thay cho `\\máy\C$` và máy chủ HTTP thật trên Linux; chưa thử trên Windows với nhiều máy học sinh thật. Tiếng bíp dùng `winsound` của Windows. Hãy thử trên 1 máy trước, mở một trang web ngoài `AllowPage.xlsx` rồi xem báo động có hiện trong vòng vài giây không.
 
+## Điểm danh vắng, dồn chỗ và thông báo "Máy này của ai" (từ bản 1.6.0)
+
+Ở trang **Lớp & lịch dạy**, dưới thời khóa biểu (cần đã nhập danh sách lớp và xếp chỗ ngồi):
+
+**Điểm danh hôm nay.** Bấm tên em để đánh dấu **vắng** (bấm lại để có mặt). Chương trình tự kiểm tra máy nào đang bật (mở cổng Veyon 11100) rồi chuyển các em sau sang **máy trống gần nhất** (gần theo hàng và dãy trên sơ đồ, thường là máy của em vắng):
+- em có mặt nhưng máy của em đang tắt hoặc hỏng;
+- em chưa có chỗ trong sơ đồ (lớp đông hơn số máy, em mới vào lớp...).
+
+Chỗ đổi chỉ áp dụng cho hôm nay, sơ đồ gốc không bị sửa. Trên sơ đồ, ô xám gạch ngang là máy của em vắng, ô xanh là máy em được chuyển đến. Hết máy trống thì báo ở Nhật ký. Nếu **không máy nào trả lời** (chưa bật máy, sai tên máy) thì chương trình bỏ qua việc kiểm tra bật/tắt để không dồn chỗ sai; bật máy rồi bấm **Kiểm tra máy và dồn chỗ**. Điểm danh được lưu 60 ngày trong `data\school.json`. Lớp chưa xếp chỗ thì không tự xếp.
+
+**Thông báo vị trí máy.** Nút **Thông báo cho cả lớp** hiện lên màn hình từng em bảng lớn "MÁY NÀY LÀ CỦA: tên em, lớp, số máy" trong N giây (mặc định 15), rồi thu thành nhãn nhỏ ở góc phải trên cùng nếu bật "giữ nhãn nhỏ". Em bấm vào bảng lớn để thu nhỏ. **Gỡ nhãn trên các máy** xóa nhãn. Em được chuyển chỗ tự nhận bảng "BẠN ĐƯỢC CHUYỂN SANG MÁY NÀY" (tắt được bằng công tắc "Tự báo cho em bị chuyển chỗ"). Công tắc **Tự thông báo khi sang tiết mới** gửi cho cả lớp mỗi khi thời khóa biểu chuyển lớp.
+
+- Cách làm: chép `kvseat.ps1` và `kvseat.json` vào `C:\cmd\vcfg`, chạy bằng `schtasks` dưới tài khoản **người đang đăng nhập** (giống chụp màn hình). Máy không có ai đăng nhập thì báo lỗi ở Nhật ký.
+- Số máy trên sơ đồ phải ứng với tên máy: điền **Tên máy mẫu** (ví dụ `MAY{n}`) hoặc dựa vào thứ tự danh sách máy ở trang Điều khiển lớp.
+- **Chưa kiểm chứng trên Windows thật:** script PowerShell `kvseat.ps1` (cửa sổ luôn ở trên cùng, tác vụ chạy dưới tài khoản người dùng có thể đòi mật khẩu). Phần tính chỗ ngồi và giao diện đã thử trên Linux. Hãy thử nút thông báo trên 1 máy trước.
+
 ## Cấu hình Veyon (trang mới, từ bản 1.1.0)
 
 Trang **Cấu hình Veyon** có 3 khối. Bản sao lưu lưu ở `data\veyon-backups` (file JSON, tên bắt đầu bằng `master_` hoặc tên máy).
@@ -181,3 +197,9 @@ Ngoài việc tự gửi file xuống từng máy, bạn có thể dùng thư m�
 - Danh sách chỉ được script đọc lúc bật chế độ. Sau khi sửa, dùng **Lưu và áp dụng** hoặc chạy lại lệnh khóa tương ứng.
 - Máy đang ở chế độ khóa toàn bộ không mở được `cmd`/file `.bat` từ Explorer. Luôn bật và tắt khóa từ chương trình này hoặc từ Run program của Veyon.
 - Giao diện web đã được thử trong trình duyệt Chromium trên Linux; phần chép file, `schtasks` và `veyon-cli` cần Windows thật nên chưa được thử.
+
+## Cập nhật từ GitHub
+
+Chương trình hỏi GitHub (mục Releases của kho `update_repo` ở trang Cài đặt) khi mở và cứ 6 giờ một lần. Khi có bản mới hơn `VERSION` trong `KhoaVeyon.py`, một hộp thoại hiện ra hỏi **Cập nhật ngay / Để sau / Bỏ qua bản này**. "Để sau" thì 4 giờ sau hỏi lại, "Bỏ qua" thì chỉ hỏi lại khi có bản còn mới hơn nữa. Danh sách, lớp, sơ đồ chỗ ngồi và cài đặt trong `data`, `lists`, `payload` không bị thay.
+
+Để phát hành bản mới: đổi `VERSION`, đẩy code lên GitHub, rồi tạo một **Release** có tag lớn hơn (ví dụ `v1.6.0`) và ghi chú thay đổi vào phần mô tả của Release (hộp thoại sẽ hiện phần này).
