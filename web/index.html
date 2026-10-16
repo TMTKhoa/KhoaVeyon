@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>KhoaVeyon</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232563eb'/%3E%3Cpath d='M16 20h32v20H16zM26 46h12' stroke='white' stroke-width='5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="/assets/icon.svg">
+<link rel="alternate icon" type="image/x-icon" href="/favicon.ico">
 <style>
 :root{
   --bg:#f4f6fb; --card:#fff; --line:#e5e9f2; --text:#1b2437; --muted:#6b778c;
@@ -25,8 +26,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 .app{display:flex;height:100%}
 .side{width:var(--side-w);background:linear-gradient(180deg,var(--side),var(--side-2));color:var(--side-text);display:flex;flex-direction:column;padding:18px 14px;flex-shrink:0}
 .brand{display:flex;align-items:center;gap:12px;padding:6px 8px 22px}
-.brand .logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#3b82f6,#2563eb);display:grid;place-items:center;box-shadow:0 6px 16px rgba(37,99,235,.45)}
-.brand .logo svg{width:24px;height:24px}
+.brand .logo{width:46px;height:46px;border-radius:12px;box-shadow:0 6px 16px rgba(0,242,254,.25);flex-shrink:0}
+.brand .logo img{width:100%;height:100%;display:block;border-radius:12px}
 .brand b{display:block;color:#fff;font-size:18px;letter-spacing:.2px}
 .brand small{color:#8fa1c4;font-size:12px}
 .nav{display:flex;flex-direction:column;gap:4px}
@@ -57,6 +58,13 @@ button,input,select,textarea{font:inherit;color:inherit}
 .card h3{margin:0 0 14px;font-size:16px;display:flex;align-items:center;gap:10px}
 .card .sub{margin:-8px 0 14px;color:var(--muted);font-size:13.5px}
 .stack{display:flex;flex-direction:column;gap:18px}
+.clsbadge{cursor:pointer;font-size:13px;padding:4px 12px}.clsbadge.off{background:#eef1f6;color:#6b7a99}
+.sgrid{border-collapse:separate;border-spacing:4px;width:100%}.sgrid th{font-size:12px;color:var(--muted);font-weight:700;text-align:center;padding:4px}.sgrid td{background:#f3f6fb;border-radius:8px;text-align:center;padding:9px 4px;font-weight:700;min-width:64px}.sgrid td.tm{background:none;color:var(--muted);font-weight:600;font-size:12px;white-space:nowrap}.sgrid td.on{background:var(--primary);color:#fff}.sgrid td.nil{background:none;border:0;padding:0}
+.seatwrap{overflow:auto;padding:4px}.tdesk{margin:0 auto 10px;width:min(360px,70%);text-align:center;background:#e7ecf6;border-radius:10px;padding:7px;font-weight:700;font-size:13px;color:#51607f}.tdoor{margin:10px auto 0;width:min(240px,50%);text-align:center;border-top:4px solid #8aa0c9;padding-top:5px;font-size:12px;color:var(--muted)}
+.seats{display:grid;gap:8px;justify-content:center}.seat{width:104px;min-height:56px;border:1px solid #d3dae8;border-radius:10px;background:#fff;padding:5px 6px;cursor:pointer;text-align:left;line-height:1.25}.seat:hover{border-color:var(--primary)}.seat b{font-size:12px;color:var(--muted)}.seat span{display:block;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.seat.bad{background:#fde8e8;border-color:#f3b4b4}.seat.bad b{color:#b91c1c}.seat.bad span{color:#b91c1c}.seat.guest{background:#fff4e0;border-color:#f5cf8f}.seat.guest b{color:#b45309}
+.frontrow{display:flex;gap:10px;margin-bottom:10px}.frontrow>div{flex:1;display:flex;flex-direction:column;gap:6px;align-items:center}.frontrow .tdesk,.frontrow .tdoor2{width:100%;margin:0}.tdoor2{text-align:center;background:#e8f3ec;border-radius:10px;padding:7px;font-weight:700;font-size:13px;color:#2f6b4a}
+.seat.full{background:var(--primary-l);border-color:#b8cdfa}.seat.full b{color:var(--primary-d)}
+.cchips{display:flex;flex-wrap:wrap;gap:8px}.cchip{border:1px solid #d3dae8;background:#fff;border-radius:10px;padding:7px 12px;cursor:pointer;font-weight:700}.cchip small{color:var(--muted);font-weight:500;margin-left:6px}.cchip:hover{border-color:var(--primary)}.cchip.on{background:var(--primary-l);border-color:var(--primary);color:var(--primary-d)}
 .badge{background:var(--primary-l);color:var(--primary-d);border-radius:99px;font-size:12px;font-weight:700;padding:2px 10px}
 .btn{border:0;border-radius:10px;padding:10px 18px;font-weight:600;cursor:pointer;background:#e9edf5;color:var(--text);transition:.15s;display:inline-flex;align-items:center;gap:8px}
 .btn:hover{background:#dde3ef}
@@ -194,6 +202,18 @@ label.field{display:block;font-weight:600;margin:0 0 6px}
 .vcard .vb .meta{color:var(--muted);font-size:13px;word-break:break-word}
 .tag{display:inline-block;border-radius:99px;font-size:12px;font-weight:700;padding:1px 9px;margin-left:6px;vertical-align:2px}
 .tag.site{background:#e8effe;color:#1d4ed8}.tag.app{background:#fff1e6;color:#c2410c}
+.vcard .thumbs{display:flex;gap:4px;padding:6px 14px 0;flex-wrap:wrap}
+.vcard .thumbs img{width:48px;height:30px;object-fit:cover;border-radius:4px;cursor:zoom-in;border:1px solid var(--line)}
+.cnt{background:#b91c1c;color:#fff;border-radius:99px;font-size:12px;font-weight:700;padding:1px 9px;margin-left:6px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow)}
+.stat .n{font-size:30px;font-weight:800;line-height:1.1}
+.stat .l{color:var(--muted);font-size:13px;margin-top:2px;word-break:break-word}
+.bar{height:10px;border-radius:6px;background:#fca5a5;min-width:3px}
+.barcell{width:34%}
+.hours{display:flex;align-items:flex-end;gap:6px;height:90px;padding-top:6px}
+.hours div{flex:1;text-align:center;font-size:11px;color:var(--muted);display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+.hours i{display:block;background:#f87171;border-radius:4px 4px 0 0;min-height:3px}
 .lightbox{position:fixed;inset:0;background:rgba(5,9,20,.88);z-index:80;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;animation:fade .15s}
 .lightbox img{max-width:96vw;max-height:82vh;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .lightbox .cap{color:#fff;text-align:center;line-height:1.5;max-width:90vw;word-break:break-word}
@@ -214,7 +234,7 @@ label.field{display:block;font-weight:600;margin:0 0 6px}
 <div class="app">
   <aside class="side">
     <div class="brand">
-      <div class="logo"><svg viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><rect x="10" y="14" width="44" height="30" rx="4"/><path d="M24 54h16M32 44v10"/></svg></div>
+      <div class="logo"><img src="/assets/icon.svg" alt="KhoaVeyon"></div>
       <div><b>KhoaVeyon</b><small id="verTxt">Quản lý lớp học</small></div>
     </div>
     <nav class="nav" id="nav"></nav>
@@ -227,7 +247,7 @@ label.field{display:block;font-weight:600;margin:0 0 6px}
   <main class="main" id="main">
     <header class="top">
       <div><h1 id="title"></h1><p id="sub"></p></div>
-      <div><span class="pill hidden" id="busy"><i class="spin"></i>Đang thực hiện...</span></div>
+      <div class="row" style="gap:10px"><span class="badge clsbadge hidden" id="classBadge" title="Bấm để mở Lớp và lịch dạy"></span><span class="pill hidden" id="busy"><i class="spin"></i>Đang thực hiện...</span></div>
     </header>
     <div id="updbar" class="note hidden" style="margin-bottom:18px"></div>
     <div id="view"></div>
@@ -262,7 +282,9 @@ async function api(path, body) {
 const PAGES = [
   {id:'setup', ic:'🚀', name:'Thiết lập ban đầu', title:'Thiết lập ban đầu', sub:'Một nút để chuẩn bị mọi thứ cần thiết trước khi dùng lần đầu.'},
   {id:'control', ic:'🎛️', name:'Điều khiển lớp', title:'Điều khiển lớp học', sub:'Chọn máy học sinh rồi bấm một nút để khóa máy, chặn web hoặc chặn ứng dụng.'},
+  {id:'school', ic:'📅', name:'Lớp & lịch dạy', title:'Lớp và lịch dạy', sub:'Nhập danh sách lớp và thời khóa biểu để chương trình tự biết đang dạy lớp nào và ghi tên lớp vào từng vi phạm.'},
   {id:'viol', ic:'🚨', name:'Vi phạm', title:'Vi phạm của học sinh', sub:'Ảnh và thông tin vi phạm tự động gửi về từ các máy học sinh đang được giám sát.'},
+  {id:'report', ic:'📊', name:'Báo cáo', title:'Báo cáo vi phạm', sub:'Thống kê cuối buổi: máy nào, trang nào vi phạm nhiều nhất.'},
   {id:'vcfg', ic:'🛠️', name:'Cấu hình Veyon', title:'Cấu hình Veyon', sub:'Sao lưu, so sánh, khôi phục và đẩy cấu hình xuống máy học sinh, thêm máy vào Veyon Master.'},
   {id:'dist', ic:'📦', name:'Phân phối & chạy', title:'Phân phối và chạy ứng dụng', sub:'Chép file sang máy học sinh rồi chạy ứng dụng chỉ với một nút bấm.'},
   {grp:'Danh sách'},
@@ -274,7 +296,7 @@ const PAGES = [
 ];
 
 const S = {setup:null, st:null, hosts:[], sel:new Set(), page:'control', lists:{}, payload:[], logSeq:0, logOpen:true, busy:false,
-  alerts:[], alertSeq:0, alertInit:false, unseen:0, watching:0, violHost:''};
+  school:null, schoolBrief:null, seatCls:'', stu:{}, violCls:'', report:null, reportRange:'today', groupToasts:{}, alerts:[], alertSeq:0, alertInit:false, unseen:0, watching:0, violHost:''};
 
 /* ---------- tiện ích giao diện ---------- */
 function toast(msg, kind = '') {
@@ -442,8 +464,9 @@ function viewControl() {
         <h3>Giám sát vi phạm (tự chụp ảnh)</h3>
         <p class="sub">Khi cửa sổ đang mở là <b>trang web không có trong AllowPage</b> hoặc <b>ứng dụng không có trong KeepAppList</b>, máy học sinh tự chụp màn hình. Danh sách Excel được đọc lại mỗi 30 giây. Không ghi phím gõ.</p>
         <div class="row"><button class="btn primary" data-act="watch_start">👁 Bật giám sát</button><button class="btn" data-act="watch_stop">Tắt giám sát</button><button class="btn" data-act="gopage" data-page-to="viol">🚨 Xem vi phạm</button><button class="btn ghost" data-act="watch_fetch">⬇ Lấy ảnh ngay</button><button class="btn ghost" data-act="openevidence">Mở thư mục ảnh</button><span class="badge" id="watchInfo"></span></div>
+        <label class="switch" style="margin-top:12px"><input type="checkbox" data-cfg="watch_autostart" ${st.cfg.watch_autostart !== false ? 'checked' : ''}><span class="tr"></span><span>Tự chạy lại giám sát mỗi khi học sinh đăng nhập (kể cả sau khi khởi động lại máy). Áp dụng ở lần bấm “Bật giám sát” tiếp theo; “Tắt giám sát” sẽ gỡ luôn.</span></label>
         <div class="formgrid" style="margin-top:12px"><div><label class="field">Chụp lại sau (giây) nếu vẫn ở trang đó</label><input type="text" data-cfg="watch_repeat" value="${esc(st.cfg.watch_repeat)}"></div><div><label class="field">Số ảnh tối đa mỗi lần vi phạm</label><input type="text" data-cfg="watch_max" value="${esc(st.cfg.watch_max)}"></div></div>
-        <p class="hint">Sau khi bật, chương trình <b>tự nhận ảnh vi phạm</b> từ máy học sinh về máy này (vài giây một lần), kêu bíp và hiện thông báo kèm ảnh, tên máy, nội dung vi phạm, ngày giờ. Toàn bộ lưu ở <code>data\\evidence\\TÊNMÁY</code> và bảng <code>violations.csv</code>. Khi đang giám sát, đóng cửa sổ chương trình không làm chương trình thoát (để không bỏ lỡ báo động); muốn thoát hãy bấm “Tắt giám sát” rồi “Thoát chương trình”.</p>
+        <p class="hint">Sau khi bật, chương trình <b>tự nhận ảnh vi phạm</b> từ máy học sinh về máy này (vài giây một lần), kêu bíp và hiện thông báo kèm ảnh, tên máy, nội dung vi phạm, ngày giờ. Toàn bộ lưu ở <code>data\\evidence\\TÊNMÁY</code> và bảng <code>violations.csv</code>, ảnh cũ hơn số ngày đặt ở trang Vi phạm sẽ tự xóa. Khi đang giám sát, đóng cửa sổ chương trình không làm chương trình thoát (để không bỏ lỡ báo động); muốn thoát hãy bấm “Tắt giám sát” rồi “Thoát chương trình”.</p>
       </section>
       ${groups}
       <section class="card">
@@ -815,17 +838,33 @@ function updWatchInfo() {
   el.textContent = S.watching ? `Đang nhận cảnh báo từ ${S.watching} máy` : 'Chưa bật giám sát';
 }
 
+function alertGap() { return Math.max(10, +S.st.cfg.alert_group_sec || 60); }
+function fillAlertToast(g) {
+  const e = g.last, n = g.count, secs = Math.round(g.last.ts - g.first.ts);
+  const title = n > 1 ? `${esc(e.host)} vi phạm liên tục` : `${esc(e.host)} vừa vi phạm`;
+  const more = n > 1 ? `<span class="cnt">${n} ảnh</span>` : '';
+  const dur = n > 1 ? `<div class="sm">${n} ảnh trong ${secs < 60 ? secs + ' giây' : Math.round(secs / 60) + ' phút'}, mới nhất lúc ${esc(e.time)}</div>` : `<div class="sm">${esc(e.date)} ${esc(e.time)}${e.user ? ' · ' + esc(e.user) : ''}${e.window ? '<br>' + esc(e.window) : ''}</div>`;
+  g.el.innerHTML = `${e.img ? `<img src="${imgUrl(e)}" alt="">` : ''}<div class="tt"><b>🚨 ${title}${more}</b>${esc(e.text)}${dur}</div><button class="xx" title="Đóng">×</button>`;
+  g.el.querySelector('.xx').onclick = ev => { ev.stopPropagation(); g.el.remove(); };
+}
 function showAlert(e) {
+  const key = e.host + '|' + e.type + '|' + e.name, gap = alertGap();
+  let g = S.groupToasts[key];
+  if (g && document.body.contains(g.el) && e.ts - g.last.ts <= gap) {   // cùng máy, cùng trang: cập nhật thông báo cũ, không tạo cái mới
+    g.count++; g.last = e; fillAlertToast(g);
+    clearTimeout(g.timer); g.timer = setTimeout(() => g.el.remove(), 20000);
+    return;
+  }
   const box = $('#toasts');
   const olds = [...box.querySelectorAll('.toast.alert')];
   while (olds.length >= 4) olds.shift().remove();
   const el = document.createElement('div');
   el.className = 'toast alert';
-  el.innerHTML = `${e.img ? `<img src="${imgUrl(e)}" alt="">` : ''}<div class="tt"><b>🚨 ${esc(e.host)} vừa vi phạm</b>${esc(e.text)}<div class="sm">${esc(e.date)} ${esc(e.time)}${e.user ? ' · ' + esc(e.user) : ''}${e.window ? '<br>' + esc(e.window) : ''}</div></div><button class="xx" title="Đóng">×</button>`;
+  g = S.groupToasts[key] = {el, count: 1, first: e, last: e, timer: null};
+  fillAlertToast(g);
   el.onclick = ev => { if (!ev.target.closest('.xx')) go('viol'); el.remove(); };
-  el.querySelector('.xx').onclick = ev => { ev.stopPropagation(); el.remove(); };
   box.appendChild(el);
-  setTimeout(() => el.remove(), 20000);
+  g.timer = setTimeout(() => el.remove(), 20000);
 }
 
 let titleTimer = null;
@@ -841,38 +880,54 @@ function flashTitle(text) {
 async function pollAlerts() {
   try {
     const r = await api('/api/alerts?since=' + S.alertSeq);
-    S.watching = r.watching; updWatchInfo();
+    S.watching = r.watching; updWatchInfo(); S.schoolBrief = r.school; updClassBadge();
     if (!S.alertInit) {                       // lần đầu: nạp lịch sử, không báo động lại việc cũ
       S.alerts = r.items; S.alertSeq = r.last; S.seenSeq = r.last; S.freshFrom = r.last; S.alertInit = true; return;
     }
     if (!r.items.length) return;
     S.alertSeq = r.last;
     S.alerts = S.alerts.concat(r.items).slice(-500);
-    if (S.st.cfg.alert_popup !== false) r.items.slice(-4).forEach(showAlert);
+    if (S.st.cfg.alert_popup !== false) r.items.slice(-30).forEach(showAlert);
     flashTitle(`${r.items[r.items.length - 1].host} vi phạm`);
     if (S.page === 'viol') { S.seenSeq = S.alertSeq; render(); } else { S.unseen += r.items.length; buildNav(); }
   } catch (e) { /* mất kết nối tạm thời */ }
 }
 
+function groupAlerts(list, gap) {
+  const out = [], last = {};
+  for (const e of list) {
+    const k = e.host + '|' + e.type + '|' + e.name, g = last[k];
+    if (g && e.ts - g.lastTs <= gap) { g.items.push(e); g.lastTs = e.ts; }
+    else { const ng = {host: e.host, type: e.type, name: e.name, text: e.text, items: [e], firstTs: e.ts, lastTs: e.ts}; out.push(ng); last[k] = ng; }
+  }
+  return out.sort((a, b) => b.lastTs - a.lastTs);
+}
+
 function viewViol() {
   const st = S.st, c = st.cfg;
   const hostsIn = [...new Set(S.alerts.map(e => e.host))].sort();
-  const list = S.alerts.filter(e => !S.violHost || e.host === S.violHost).slice().reverse();
-  const opts = `<option value="">Tất cả máy (${S.alerts.length})</option>` + hostsIn.map(h => `<option value="${esc(h)}" ${S.violHost === h ? 'selected' : ''}>${esc(h)} (${S.alerts.filter(e => e.host === h).length})</option>`).join('');
-  const cards = list.map(e => {
-    const idx = S.alerts.indexOf(e);
-    const fresh = e.id > (S.freshFrom || 0);
+  const clsIn = [...new Set(S.alerts.map(e => e.cls).filter(Boolean))].sort();
+  const src = S.alerts.filter(e => (!S.violHost || e.host === S.violHost) && (!S.violCls || e.cls === S.violCls));
+  const groups = groupAlerts(src, alertGap());
+  const opts = `<option value="">Tất cả máy (${S.alerts.length} ảnh)</option>` + hostsIn.map(h => `<option value="${esc(h)}" ${S.violHost === h ? 'selected' : ''}>${esc(h)} (${S.alerts.filter(e => e.host === h).length})</option>`).join('');
+  const cards = groups.map(g => {
+    const e = g.items[g.items.length - 1], n = g.items.length, fresh = g.items.some(x => x.id > (S.freshFrom || 0));
+    const secs = Math.round(g.lastTs - g.firstTs);
+    const thumbs = n > 1 ? `<div class="thumbs">${g.items.slice(-8).map(x => x.img ? `<img src="${imgUrl(x)}" alt="" loading="lazy" data-act="viewimg" data-i="${S.alerts.indexOf(x)}">` : '').join('')}</div>` : '';
     return `<div class="vcard ${fresh ? 'fresh' : ''}">
-      ${e.img ? `<img class="shot" src="${imgUrl(e)}" alt="Ảnh vi phạm" loading="lazy" data-act="viewimg" data-i="${idx}">` : `<div class="noimg">Không có ảnh<br>(ảnh bị xóa hoặc chưa chép được)</div>`}
-      <div class="vb"><div class="pc">🖥 ${esc(e.host)}<span class="tag ${esc(e.type)}">${kindLabel(e)}</span></div>
+      ${e.img ? `<img class="shot" src="${imgUrl(e)}" alt="Ảnh vi phạm" loading="lazy" data-act="viewimg" data-i="${S.alerts.indexOf(e)}">` : `<div class="noimg">Không có ảnh<br>(ảnh bị xóa hoặc chưa chép được)</div>`}
+      ${thumbs}
+      <div class="vb"><div class="pc">🖥 ${esc(e.host)}<span class="tag ${esc(e.type)}">${kindLabel(e)}</span>${e.cls ? `<span class="tag" style="background:#e7f8ef;color:#15803d">Lớp ${esc(e.cls)}</span>` : ''}${n > 1 ? `<span class="cnt">${n} ảnh</span>` : ''}</div>
         <div class="what">${esc(e.text)}</div>
-        <div class="meta">🕒 ${esc(e.time)} · ${esc(e.date)}${e.user ? '<br>👤 ' + esc(e.user) : ''}${e.window ? '<br>🪟 ' + esc(e.window) : ''}</div></div></div>`;
+        <div class="meta">🕒 ${esc(e.time)} · ${esc(e.date)}${n > 1 ? ` (kéo dài ${secs < 60 ? secs + ' giây' : Math.round(secs / 60) + ' phút'})` : ''}${e.student ? `<br>🎓 <b>${esc(e.student)}</b> (máy ${e.seat})` : ''}${e.user ? '<br>👤 ' + esc(e.user) : ''}${e.window ? '<br>🪟 ' + esc(e.window) : ''}</div></div></div>`;
   }).join('');
   return `<div class="stack">
     <section class="card">
       <div class="toolbar" style="margin-bottom:0">
         <select id="violFilter" style="min-width:220px">${opts}</select>
+        ${clsIn.length ? `<select id="violCls"><option value="">Tất cả lớp</option>${clsIn.map(c => `<option value="${esc(c)}" ${S.violCls === c ? 'selected' : ''}>Lớp ${esc(c)} (${S.alerts.filter(e => e.cls === c).length})</option>`).join('')}</select>` : ''}
         <span class="badge" id="watchInfo"></span><span class="grow"></span>
+        <button class="btn" data-act="gopage" data-page-to="report">📊 Báo cáo</button>
         <button class="btn" data-act="gopage" data-page-to="control">👁 Bật / tắt giám sát</button>
         <button class="btn ghost" data-act="openevidence">Mở thư mục ảnh</button>
         <button class="btn danger" data-act="alertclear">Xóa danh sách</button>
@@ -882,9 +937,234 @@ function viewViol() {
         <label class="switch"><input type="checkbox" data-cfg="alert_popup" ${c.alert_popup !== false ? 'checked' : ''}><span class="tr"></span><span>Hiện thông báo kèm ảnh</span></label>
         <span class="row" style="gap:8px"><span class="muted">Nhận ảnh mỗi</span><input type="text" data-cfg="alert_poll" value="${esc(c.alert_poll || '3')}" style="width:60px"><span class="muted">giây</span></span>
       </div>
-      <p class="hint" style="margin-bottom:0">Mỗi vi phạm gồm ảnh màn hình, tên máy, tài khoản học sinh, nội dung (trang web hoặc ứng dụng), tiêu đề cửa sổ, ngày và giờ. Lịch sử đầy đủ nằm ở <code>data\\evidence\\violations.csv</code> (mở được bằng Excel). Ô viền đỏ là vi phạm mới kể từ lần xem trước.</p>
+      <div class="row" style="margin-top:12px;gap:22px">
+        <span class="row" style="gap:8px"><span class="muted">Gộp vi phạm giống nhau cách nhau dưới</span><input type="text" data-cfg="alert_group_sec" value="${esc(c.alert_group_sec || '60')}" style="width:60px"><span class="muted">giây (chỉ bíp một lần)</span></span>
+        <span class="row" style="gap:8px"><span class="muted">Tự xóa ảnh sau</span><input type="text" data-cfg="keep_days" value="${esc(c.keep_days ?? '30')}" style="width:60px"><span class="muted">ngày (0 = không xóa)</span><button class="btn" data-act="cleanup">🧹 Dọn ngay</button></span>
+      </div>
+      <p class="hint" style="margin-bottom:0">Mỗi vi phạm gồm ảnh màn hình, tên máy, tài khoản học sinh, nội dung (trang web hoặc ứng dụng), tiêu đề cửa sổ, ngày và giờ. Học sinh ở yên một trang thì nhiều ảnh được gộp thành một thẻ. Lịch sử nằm ở <code>data\\evidence\\violations.csv</code>. Ô viền đỏ là vi phạm mới kể từ lần xem trước. Thời hạn lưu ảnh nên theo quy định của nhà trường.</p>
     </section>
-    ${list.length ? `<div class="vgrid">${cards}</div>` : `<div class="empty">Chưa có vi phạm nào.<br>Bật giám sát ở trang “Điều khiển lớp”, khi học sinh mở trang web hoặc ứng dụng ngoài danh sách, ảnh sẽ tự hiện ở đây.</div>`}
+    ${groups.length ? `<div class="vgrid">${cards}</div>` : `<div class="empty">Chưa có vi phạm nào.<br>Bật giám sát ở trang “Điều khiển lớp”, khi học sinh mở trang web hoặc ứng dụng ngoài danh sách, ảnh sẽ tự hiện ở đây.</div>`}
+  </div>`;
+}
+
+
+/* ---------- trang: lớp và lịch dạy ---------- */
+async function loadSchool() {
+  S.school = await api('/api/school');
+  const cls = S.school.classes || [];
+  if (cls.length && (!S.seatCls || !cls.some(c => c.name === S.seatCls))) S.seatCls = (S.school.current && cls.some(c => c.name === S.school.current.cls)) ? S.school.current.cls : cls[0].name;
+  if (S.seatCls) { try { await seatNames(); } catch (e) { /* bỏ qua */ } }
+}
+
+function updClassBadge() {
+  const el = $('#classBadge'); if (!el) return;
+  const b = S.schoolBrief;
+  if (!b || !S.school && !b.current && !b.next[0]) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  if (b.current) { el.className = 'badge clsbadge'; el.textContent = '🏫 Lớp ' + b.current + (b.source === 'manual' ? ' (đặt tay)' : ''); }
+  else { el.className = 'badge clsbadge off'; el.textContent = b.next[0] ? `🏫 Ngoài giờ · kế tiếp ${b.next[0]} ${b.next[1]}` : '🏫 Ngoài giờ'; }
+}
+
+async function schoolUpload(kind, file) {
+  if (!file) return;
+  try {
+    const r = await fetch(`/api/school_upload?kind=${kind}&name=${encodeURIComponent(file.name)}`, {method: 'PUT', headers: {'X-Token': TOKEN}, body: file});
+    const data = await r.json().catch(() => ({error: 'Phản hồi không hợp lệ'}));
+    if (!r.ok || data.error) throw new Error(data.error || ('Lỗi ' + r.status));
+    S.school = data; if (kind === 'classes') S.stu = {}; toast(kind === 'classes' ? 'Đã nhập danh sách lớp' : 'Đã nhập thời khóa biểu', 'ok');
+  } catch (err) { toast(err.message, 'err'); }
+  await refreshBrief(); try { await loadSchool(); } catch (e) { /* bỏ qua */ } render();
+}
+
+async function schoolSet(body) {
+  try { S.school = await api('/api/school_set', body); } catch (err) { toast(err.message, 'err'); }
+  await refreshBrief(); render();
+}
+
+async function refreshBrief() {
+  try { const r = await api('/api/school'); S.school = r; S.schoolBrief = {current: (r.current || {}).cls || '', source: r.source, next: [(r.next || {}).cls || '', (r.next || {}).start || '']}; } catch (e) { /* bỏ qua */ }
+  updClassBadge();
+}
+
+
+/* ---------- sơ đồ chỗ ngồi ---------- */
+const LAY_DEFAULT = {cols: 4, per: 10, from: 'teacher', first: 'left', pattern: '', seats: {}, broken: [], gv: 'center', door: 'back'};
+function curLay() { return Object.assign({}, LAY_DEFAULT, (S.school.layouts || {})[S.seatCls] || {}); }
+
+/* số máy ở từng ô: hàng 0 gần bàn giáo viên, hàng cuối gần cửa; đánh số theo từng dãy */
+function seatNumbers(lay) {
+  const cols = +lay.cols, per = +lay.per, num = Array.from({length: per}, () => Array(cols).fill(0));
+  const order = [...Array(cols).keys()]; if (lay.first === 'right') order.reverse();
+  let n = 0;
+  for (const c of order) {
+    const rows = [...Array(per).keys()]; if (lay.from === 'door') rows.reverse();
+    for (const r of rows) num[r][c] = ++n;
+  }
+  return num;
+}
+
+async function seatSave(patch, all) {
+  const lay = Object.assign(curLay(), patch);
+  for (const k of ['cols', 'per']) lay[k] = Math.max(1, Math.min(k === 'cols' ? 12 : 20, parseInt(lay[k]) || 1));
+  try { S.school = await api('/api/school_layout', Object.assign({cls: S.seatCls, apply_all: !!all}, lay)); } catch (err) { toast(err.message, 'err'); }
+  render();
+}
+
+async function seatNames() {
+  if (!S.stu[S.seatCls]) S.stu[S.seatCls] = (await api('/api/school_students?cls=' + encodeURIComponent(S.seatCls))).names;
+  return S.stu[S.seatCls];
+}
+
+async function seatAuto() {
+  const names = await seatNames(), lay = curLay(), seats = {}, bad = new Set(lay.broken || []);
+  const slots = [...Array(lay.cols * lay.per).keys()].map(i => i + 1).filter(n => !bad.has(n)), total = slots.length;
+  names.slice(0, total).forEach((n, i) => { seats[slots[i]] = n; });
+  if (Object.keys(lay.seats).length && !(await modal({title: 'Xếp lại từ đầu?', html: 'Chỗ ngồi hiện tại của lớp này sẽ được thay bằng thứ tự trong danh sách lớp (học sinh số 1 ngồi máy 1...), bỏ qua các máy hỏng.', ok: 'Xếp lại'}))) return;
+  if (names.length > total) toast(`Lớp có ${names.length} học sinh nhưng chỉ có ${total} máy dùng được, ${names.length - total} em chưa có chỗ`, 'warn');
+  await seatSave({seats});
+}
+
+async function seatPick(n) {
+  const names = await seatNames(), lay = curLay(), seats = Object.assign({}, lay.seats), cur = seats[n] || '';
+  const isBad = (lay.broken || []).includes(n), inList = names.includes(cur);
+  const used = {}; Object.values(seats).forEach(v => { used[v] = (used[v] || 0) + 1; });
+  const free = names.filter(x => !used[x] || x === cur);
+  const v = await modal({title: `Máy ${n}`, ok: 'Lưu',
+    html: `<label class="switch"><input type="checkbox" id="seatBad" ${isBad ? 'checked' : ''}><span class="tr"></span><span>Máy hỏng</span></label>
+      <div style="margin-top:14px"><div class="muted" style="margin-bottom:4px">Học sinh ngồi máy này</div>
+      <select id="seatSel" style="width:100%"><option value="__none__">— Bỏ trống —</option>${free.map(x => `<option ${x === cur ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>
+      <div class="muted" style="margin:10px 0 4px">Hoặc ghi tên bạn ngoài danh sách lớp</div>
+      <input type="text" id="seatOther" style="width:100%" value="${cur && !inList ? esc(cur) : ''}" placeholder="Ví dụ: bạn lớp khác ngồi nhờ"></div>
+      <p class="hint">Danh sách chỉ hiện học sinh chưa có chỗ${cur && inList ? ' và em đang ngồi máy này' : ''}. Máy hỏng thì không có người ngồi.</p>`,
+    collect: r => ({bad: r.querySelector('#seatBad').checked, sel: r.querySelector('#seatSel').value, other: r.querySelector('#seatOther').value.trim()})});
+  if (!v) return;
+  const broken = new Set(lay.broken || []);
+  if (v.bad) { broken.add(n); delete seats[n]; }
+  else {
+    broken.delete(n);
+    if (v.other) seats[n] = v.other; else if (v.sel !== '__none__') seats[n] = v.sel; else delete seats[n];
+  }
+  await seatSave({seats, broken: [...broken]});
+}
+
+function viewSeats() {
+  const sc = S.school, cls = (sc.classes || []);
+  if (!cls.length) return '';
+  if (!S.seatCls || !cls.some(c => c.name === S.seatCls)) S.seatCls = (sc.current && cls.some(c => c.name === sc.current.cls)) ? sc.current.cls : cls[0].name;
+  const lay = curLay(), num = seatNumbers(lay), cnt = (cls.find(c => c.name === S.seatCls) || {}).count || 0;
+  const by = lay.seats, inCls0 = new Set(S.stu[S.seatCls] || []), filled = Object.values(by).filter(v => !inCls0.size || inCls0.has(v)).length;
+  const bad = new Set(lay.broken || []), inCls = new Set(S.stu[S.seatCls] || []);
+  const cells = num.map(row => row.map(n => {
+    const isBad = bad.has(n), guest = by[n] && inCls.size && !inCls.has(by[n]);
+    return `<button class="seat ${isBad ? 'bad' : guest ? 'guest' : by[n] ? 'full' : ''}" data-act="seatpick" data-n="${n}" title="${esc(isBad ? 'Máy hỏng' : by[n] || 'Chưa xếp')}"><b>Máy ${n}${isBad ? ' · hỏng' : ''}</b><span>${esc(isBad ? '' : by[n] || '')}${guest ? ' (ngoài lớp)' : ''}</span></button>`; }).join('')).join('');
+  const slot = {left: [], center: [], right: []};
+  slot[lay.gv].push('<div class="tdesk">🖥 Bàn giáo viên</div>');
+  if (lay.door === 'tl') slot.left.push('<div class="tdoor2">🚪 Cửa ra vào</div>');
+  if (lay.door === 'tr') slot.right.push('<div class="tdoor2">🚪 Cửa ra vào</div>');
+  const front = `<div class="frontrow" style="width:${lay.cols * 104 + (lay.cols - 1) * 8}px;margin-left:auto;margin-right:auto">${['left', 'center', 'right'].map(k => `<div>${slot[k].join('')}</div>`).join('')}</div>`;
+  const opt = (v, cur, t) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${t}</option>`;
+  return `<section class="card"><div class="toolbar" style="margin-bottom:12px"><b>Sơ đồ chỗ ngồi</b>
+      <select id="seatClsSel">${cls.map(c => `<option value="${esc(c.name)}" ${c.name === S.seatCls ? 'selected' : ''}>Lớp ${esc(c.name)}</option>`).join('')}</select>
+      <span class="muted">${filled}/${cnt} học sinh đã có chỗ · ${lay.cols * lay.per - bad.size} máy dùng được${bad.size ? ` · ${bad.size} máy hỏng` : ''}</span><span class="grow"></span>
+      <button class="btn" data-act="seatauto">Tự xếp theo danh sách</button><button class="btn ghost" data-act="seatclear">Xóa chỗ ngồi</button></div>
+    <div class="row" style="gap:16px;flex-wrap:wrap;margin-bottom:14px">
+      <label class="row" style="gap:6px"><span class="muted">Số dãy</span><input type="number" min="1" max="12" data-lay="cols" value="${lay.cols}" style="width:64px"></label>
+      <label class="row" style="gap:6px"><span class="muted">Máy mỗi dãy</span><input type="number" min="1" max="20" data-lay="per" value="${lay.per}" style="width:64px"></label>
+      <label class="row" style="gap:6px"><span class="muted">Đánh số từ</span><select data-lay="from">${opt('teacher', lay.from, 'Bàn giáo viên (đầu dãy)')}${opt('door', lay.from, 'Cửa ra vào (cuối dãy)')}</select></label>
+      <label class="row" style="gap:6px"><span class="muted">Dãy số 1 ở bên</span><select data-lay="first">${opt('left', lay.first, 'Trái')}${opt('right', lay.first, 'Phải')}</select></label>
+      <label class="row" style="gap:6px"><span class="muted">Tên máy mẫu</span><input type="text" data-lay="pattern" value="${esc(lay.pattern)}" placeholder="MAY{n}" style="width:120px"></label>
+      <label class="row" style="gap:6px"><span class="muted">Bàn giáo viên</span><select data-lay="gv">${opt('left', lay.gv, 'Góc trái')}${opt('center', lay.gv, 'Giữa')}${opt('right', lay.gv, 'Góc phải')}</select></label>
+      <label class="row" style="gap:6px"><span class="muted">Cửa ra vào</span><select data-lay="door">${opt('back', lay.door, 'Cuối lớp')}${opt('tl', lay.door, 'Trên cùng, bên trái')}${opt('tr', lay.door, 'Trên cùng, bên phải')}</select></label>
+      <button class="btn ghost sm" data-act="seatall" title="Chép số dãy, số máy và cách đánh số sang tất cả các lớp">Áp dụng kiểu phòng cho mọi lớp</button>
+    </div>
+    <div class="seatwrap">${front}<div class="seats" style="grid-template-columns:repeat(${lay.cols},104px)">${cells}</div>${lay.door === 'back' ? '<div class="tdoor">🚪 Cửa ra vào</div>' : ''}</div>
+    <p class="hint" style="margin-bottom:0">Số máy tăng dần dọc theo từng dãy, ${lay.from === 'teacher' ? 'bắt đầu từ máy gần bàn giáo viên' : 'bắt đầu từ máy gần cửa'}, dãy số 1 ở bên ${lay.first === 'left' ? 'trái' : 'phải'} (nhìn từ bàn giáo viên xuống lớp). Bàn giáo viên và cửa chỉ để vẽ cho giống phòng thật, không ảnh hưởng cách đánh số. Số máy được đổi thành tên máy bằng <b>Tên máy mẫu</b> (ví dụ <code>MAY{n}</code> khớp MAY1, MAY01, MAY12). Để trống thì lấy theo thứ tự danh sách máy ở trang Điều khiển lớp. Khi học sinh vi phạm, chương trình ghi tên em ngồi máy đó.</p></section>`;
+}
+
+function viewSchool() {
+  const sc = S.school || {}, cls = sc.classes || [], slots = sc.slots || [];
+  const cur = sc.current, nxt = sc.next, dayN = ['Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy', 'Chủ nhật'];
+  const total = cls.reduce((a, c) => a + c.count, 0);
+  const todayIdx = (new Date().getDay() + 6) % 7;
+  const nowTxt = cur
+    ? `<div style="font-size:30px;font-weight:800">Lớp ${esc(cur.cls)}</div><div class="muted">${sc.source === 'manual' ? 'Do bạn đặt tay' + (cur.until ? ' (hết hiệu lực lúc ' + new Date(cur.until * 1000).toTimeString().slice(0, 5) + ')' : '') : `Tiết ${esc(cur.start)} – ${esc(cur.end)}`}</div>`
+    : `<div style="font-size:24px;font-weight:800" class="muted">Ngoài giờ dạy</div><div class="muted">Chưa có tiết nào đang diễn ra.</div>`;
+  const nextTxt = nxt
+    ? `<div style="font-size:30px;font-weight:800">Lớp ${esc(nxt.cls)}</div><div class="muted">${nxt.date === new Date().toISOString().slice(0, 10) || (nxt.day === todayIdx) ? 'Hôm nay' : dayN[nxt.day]} ${esc(nxt.start)} – ${esc(nxt.end)}</div>`
+    : `<div class="muted" style="font-size:16px">${sc.auto === false ? 'Đang tắt chế độ tự động theo lịch.' : slots.length ? 'Không còn tiết nào trong tuần.' : 'Chưa nhập thời khóa biểu.'}</div>`;
+  const times = [...new Set(slots.map(s => s.start + '|' + s.end))].sort();
+  const days = [...new Set(slots.map(s => s.day))].sort((a, b) => a - b);
+  const short = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+  const grid = slots.length ? `<table class="sgrid"><tr><th></th>${days.map(d => `<th>${short[d]}${d === todayIdx ? ' •' : ''}</th>`).join('')}</tr>
+      ${times.map(t => { const [a, b] = t.split('|'); return `<tr><td class="tm">${a}–${b}</td>${days.map(d => {
+        const s = slots.find(x => x.day === d && x.start === a && x.end === b);
+        const on = s && cur && sc.source === 'schedule' && cur.cls === s.cls && cur.start === a && d === todayIdx;
+        return s ? `<td class="${on ? 'on' : ''}">${esc(s.cls)}</td>` : '<td class="nil"></td>'; }).join('')}</tr>`; }).join('')}</table>`
+    : '<div class="empty">Chưa có thời khóa biểu. Bấm “Nhập thời khóa biểu” và chọn file Excel.</div>';
+  const chips = cls.length ? `<div class="cchips">${cls.map(c => `<span class="cchip ${cur && cur.cls === c.name ? 'on' : ''}" data-act="schoolset" data-cls="${esc(c.name)}" title="Bấm để đặt làm lớp hiện tại">${esc(c.name)}<small>${c.count} HS</small></span>`).join('')}</div>`
+    : '<div class="empty">Chưa có danh sách lớp. Bấm “Nhập danh sách lớp” và chọn file Excel điểm danh.</div>';
+  const info = (f, at) => f ? `<span class="muted">${esc(f)} · nhập lúc ${esc(at)}</span>` : '<span class="muted">Chưa nhập</span>';
+  return `<div class="stack">
+    <section class="card"><div style="display:grid;grid-template-columns:1fr 1fr;gap:22px">
+      <div><div class="muted" style="margin-bottom:6px">ĐANG DẠY</div>${nowTxt}</div>
+      <div><div class="muted" style="margin-bottom:6px">LỚP KẾ TIẾP</div>${nextTxt}</div></div>
+      <div class="row" style="margin-top:16px;gap:22px">
+        <label class="switch"><input type="checkbox" data-schoolauto ${sc.auto !== false ? 'checked' : ''}><span class="tr"></span><span>Tự chuyển lớp theo thời khóa biểu</span></label>
+        ${(sc.source === 'manual') ? '<button class="btn" data-act="schoolclear">↩ Quay lại theo lịch</button>' : ''}
+      </div>
+      <p class="hint" style="margin-bottom:0">Tên lớp hiện tại hiện ở góc trên bên phải và được ghi vào từng vi phạm (lọc được ở trang Vi phạm). Lịch đổi đột xuất thì bấm tên một lớp ở dưới để đặt làm lớp hiện tại${sc.auto === false ? '' : ' (có hiệu lực 45 phút rồi tự quay lại theo lịch)'}.</p>
+    </section>
+    <section class="card"><div class="toolbar" style="margin-bottom:10px"><b>Nhập dữ liệu</b><span class="grow"></span></div>
+      <div class="row" style="gap:12px;flex-wrap:wrap">
+        <button class="btn primary" data-act="schoolimport" data-kind="classes">📥 Nhập danh sách lớp</button>${info(sc.classes_file, sc.classes_at)}
+        <input type="file" id="schoolFile_classes" data-schoolfile="classes" accept=".xlsx,.xlsm" class="hidden">
+      </div>
+      <div class="row" style="gap:12px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn primary" data-act="schoolimport" data-kind="timetable">📥 Nhập thời khóa biểu</button>${info(sc.timetable_file, sc.timetable_at)}
+        <input type="file" id="schoolFile_timetable" data-schoolfile="timetable" accept=".xlsx,.xlsm" class="hidden">
+      </div>
+      <p class="hint" style="margin-bottom:0">Danh sách lớp: file điểm danh của trường (mỗi lớp một sheet, tên lớp ở ô E2, họ tên ở cột C). Thời khóa biểu: bảng tiết × thứ, ô ghi tên lớp. File chỉ được đọc để lấy dữ liệu, không gửi xuống máy học sinh. Nhập lại bất cứ lúc nào để cập nhật.</p>
+      ${(sc.unknown || []).length ? `<div class="note warn" style="margin-top:10px">Lớp có trong thời khóa biểu nhưng không có trong danh sách lớp: <b>${sc.unknown.map(esc).join(', ')}</b></div>` : ''}
+    </section>
+    <section class="card"><div class="toolbar" style="margin-bottom:10px"><b>Thời khóa biểu</b>${sc.subject || sc.teacher ? `<span class="muted">${esc([sc.subject, sc.teacher].filter(Boolean).join(' · '))}${sc.from ? ' · từ ' + esc(sc.from.split('-').reverse().join('/')) : ''}</span>` : ''}</div>${grid}</section>
+    ${viewSeats()}
+    <section class="card"><div class="toolbar" style="margin-bottom:10px"><b>Các lớp</b><span class="muted">${cls.length} lớp · ${total} học sinh</span><span class="grow"></span></div>${chips}
+      ${cls.length ? `<div class="row" style="margin-top:12px;gap:8px;flex-wrap:wrap"><span class="muted">Xem danh sách học sinh:</span>${cls.map(c => `<button class="btn ghost sm" data-act="schoolstudents" data-cls="${esc(c.name)}">${esc(c.name)}</button>`).join('')}</div>` : ''}
+    </section></div>`;
+}
+
+/* ---------- báo cáo cuối buổi ---------- */
+async function loadReport() { S.report = await api('/api/report?range=' + encodeURIComponent(S.reportRange)); }
+
+function viewReport() {
+  const r = S.report;
+  const ranges = {'2h': 'Hai giờ qua', today: 'Hôm nay', '7d': '7 ngày qua', all: 'Tất cả'};
+  const head = `<section class="card"><div class="toolbar" style="margin-bottom:0">
+      <select id="reportRange">${Object.entries(ranges).map(([k, v]) => `<option value="${k}" ${S.reportRange === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+      <button class="btn" data-act="reportreload">↻ Làm mới</button><span class="grow"></span>
+      <button class="btn primary" data-act="reportexport">📊 Xuất Excel</button>
+      <button class="btn ghost" data-act="openreports">Mở thư mục báo cáo</button></div>
+      <p class="hint" style="margin:12px 0 0">Một “lần vi phạm” là các ảnh liên tiếp của cùng một máy và cùng một trang/ứng dụng (cách nhau dưới ${r ? r.gap : 60} giây), nên học sinh ở yên một trang chỉ tính một lần.</p></section>`;
+  if (!r || !r.episodes) return `<div class="stack">${head}<div class="empty">Chưa có vi phạm trong khoảng “${esc(ranges[S.reportRange])}”.</div></div>`;
+  const maxH = Math.max(...r.by_host.map(h => h.count)), maxI = Math.max(...r.by_item.map(i => i.count)), maxHr = Math.max(...r.by_hour.map(h => h.count));
+  const top = r.by_item[0], worst = r.by_host[0], peak = r.by_hour.reduce((a, b) => b.count > a.count ? b : a);
+  const tagOf = t => `<span class="tag ${esc(t)}">${t === 'site' ? 'Trang web' : 'Ứng dụng'}</span>`;
+  const hostRows = r.by_host.map(h => `<tr><td><b>${esc(h.host)}</b></td><td class="barcell"><div class="bar" style="width:${Math.round(h.count / maxH * 100)}%"></div></td><td><b>${h.count}</b> lần <span class="muted">(${h.shots} ảnh)</span></td><td class="muted">${h.top.map(t => esc(t.name) + ' ×' + t.count).join(', ')}</td></tr>`).join('');
+  const itemRows = r.by_item.map(i => `<tr><td><b>${esc(i.name)}</b> ${tagOf(i.type)}</td><td class="barcell"><div class="bar" style="width:${Math.round(i.count / maxI * 100)}%"></div></td><td><b>${i.count}</b> lần · ${i.hosts} máy</td><td class="act"><button class="btn" data-act="allowadd" data-type="${esc(i.type)}" data-name="${esc(i.name)}" title="Thêm vào ${i.type === 'site' ? 'danh sách trang web' : 'danh sách ứng dụng'} được phép">＋ Cho phép</button></td></tr>`).join('');
+  const sug = r.suggest.length ? `<div class="note warn" style="margin:0">Các trang này có từ 3 máy trở lên cùng vào: <b>${r.suggest.map(esc).join(', ')}</b>. Có thể là trang cần cho bài học, hãy cân nhắc bấm “＋ Cho phép”. Nếu không thì nhắc nhở cả lớp.</div>` : '';
+  return `<div class="stack">${head}
+    <div class="stats">
+      <div class="stat"><div class="n">${r.episodes}</div><div class="l">lần vi phạm (${r.shots} ảnh)</div></div>
+      <div class="stat"><div class="n">${r.machines}</div><div class="l">máy có vi phạm</div></div>
+      <div class="stat"><div class="n" style="font-size:20px">${esc(worst.host)}</div><div class="l">vi phạm nhiều nhất: ${worst.count} lần</div></div>
+      <div class="stat"><div class="n" style="font-size:20px;word-break:break-all">${esc(top.name)}</div><div class="l">bị vào nhiều nhất: ${top.count} lần, ${top.hosts} máy</div></div>
+      <div class="stat"><div class="n">${esc(peak.hour)}h</div><div class="l">giờ cao điểm (${peak.count} lần)</div></div>
+    </div>
+    ${sug}
+    <section class="card"><h3>Theo máy</h3><table class="tbl"><thead><tr><th>Máy</th><th></th><th>Số lần</th><th>Hay vào</th></tr></thead><tbody>${hostRows}</tbody></table></section>
+    <section class="card"><h3>Theo trang web / ứng dụng</h3><table class="tbl"><thead><tr><th>Nội dung</th><th></th><th>Số lần</th><th></th></tr></thead><tbody>${itemRows}</tbody></table>
+      <p class="hint" style="margin-bottom:0">“＋ Cho phép” chỉ thêm dòng vào danh sách. Hãy mở trang “Trang web được phép” hoặc “Ứng dụng được phép” rồi bấm Lưu để áp dụng.</p></section>
+    <section class="card"><h3>Theo giờ</h3><div class="hours">${r.by_hour.map(h => `<div><i style="height:${Math.round(h.count / maxHr * 70)}px" title="${h.count} lần"></i>${esc(h.hour)}h</div>`).join('')}</div></section>
   </div>`;
 }
 
@@ -914,6 +1194,8 @@ async function go(id) {
     if (id === 'dist') await loadPayload();
     if (id === 'setup') await loadSetup();
     if (id === 'vcfg') await loadVcfg();
+    if (id === 'report') await loadReport();
+    if (id === 'school') await loadSchool();
   } catch (e) { toast(e.message, 'err'); }
   buildNav(); render(true);
 }
@@ -930,12 +1212,14 @@ function render(top) {
   else if (S.page === 'dist') v.innerHTML = viewDist();
   else if (S.page === 'vcfg') v.innerHTML = viewVcfg();
   else if (S.page === 'viol') v.innerHTML = viewViol();
+  else if (S.page === 'school') v.innerHTML = viewSchool();
+  else if (S.page === 'report') v.innerHTML = viewReport();
   else if (S.page === 'settings') v.innerHTML = viewSettings();
   else v.innerHTML = viewList(p.list);
   if (p.list) applyFilter(p.list);
   main.scrollTop = top ? 0 : keep;
   const st = S.st;
-  updWatchInfo(); showUpdate(); $('#verTxt').textContent = 'Quản lý lớp học · v' + st.version;
+  updWatchInfo(); updClassBadge(); showUpdate(); $('#verTxt').textContent = 'Quản lý lớp học · v' + st.version;
   $('#statusDot').className = 'dot ' + (st.veyon_cli_found ? 'ok' : 'bad');
   $('#statusTxt').textContent = st.veyon_cli_found ? 'Đã tìm thấy veyon-cli' : 'Chưa thấy veyon-cli';
   $('#status').title = st.veyon_cli_path + (st.veyon_cli_found ? '' : ' (không tồn tại, bấm để mở Cài đặt)');
@@ -962,6 +1246,26 @@ document.addEventListener('click', async e => {
     case 'shot': { const hs = await resolveTargets(); if (!hs) break; try { await api('/api/shot', {hosts: hs}); openLog(); toast(`Đang chụp màn hình ${hs.length} máy`, 'ok'); } catch (err) { toast(err.message, 'err'); } break; }
     case 'watch_start': case 'watch_stop': case 'watch_fetch': { const hs = await resolveTargets(); if (!hs) break; const step = act.slice(6); try { await api('/api/watch', {step, hosts: hs}); openLog(); toast(`Đã gửi lệnh tới ${hs.length} máy`, 'ok'); } catch (err) { toast(err.message, 'err'); } break; }
     case 'gopage': go(el.dataset.pageTo); break;
+    case 'reportreload': try { await loadReport(); render(); } catch (err) { toast(err.message, 'err'); } break;
+    case 'reportexport': try { const r = await api('/api/report_export', {range: S.reportRange}); toast('Đã xuất báo cáo: ' + r.path, 'ok'); api('/api/open', {what: 'reports'}).catch(() => {}); } catch (err) { toast(err.message, 'err'); } break;
+    case 'openreports': api('/api/open', {what: 'reports'}).catch(err => toast(err.message, 'warn')); break;
+    case 'allowadd': {
+      const k = el.dataset.type === 'site' ? 'allow' : 'keep', name = el.dataset.name;
+      try {
+        if (!S.lists[k]) await loadList(k);
+        const n = addRows(k, [[name, 'Thêm từ báo cáo ' + new Date().toLocaleDateString('vi-VN')]]);
+        toast(n ? `Đã thêm "${name}". Mở trang “${k === 'allow' ? 'Trang web được phép' : 'Ứng dụng được phép'}” và bấm Lưu để áp dụng.` : `"${name}" đã có trong danh sách`, n ? 'ok' : 'warn');
+        el.disabled = true; el.textContent = n ? '✓ Đã thêm' : '✓ Đã có';
+      } catch (err) { toast(err.message, 'err'); }
+      break; }
+    case 'cleanup': {
+      const d = +S.st.cfg.keep_days || 0;
+      if (!d) { toast('Đang để 0 ngày (không tự xóa). Nhập số ngày muốn giữ ảnh.', 'warn'); break; }
+      if (await modal({title: 'Dọn ảnh cũ?', ok: 'Dọn ngay', danger: true, html: `Xóa ảnh và bản ghi vi phạm cũ hơn <b>${d} ngày</b> trên máy này. Không hoàn tác được.`})) {
+        try { const r = await api('/api/cleanup', {}); S.alerts = S.alerts.filter(x => x.ts >= r.cutoff); toast(`Đã xóa ${r.images} ảnh, ${r.records} bản ghi, ${r.shots} thư mục ảnh chụp`, 'ok'); render(); }
+        catch (err) { toast(err.message, 'err'); }
+      }
+      break; }
     case 'viewimg': { const ev = S.alerts[+el.dataset.i]; if (ev) lightbox(ev); break; }
     case 'alertclear': if (await modal({title: 'Xóa danh sách vi phạm?', ok: 'Xóa danh sách', danger: true, html: 'Danh sách trên màn hình sẽ được làm trống. Ảnh vẫn còn trong thư mục <code>data\\evidence</code>.'})) { try { await api('/api/alerts_clear', {}); S.alerts = []; S.unseen = 0; render(); } catch (err) { toast(err.message, 'err'); } } break;
     case 'openevidence': api('/api/open', {what: 'evidence'}).catch(err => toast(err.message, 'warn')); break;
@@ -1012,6 +1316,21 @@ document.addEventListener('click', async e => {
     case 'saveapply': saveList(kind, true); break;
     case 'mode': await saveCfg({dist_mode: el.dataset.v}); render(); break;
     case 'upload': $('#fileInput').click(); break;
+    case 'schoolimport': $('#schoolFile_' + el.dataset.kind).click(); break;
+    case 'schoolset': await schoolSet({action: 'set', cls: el.dataset.cls}); break;
+    case 'seatpick': await seatPick(+el.dataset.n); break;
+    case 'seatauto': await seatAuto(); break;
+    case 'seatclear': await seatSave({seats: {}}); break;
+    case 'seatall': await seatSave({}, true); toast('Đã áp dụng kiểu phòng này cho tất cả các lớp', 'ok'); break;
+    case 'schoolclear': await schoolSet({action: 'clear'}); break;
+    case 'schoolstudents': {
+      try {
+        const r = await api('/api/school_students?cls=' + encodeURIComponent(el.dataset.cls));
+        await modal({title: `Lớp ${el.dataset.cls} (${r.names.length} học sinh)`, ok: 'Đóng', noCancel: true,
+          html: `<ol style="margin:0;padding-left:34px;max-height:52vh;overflow:auto;columns:2;column-gap:28px">${r.names.map(n => `<li>${esc(n)}</li>`).join('')}</ol>`});
+      } catch (err) { toast(err.message, 'err'); }
+      break;
+    }
     case 'addextra': {
       const v = await modal({title: 'Thêm theo đường dẫn', ok: 'Thêm', html: '<p class="hint" style="margin-top:0">Đường dẫn đầy đủ của file hoặc thư mục trên máy này, ví dụ D:\\Phanmem\\setup.exe</p><input type="text" id="pathTxt" placeholder="D:\\Phanmem\\setup.exe">', collect: r => r.querySelector('#pathTxt').value.trim()});
       if (v) { const l = (S.st.cfg.dist_files || []).concat([v.replace(/^"|"$/g, '')]); await saveCfg({dist_files: l}); render(); }
@@ -1066,11 +1385,18 @@ document.addEventListener('change', async e => {
     await saveCfg({dist_payload_skip: [...skip]});
   }
   else if (t.id === 'violFilter') { S.violHost = t.value; render(); }
+  else if (t.id === 'seatClsSel') { S.seatCls = t.value; try { await seatNames(); } catch (err) { /* bỏ qua */ } render(); }
+  else if (t.dataset.lay) { await seatSave({[t.dataset.lay]: t.value}); }
+  else if (t.id === 'violCls') { S.violCls = t.value; render(); }
+  else if (t.dataset.schoolfile) { await schoolUpload(t.dataset.schoolfile, t.files[0]); t.value = ''; }
+  else if (t.dataset.schoolauto !== undefined) { await schoolSet({action: 'auto', value: t.checked}); }
+  else if (t.id === 'reportRange') { S.reportRange = t.value; try { await loadReport(); render(); } catch (err) { toast(err.message, 'err'); } }
   else if (t.dataset.cfg) { await saveCfg({[t.dataset.cfg]: t.type === 'checkbox' ? t.checked : t.value}); if (t.dataset.cfg === 'auto_push') render(); }
   else if (t.id === 'fileInput') { await uploadFiles(t.files); t.value = ''; }
 });
 
 $('#status').onclick = () => go('settings');
+$('#classBadge').onclick = () => go('school');
 $('#quitBtn').onclick = async () => {
   if (!(await modal({title: 'Thoát KhoaVeyon?', html: 'Cửa sổ sẽ đóng. Các lệnh đang chạy nền có thể bị dừng.', ok: 'Thoát', danger: true}))) return;
   try { await api('/api/quit', {}); } catch (e) { /* đang đóng */ }

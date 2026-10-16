@@ -13,12 +13,13 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Border, Side
 
-VERSION = '1.3.0'
+VERSION = '1.4.0'
 APP_TITLE = 'KhoaVeyon - Hỗ trợ quản lý lớp học'
 APP_DIR = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__))
 LEGACY_CONFIG_PATH = os.path.join(APP_DIR, 'KhoaVeyon.json')
@@ -149,6 +150,9 @@ DEFAULT_CONFIG = {
     'alert_poll': '3',     # giây giữa hai lần nhận ảnh vi phạm từ máy học sinh
     'alert_sound': True,   # kêu bíp trên máy giáo viên khi có vi phạm mới
     'alert_popup': True,   # hiện thông báo nổi (kèm ảnh) khi có vi phạm mới
+    'alert_group_sec': '60',  # các vi phạm giống nhau (cùng máy, cùng trang/ứng dụng) cách nhau không quá chừng này giây thì gộp thành một báo động
+    'keep_days': '30',     # tự xóa ảnh và bản ghi vi phạm cũ hơn chừng này ngày (0 = không tự xóa)
+    'watch_autostart': True,  # máy học sinh tự chạy lại giám sát mỗi khi có người đăng nhập (kể cả sau khi khởi động lại)
     'setup_done': False,  # đã chạy thiết lập ban đầu chưa (chưa thì mở trang Thiết lập khi khởi động)
     'features': {a[0]: a[3] for a in ACTIONS},
 }
@@ -452,6 +456,7 @@ import webbrowser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 WEB_DIR = os.path.join(APP_DIR, 'web')
+ASSET_TYPES = {'.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon'}
 PAYLOAD_DIR = os.path.join(APP_DIR, 'payload')
 IDLE_EXIT_SECONDS = 180      # đóng cửa sổ trình duyệt thì chương trình tự thoát sau chừng này giây
 MAX_UPLOAD = 500 * 1024 * 1024
@@ -481,8 +486,8 @@ LOCK_KEYS = {'lockall-start', 'lockrun-start', 'lockapp-start', 'blockall', 'all
 FREE_KEYS = {'lockall-stop', 'lockrun-stop', 'lockapp-stop', 'allowall', 'unblockapp', 'unlock'}
 
 STR_KEYS = ['list_dir', 'script_path', 'veyon_cli', 'run_template', 'list_template', 'sync_dir',
-            'dist_target', 'dist_mode', 'dist_cmd', 'dist_action', 'update_repo', 'watch_repeat', 'watch_max', 'alert_poll']
-BOOL_KEYS = ['auto_sync', 'auto_push', 'dist_include_lists', 'dist_interactive', 'setup_done', 'auto_lock', 'update_check', 'update_auto', 'shot_before_lock', 'alert_sound', 'alert_popup']
+            'dist_target', 'dist_mode', 'dist_cmd', 'dist_action', 'update_repo', 'watch_repeat', 'watch_max', 'alert_poll', 'alert_group_sec', 'keep_days']
+BOOL_KEYS = ['auto_sync', 'auto_push', 'dist_include_lists', 'dist_interactive', 'setup_done', 'auto_lock', 'update_check', 'update_auto', 'shot_before_lock', 'alert_sound', 'alert_popup', 'watch_autostart']
 LIST_KEYS = ['dist_files', 'dist_payload_skip']
 
 
@@ -1642,9 +1647,6 @@ function Take-Shot($kind, $name, $title) {
         $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $bmp.Size)
         $bmp.Save($file, [System.Drawing.Imaging.ImageFormat]::Jpeg)
         $g.Dispose(); $bmp.Dispose()
-        if (-not (Test-Path -LiteralPath $csv)) { Set-Content -LiteralPath $csv -Value 'Date,Time,PCName,User,Type,Name,Window,File' -Encoding UTF8 }
-        $t = $title -replace '"', '""'
-        Add-Content -LiteralPath $csv -Encoding UTF8 -Value ('"{0}","{1}","{2}","{3}","{4}","{5}","{6}","{7}"' -f $now.ToString('yyyy-MM-dd'), $now.ToString('HH:mm:ss'), $pc, $user, $kind, $name, $t, (Split-Path $file -Leaf))
         # File .json di kem anh: may giao vien doc file nay de biet ten may, noi dung vi pham, ngay gio (ghi xong anh moi ghi json)
         $meta = [ordered]@{ pc = $pc; user = $user; type = $kind; name = $name; window = $title; date = $now.ToString('yyyy-MM-dd'); time = $now.ToString('HH:mm:ss'); file = (Split-Path $file -Leaf) }
         $jf = [IO.Path]::ChangeExtension($file, '.json')
@@ -1722,13 +1724,63 @@ def watch_start_one(cfg, host):
         os.remove(os.path.join(ev, 'stop.flag'))
     except OSError:
         pass
-    cmd = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File %s -ListDir %s -Out %s -RepeatSec %d -MaxShots %d' % (
+    ps_args = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File %s -ListDir %s -Out %s -RepeatSec %d -MaxShots %d' % (
         _q(rdir + '\\' + WATCH_PS1_NAME), _q(cfg['dist_target'].rstrip('\\/')), _q(WATCH_REMOTE_DIR),
         watch_num(cfg, 'watch_repeat', 10, 3, 300), watch_num(cfg, 'watch_max', 5, 1, 50))
-    rc, out = remote_run(host, cmd, interactive=True, name=WATCH_TASK)
+    rc, out = remote_run(host, 'powershell.exe ' + ps_args, interactive=True, name=WATCH_TASK)
+    if rc != 0:
+        return False, out
+    watch_hosts_set(host, True)  # từ giờ máy giáo viên tự nhận ảnh và báo động
+    msg = 'đã bật giám sát, ảnh vi phạm sẽ tự gửi về máy này'
+    if cfg.get('watch_autostart', True):
+        ok, why = watch_autostart_install(host, ps_args)
+        msg += '; tự chạy lại khi học sinh đăng nhập' if ok else '; CHƯA cài được tác vụ tự chạy lại (%s)' % why[:160]
+    else:
+        watch_autostart_remove(host)
+    return True, msg
+
+
+WATCH_LOGON_TASK = 'KhoaVeyonWatchLogon'
+
+
+def watch_logon_xml(ps_args):
+    """Tác vụ chạy mỗi khi BẤT KỲ người dùng nào đăng nhập, trong phiên của người đó (nhóm Users), ẩn, không giới hạn thời gian."""
+    from xml.sax.saxutils import escape
+    return (
+        '<?xml version="1.0" encoding="UTF-16"?>\r\n'
+        '<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">\r\n'
+        '  <RegistrationInfo><Description>KhoaVeyon: tu chay lai giam sat khi hoc sinh dang nhap</Description></RegistrationInfo>\r\n'
+        '  <Triggers><LogonTrigger><Enabled>true</Enabled><Delay>PT15S</Delay></LogonTrigger></Triggers>\r\n'
+        '  <Principals><Principal id="Author"><GroupId>S-1-5-32-545</GroupId><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>\r\n'
+        '  <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>'
+        '<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><AllowStartOnDemand>true</AllowStartOnDemand><Enabled>true</Enabled>'
+        '<Hidden>true</Hidden><ExecutionTimeLimit>PT0S</ExecutionTimeLimit></Settings>\r\n'
+        '  <Actions Context="Author"><Exec><Command>powershell.exe</Command><Arguments>%s</Arguments></Exec></Actions>\r\n'
+        '</Task>\r\n' % escape(ps_args))
+
+
+def watch_autostart_install(host, ps_args):
+    tmp = tempfile.mkdtemp(prefix='kvauto')
+    try:
+        xp = os.path.join(tmp, 'task.xml')
+        with open(xp, 'w', encoding='utf-16', newline='') as f:  # schtasks cần UTF-16
+            f.write(watch_logon_xml(ps_args))
+        rc, out = run_args(['schtasks', '/Create', '/S', host, '/TN', WATCH_LOGON_TASK, '/XML', xp, '/F'])
+        return rc == 0, out
+    except OSError as e:
+        return False, str(e)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def watch_autostart_remove(host):
+    rc, out = run_args(['schtasks', '/Delete', '/S', host, '/TN', WATCH_LOGON_TASK, '/F'])
     if rc == 0:
-        watch_hosts_set(host, True)  # từ giờ máy giáo viên tự nhận ảnh và báo động
-    return rc == 0, 'đã bật giám sát, ảnh vi phạm sẽ tự gửi về máy này' if rc == 0 else out
+        return True, ''
+    rc2, _ = run_args(['schtasks', '/Query', '/S', host, '/TN', WATCH_LOGON_TASK])
+    if rc2 != 0 and tcp_open(host, 445, 1.5):  # máy bật mà hỏi không thấy tác vụ nghĩa là chưa từng có
+        return True, ''
+    return False, out
 
 
 def watch_stop_one(cfg, host):
@@ -1741,6 +1793,9 @@ def watch_stop_one(cfg, host):
     except Exception:  # noqa
         pass
     watch_hosts_set(host, False)
+    ok, why = watch_autostart_remove(host)  # gỡ tác vụ tự chạy lại, nếu không máy khởi động lại sẽ bật giám sát lại
+    if not ok:
+        return False, 'đã gửi lệnh dừng nhưng CHƯA gỡ được tác vụ tự chạy lại (%s). Bấm Tắt giám sát lại khi máy có mạng.' % why[:160]
     return True, 'đã gửi lệnh dừng (dừng sau vài giây)'
 
 
@@ -1750,12 +1805,11 @@ def watch_fetch_one(cfg, host):
         return False, msg
     src = unc_target(host, WATCH_REMOTE_DIR)
     dest = os.path.join(evidence_root(), vcfg_safe(host))
-    for name in ('evidence.csv', 'watch.log'):  # bản ghi đầy đủ của máy học sinh
-        try:
-            os.makedirs(dest, exist_ok=True)
-            shutil.copy2(os.path.join(src, name), os.path.join(dest, name))
-        except OSError:
-            pass
+    try:  # nhật ký chạy của script giám sát, để xem khi cần tìm lỗi
+        os.makedirs(dest, exist_ok=True)
+        shutil.copy2(os.path.join(src, 'watch.log'), os.path.join(dest, 'watch.log'))
+    except OSError:
+        pass
     return True, 'đã lấy %d ảnh vi phạm mới về %s' % (n, dest) if n else 'chưa có ảnh vi phạm mới'
 
 
@@ -1939,14 +1993,31 @@ def alert_collect_host(cfg, host):
         except ValueError:
             ts = time.time()
             date, tm = time.strftime('%Y-%m-%d'), time.strftime('%H:%M:%S')
+        cls_now = school_class_at(ts)
+        stu, seat = school_student_for(host, cls_now)
         alert_push({'host': host, 'pc': _clip(m.get('pc'), 64), 'user': _clip(m.get('user'), 64), 'type': kind,
                     'name': name, 'window': _clip(m.get('window'), 300), 'date': date, 'time': tm, 'ts': ts,
-                    'file': jpg, 'img': img, 'text': alert_text(kind, name)})
+                    'file': jpg, 'img': img, 'text': alert_text(kind, name), 'cls': cls_now, 'student': stu, 'seat': seat})
         for x in jfile + [sp]:
             _rm(x)
         new += 1
         log('[%s] VI PHẠM: %s (%s %s)' % (host, alert_text(kind, name), date, tm), 'warn')
     return True, 'ok', new
+
+
+BEEP_LAST = {}
+
+
+def alert_should_beep(events, gap):
+    """Một học sinh mở cùng một trang liên tục chỉ bíp một lần trong `gap` giây; trang khác hoặc máy khác thì bíp riêng."""
+    now = time.time()
+    beep = False
+    for e in events:
+        k = (e['host'], e['type'], e['name'])
+        if now - BEEP_LAST.get(k, 0) >= gap:
+            beep = True
+        BEEP_LAST[k] = now
+    return beep
 
 
 def alert_beep():
@@ -1967,6 +2038,7 @@ def alert_beep():
 
 def alert_loop():
     """Chạy nền: cứ vài giây lại lấy ảnh vi phạm mới từ các máy đang giám sát."""
+    last_clean = 0
     while True:
         wait = 3
         try:
@@ -1975,7 +2047,7 @@ def alert_loop():
             wait = watch_num(cfg, 'alert_poll', 3, 2, 60)
             hosts = list(cfg.get('watch_hosts') or [])
             if hosts:
-                total = 0
+                before = ALERT_SEQ[0]
                 with ThreadPoolExecutor(max_workers=min(16, len(hosts))) as ex:
                     futs = {ex.submit(alert_collect_host, cfg, h): h for h in hosts}
                     for fut in as_completed(futs):
@@ -1984,7 +2056,6 @@ def alert_loop():
                             ok, msg, n = fut.result()
                         except Exception as e:  # noqa
                             ok, msg, n = False, str(e), 0
-                        total += n
                         prev = HOST_ONLINE.get(h)
                         if ok != prev:  # chỉ ghi nhật ký khi trạng thái đổi, tránh đầy nhật ký
                             HOST_ONLINE[h] = ok
@@ -1992,11 +2063,398 @@ def alert_loop():
                                 log('[%s] không nhận được ảnh vi phạm: %s' % (h, msg), 'warn')
                             elif prev is False:
                                 log('[%s] đã kết nối lại, tiếp tục nhận ảnh vi phạm' % h, 'ok')
-                if total:
+                with ALERT_LOCK:
+                    fresh = [e for e in ALERTS if e['id'] > before]
+                if alert_should_beep(fresh, watch_num(cfg, 'alert_group_sec', 60, 10, 3600)):
                     alert_beep()
+            if time.time() - last_clean > 6 * 3600:  # dọn ảnh cũ khi mở chương trình rồi mỗi 6 giờ
+                last_clean = time.time()
+                r = evidence_cleanup(watch_num(cfg, 'keep_days', 30, 0, 3650))
+                if r['images'] or r['records'] or r['shots']:
+                    log('Đã dọn dữ liệu vi phạm cũ: %d ảnh, %d bản ghi, %d thư mục ảnh chụp' % (r['images'], r['records'], r['shots']), 'head')
         except Exception as e:  # noqa
             log('Lỗi khi nhận ảnh vi phạm: %s' % e, 'err')
         time.sleep(wait)
+
+
+# ---------------------------------------------------------------- lớp học và lịch dạy
+import datetime
+
+SCHOOL_LOCK = threading.RLock()
+SCHOOL_GRACE_MIN = 5       # vào lớp sớm tối đa chừng này phút vẫn tính là tiết đó
+SCHOOL_MANUAL_MIN = 45     # "đặt làm lớp hiện tại" có hiệu lực chừng này phút (khi đang bật tự động theo lịch)
+SCHOOL_DAYS = ['THỨ HAI', 'THỨ BA', 'THỨ TƯ', 'THỨ NĂM', 'THỨ SÁU', 'THỨ BẢY', 'CHỦ NHẬT']
+SCHOOL_DAY_SHORT = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
+SCHOOL = {'classes': {}, 'layouts': {}, 'slots': [], 'from': '', 'auto': True, 'override': None, 'manual': '',
+          'classes_file': '', 'classes_at': '', 'timetable_file': '', 'timetable_at': '', 'teacher': '', 'subject': ''}
+
+
+def school_path():
+    return os.path.join(os.path.dirname(CONFIG_PATH), 'school.json')
+
+
+def school_load():
+    try:
+        with open(school_path(), 'r', encoding='utf-8') as f:
+            d = json.load(f)
+        if isinstance(d, dict):
+            with SCHOOL_LOCK:
+                SCHOOL.update({k: d[k] for k in SCHOOL if k in d})
+    except (OSError, ValueError):
+        pass
+
+
+def school_save():
+    with SCHOOL_LOCK:
+        tmp = school_path() + '.tmp'
+        try:
+            os.makedirs(os.path.dirname(school_path()), exist_ok=True)
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(SCHOOL, f, ensure_ascii=False, indent=1)
+            os.replace(tmp, school_path())
+        except OSError as e:
+            log('Không lưu được lớp và lịch dạy: %s' % e, 'err')
+
+
+def _cls_norm(v):
+    return re.sub(r'\s+', '', str(v or '')).upper()
+
+
+def _hhmm(v):
+    """Giờ dạng '7:30', '07:30', datetime.time hoặc số của Excel -> 'HH:MM' (không hiểu thì trả về '')."""
+    if isinstance(v, datetime.datetime):
+        v = v.time()
+    if isinstance(v, datetime.time):
+        return '%02d:%02d' % (v.hour, v.minute)
+    if isinstance(v, (int, float)) and 0 <= v < 1:
+        m = int(round(v * 1440))
+        return '%02d:%02d' % (m // 60, m % 60)
+    m = re.match(r'^\s*(\d{1,2})\s*[:hH.]\s*(\d{2})', str(v or ''))
+    if m and int(m.group(1)) < 24 and int(m.group(2)) < 60:
+        return '%02d:%02d' % (int(m.group(1)), int(m.group(2)))
+    return ''
+
+
+def _date_iso(v):
+    if isinstance(v, datetime.datetime):
+        return v.strftime('%Y-%m-%d')
+    if isinstance(v, datetime.date):
+        return v.strftime('%Y-%m-%d')
+    m = re.match(r'^\s*(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})', str(v or ''))
+    if m:
+        try:
+            return datetime.date(int(m.group(3)), int(m.group(2)), int(m.group(1))).strftime('%Y-%m-%d')
+        except ValueError:
+            return ''
+    return ''
+
+
+def parse_classes_xlsx(path):
+    """File điểm danh của trường: mỗi lớp một sheet, tên lớp ở ô E2, họ tên học sinh ở cột C (từ dưới dòng tiêu đề 'HỌ & TÊN')."""
+    wb = load_workbook(path, read_only=True, data_only=True)
+    out = {}
+    try:
+        for ws in wb.worksheets:
+            rows = list(ws.iter_rows(min_row=1, max_row=75, max_col=5, values_only=True))
+            if len(rows) < 3:
+                continue
+            row2 = rows[1]
+            name = _cls_norm(row2[4] if len(row2) > 4 else '')
+            if not name or 'Lớp' not in str(row2[3] if len(row2) > 3 else ''):
+                continue
+            head = None
+            for i, r in enumerate(rows[:12]):
+                if len(r) > 2 and 'HỌ' in str(r[2] or '').upper():
+                    head = i
+                    break
+            if head is None:
+                continue
+            names = []
+            for r in rows[head + 1:]:
+                v = r[2] if len(r) > 2 else None
+                if isinstance(v, str) and v.strip():
+                    names.append(re.sub(r'\s+', ' ', v).strip())
+            if names:
+                out[name] = names
+    finally:
+        wb.close()
+    if not out:
+        raise ApiError('Không tìm thấy lớp nào. File cần có mỗi lớp một sheet, tên lớp ở ô E2 và họ tên học sinh ở cột C.')
+    return out
+
+
+def parse_timetable_xlsx(path):
+    """Thời khóa biểu dạng lưới: hàng tiêu đề có THỨ HAI...THỨ SÁU, các hàng dưới có giờ bắt đầu, giờ kết thúc và tên lớp."""
+    wb = load_workbook(path, read_only=False, data_only=True)
+    try:
+        ws = wb.worksheets[0]
+        grid = [list(r) for r in ws.iter_rows(values_only=True)]
+    finally:
+        wb.close()
+    hdr = cols = None
+    for i, r in enumerate(grid):
+        found = {}
+        for j, v in enumerate(r):
+            s = re.sub(r'\s+', ' ', str(v or '')).strip().upper()
+            if s in SCHOOL_DAYS:
+                found[j] = SCHOOL_DAYS.index(s)
+        if len(found) >= 2:
+            hdr, cols = i, found
+            break
+    if hdr is None:
+        raise ApiError('Không thấy hàng tiêu đề THỨ HAI, THỨ BA... trong thời khóa biểu.')
+    first = min(cols)
+    slots, frm, teacher, subject = [], '', '', ''
+    for r in grid[:hdr]:
+        for j, v in enumerate(r):
+            t = str(v or '').strip().lower()
+            nxt = next((x for x in r[j + 1:] if x not in (None, '')), None)
+            if t == 'bắt đầu từ':
+                frm = _date_iso(nxt)
+            elif t == 'giáo viên' and nxt:
+                teacher = str(nxt).strip()
+            elif t == 'môn' and nxt:
+                subject = str(nxt).strip()
+    for r in grid[hdr + 1:]:
+        times = [_hhmm(v) for v in r[:first] if _hhmm(v)]
+        if len(times) < 2:
+            continue
+        st, en = times[0], times[1]
+        for j, day in cols.items():
+            c = _cls_norm(r[j] if j < len(r) else '')
+            if c:
+                slots.append({'day': day, 'start': st, 'end': en, 'cls': c})
+    if not slots:
+        raise ApiError('Thời khóa biểu không có tiết nào có tên lớp.')
+    slots.sort(key=lambda s: (s['day'], s['start']))
+    return {'slots': slots, 'from': frm, 'teacher': teacher, 'subject': subject}
+
+
+def _mins(hhmm):
+    return int(hhmm[:2]) * 60 + int(hhmm[3:5])
+
+
+def school_active_slot(dt):
+    """Tiết đang diễn ra tại thời điểm dt (kể cả vào sớm SCHOOL_GRACE_MIN phút), theo thời khóa biểu."""
+    with SCHOOL_LOCK:
+        frm, slots = SCHOOL.get('from') or '', list(SCHOOL.get('slots') or [])
+    if frm and dt.strftime('%Y-%m-%d') < frm:
+        return None
+    m = dt.hour * 60 + dt.minute
+    for s in slots:
+        if s['day'] == dt.weekday() and _mins(s['start']) - SCHOOL_GRACE_MIN <= m < _mins(s['end']):
+            return s
+    return None
+
+
+def school_next_slot(dt):
+    with SCHOOL_LOCK:
+        frm, slots = SCHOOL.get('from') or '', list(SCHOOL.get('slots') or [])
+    for add in range(0, 8):
+        d = dt + datetime.timedelta(days=add)
+        if frm and d.strftime('%Y-%m-%d') < frm:
+            continue
+        m = dt.hour * 60 + dt.minute if add == 0 else -1
+        for s in slots:
+            if s['day'] == d.weekday() and _mins(s['start']) - (SCHOOL_GRACE_MIN if add == 0 else 0) > m:
+                return dict(s, date=d.strftime('%Y-%m-%d'))
+    return None
+
+
+def school_now(ts=None):
+    """Lớp hiện tại và lớp kế tiếp. source: schedule (theo lịch), manual (giáo viên đặt tay), none."""
+    ts = time.time() if ts is None else ts
+    dt = datetime.datetime.fromtimestamp(ts)
+    with SCHOOL_LOCK:
+        auto, ov, manual = bool(SCHOOL.get('auto', True)), SCHOOL.get('override'), SCHOOL.get('manual') or ''
+    cur, source = None, 'none'
+    if not auto:
+        if manual:
+            cur, source = {'cls': manual}, 'manual'
+    elif ov and ov.get('since', 0) <= ts < ov.get('until', 0):
+        cur, source = {'cls': ov['cls'], 'until': ov['until']}, 'manual'
+    else:
+        s = school_active_slot(dt)
+        if s:
+            cur, source = dict(s), 'schedule'
+    nxt = school_next_slot(dt) if auto else None
+    if nxt and cur and nxt.get('cls') == cur.get('cls') and nxt.get('start') == cur.get('start'):
+        nxt = None
+    return {'current': cur, 'next': nxt, 'source': source}
+
+
+def school_class_at(ts):
+    """Tên lớp tại thời điểm ts, dùng để ghi vào mỗi vi phạm (rỗng nếu không biết)."""
+    c = school_now(ts)['current']
+    return (c or {}).get('cls', '')
+
+
+
+LAYOUT_DEFAULT = {'cols': 4, 'per': 10, 'from': 'teacher', 'first': 'left', 'pattern': '', 'seats': {}, 'broken': [], 'gv': 'center', 'door': 'back'}
+
+
+def layout_clean(b, old_seats=None, old_broken=None):
+    """Kiểm tra sơ đồ phòng máy do giao diện gửi lên: số dãy, máy mỗi dãy, đánh số từ bàn giáo viên hay từ cửa, dãy 1 bên nào."""
+    try:
+        cols, per = int(b.get('cols')), int(b.get('per'))
+    except (TypeError, ValueError):
+        raise ApiError('Số dãy và số máy mỗi dãy phải là số')
+    if not (1 <= cols <= 12 and 1 <= per <= 20):
+        raise ApiError('Số dãy từ 1 đến 12 và số máy mỗi dãy từ 1 đến 20')
+    frm = b.get('from') if b.get('from') in ('teacher', 'door') else 'teacher'
+    first = b.get('first') if b.get('first') in ('left', 'right') else 'left'
+    pat = str(b.get('pattern') or '').strip()[:40]
+    if pat and '{n}' not in pat:
+        raise ApiError('Tên máy mẫu phải có {n} thay cho số máy, ví dụ MAY{n}')
+    seats = b.get('seats') if isinstance(b.get('seats'), dict) else (old_seats or {})
+    clean = {}
+    for k, v in seats.items():
+        if str(k).isdigit() and 1 <= int(k) <= cols * per and isinstance(v, str) and v.strip():
+            clean[str(int(k))] = v.strip()[:80]
+    gv = b.get('gv') if b.get('gv') in ('left', 'center', 'right') else 'center'
+    door = b.get('door') if b.get('door') in ('back', 'tl', 'tr') else 'back'
+    broken = b.get('broken') if isinstance(b.get('broken'), list) else (old_broken or [])
+    bk = sorted({int(x) for x in broken if str(x).isdigit() and 1 <= int(x) <= cols * per})
+    for k in bk:
+        clean.pop(str(k), None)  # máy hỏng thì không có người ngồi
+    return {'cols': cols, 'per': per, 'from': frm, 'first': first, 'pattern': pat, 'seats': clean,
+            'broken': bk, 'gv': gv, 'door': door}
+
+
+def api_school_layout(b):
+    """Lưu sơ đồ chỗ ngồi của một lớp. apply_all: chép kiểu phòng (số dãy, số máy, cách đánh số) sang mọi lớp, giữ nguyên chỗ ngồi."""
+    c = _cls_norm(b.get('cls'))
+    with SCHOOL_LOCK:
+        if not c or c not in SCHOOL['classes']:
+            raise ApiError('Lớp không có trong danh sách lớp')
+        oldl = SCHOOL['layouts'].get(c) or {}
+        lay = layout_clean(b, oldl.get('seats'), oldl.get('broken'))
+        SCHOOL['layouts'][c] = lay
+        if b.get('apply_all'):
+            for other in SCHOOL['classes']:
+                if other != c:
+                    old = (SCHOOL['layouts'].get(other) or {}).get('seats', {})
+                    SCHOOL['layouts'][other] = layout_clean(dict(lay, seats=old))
+    school_save()
+    return api_school()
+
+
+def school_seat_no(host, lay):
+    """Số máy (số chỗ ngồi) của một tên máy: theo tên máy mẫu (MAY{n}) hoặc theo thứ tự trong danh sách máy ở trang Điều khiển lớp."""
+    h = str(host or '').strip().lower()
+    pat = (lay.get('pattern') or '').strip().lower()
+    if pat and '{n}' in pat:
+        pre, post = pat.split('{n}', 1)
+        for cand in {h, h.split('.')[0]}:
+            m = re.fullmatch(re.escape(pre) + r'0*(\d+)' + re.escape(post), cand)
+            if m:
+                return int(m.group(1))
+        return 0
+    with CFG_LOCK:
+        hosts = [str(x).strip().lower() for x in CFG.get('hosts') or []]
+    for cand in (h, h.split('.')[0]):
+        if cand in hosts:
+            return hosts.index(cand) + 1
+    return 0
+
+
+def school_student_for(host, cls):
+    """(tên học sinh, số máy) ngồi ở máy `host` trong lớp `cls`; rỗng nếu chưa xếp chỗ."""
+    if not cls:
+        return '', 0
+    with SCHOOL_LOCK:
+        lay = SCHOOL['layouts'].get(cls)
+        if not lay:
+            return '', 0
+        no = school_seat_no(host, lay)
+        return (lay.get('seats') or {}).get(str(no), ''), no
+
+
+def school_brief():
+    n = school_now()
+    return {'current': (n['current'] or {}).get('cls', ''), 'source': n['source'],
+            'next': ((n['next'] or {}).get('cls', ''), (n['next'] or {}).get('start', ''))}
+
+
+def api_school(_q=None):
+    with SCHOOL_LOCK:
+        d = {k: SCHOOL[k] for k in ('slots', 'from', 'auto', 'manual', 'classes_file', 'classes_at', 'timetable_file',
+                                   'timetable_at', 'teacher', 'subject')}
+        d['classes'] = [{'name': n, 'count': len(v)} for n, v in sorted(SCHOOL['classes'].items())]
+        d['layouts'] = json.loads(json.dumps(SCHOOL['layouts']))
+        known = set(SCHOOL['classes'])
+    d['unknown'] = sorted({s['cls'] for s in d['slots'] if known and s['cls'] not in known})
+    d.update(school_now())
+    d['server_ts'] = time.time()
+    return d
+
+
+def api_school_students(q):
+    with SCHOOL_LOCK:
+        names = list(SCHOOL['classes'].get(_cls_norm(q.get('cls')), []))
+    return {'names': names}
+
+
+def api_school_set(b):
+    act = str(b.get('action') or '')
+    with SCHOOL_LOCK:
+        if act == 'auto':
+            SCHOOL['auto'] = bool(b.get('value'))
+            SCHOOL['override'] = None
+        elif act == 'set':
+            c = _cls_norm(b.get('cls'))
+            if not c:
+                raise ApiError('Thiếu tên lớp')
+            if SCHOOL.get('auto', True):
+                now = time.time()
+                SCHOOL['override'] = {'cls': c, 'since': now, 'until': now + SCHOOL_MANUAL_MIN * 60}
+            else:
+                SCHOOL['manual'] = c
+            log('Đã đặt lớp hiện tại: %s' % c, 'head')
+        elif act == 'clear':
+            SCHOOL['override'] = None
+            SCHOOL['manual'] = ''
+        else:
+            raise ApiError('Thao tác không hợp lệ')
+    school_save()
+    return api_school()
+
+
+def school_import(kind, path, filename):
+    stamp = time.strftime('%d/%m/%Y %H:%M')
+    if kind == 'classes':
+        data = parse_classes_xlsx(path)
+        with SCHOOL_LOCK:
+            prev = {k: set(v) for k, v in SCHOOL['classes'].items()}
+            SCHOOL.update({'classes': data, 'classes_file': filename, 'classes_at': stamp})
+            for k in list(SCHOOL['layouts']):
+                if k not in data:
+                    del SCHOOL['layouts'][k]
+                else:  # bỏ chỗ của học sinh đã rời lớp; giữ tên ghi tay (học sinh ngoài danh sách)
+                    keep = SCHOOL['layouts'][k].get('seats', {})
+                    SCHOOL['layouts'][k]['seats'] = {n: v for n, v in keep.items() if v in data[k] or v not in prev.get(k, set())}
+        log('Đã nhập danh sách lớp: %d lớp, %d học sinh' % (len(data), sum(len(v) for v in data.values())), 'ok')
+    else:
+        data = parse_timetable_xlsx(path)
+        with SCHOOL_LOCK:
+            SCHOOL.update({'slots': data['slots'], 'from': data['from'], 'teacher': data['teacher'], 'subject': data['subject'],
+                           'timetable_file': filename, 'timetable_at': stamp, 'override': None})
+        log('Đã nhập thời khóa biểu: %d tiết mỗi tuần%s' % (len(data['slots']), (', bắt đầu từ ' + data['from']) if data['from'] else ''), 'ok')
+    school_save()
+
+
+def school_loop():
+    """Chạy nền: ghi nhật ký khi sang lớp mới."""
+    last = None
+    while True:
+        try:
+            c = (school_now()['current'] or {}).get('cls', '')
+            if last is not None and c != last:
+                log('Chuyển lớp: %s' % (('đang dạy lớp ' + c) if c else 'hết tiết'), 'head')
+            last = c
+        except Exception:  # noqa
+            pass
+        time.sleep(15)
 
 
 def api_alerts(q):
@@ -2009,7 +2467,7 @@ def api_alerts(q):
         last = ALERT_SEQ[0]
     with CFG_LOCK:
         watching = len(CFG.get('watch_hosts') or [])
-    return {'items': items[-200:], 'last': last, 'watching': watching}
+    return {'items': items[-200:], 'last': last, 'watching': watching, 'school': school_brief()}
 
 
 def api_alerts_clear(_b=None):
@@ -2022,6 +2480,231 @@ def api_alerts_clear(_b=None):
         except OSError:
             pass
     return {'ok': True}
+
+
+
+# ---------------------------------------------------------------- dọn ảnh cũ
+def evidence_cleanup(days):
+    """Xóa ảnh vi phạm, ảnh chụp và bản ghi cũ hơn `days` ngày trên máy giáo viên. days <= 0: không làm gì."""
+    res = {'images': 0, 'records': 0, 'shots': 0, 'cutoff': 0}
+    if days <= 0:
+        return res
+    cutoff = time.time() - days * 86400
+    res['cutoff'] = cutoff
+    root = evidence_root()
+    for d in os.listdir(root):
+        dp = os.path.join(root, d)
+        if not os.path.isdir(dp):
+            continue
+        for f in os.listdir(dp):
+            fp = os.path.join(dp, f)
+            try:
+                if f.lower().endswith('.jpg') and os.path.getmtime(fp) < cutoff:
+                    os.remove(fp)
+                    res['images'] += 1
+            except OSError:
+                pass
+        try:
+            os.rmdir(dp)  # chỉ xóa được khi thư mục rỗng
+        except OSError:
+            pass
+    sr = shot_root()
+    for d in os.listdir(sr):
+        dp = os.path.join(sr, d)
+        try:
+            if os.path.isdir(dp) and os.path.getmtime(dp) < cutoff:
+                shutil.rmtree(dp)
+                res['shots'] += 1
+        except OSError:
+            pass
+    for f in os.listdir(root):  # các file lịch sử đã đổi tên khi bấm "Xóa danh sách"
+        fp = os.path.join(root, f)
+        try:
+            if f.startswith('alerts-') and f.endswith('.old') and os.path.getmtime(fp) < cutoff:
+                os.remove(fp)
+        except OSError:
+            pass
+    with ALERT_LOCK:
+        keep = [e for e in ALERTS if e.get('ts', 0) >= cutoff]
+        res['records'] += len(ALERTS) - len(keep)
+        ALERTS[:] = keep
+        jp = os.path.join(root, ALERT_FILE)
+        try:
+            if os.path.exists(jp):
+                with open(jp, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                out = []
+                for ln in lines:
+                    try:
+                        if float(json.loads(ln).get('ts', 0)) >= cutoff:
+                            out.append(ln)
+                    except (ValueError, AttributeError, TypeError):
+                        pass
+                if len(out) != len(lines):
+                    with open(jp + '.tmp', 'w', encoding='utf-8') as f:
+                        f.writelines(out)
+                    os.replace(jp + '.tmp', jp)
+            cp = os.path.join(root, ALERT_CSV)
+            if os.path.exists(cp):
+                import csv
+                lim = time.strftime('%Y-%m-%d', time.localtime(cutoff))
+                with open(cp, 'r', encoding='utf-8-sig', newline='') as f:
+                    rows = list(csv.reader(f))
+                kept = [rows[0]] + [r for r in rows[1:] if r and r[0] >= lim] if rows else []
+                if len(kept) != len(rows):
+                    with open(cp + '.tmp', 'w', encoding='utf-8-sig', newline='') as f:
+                        f.write('\r\n'.join(','.join(_csv_cell(x) for x in r) for r in kept[:1]) + '\r\n')
+                        f.write(''.join(','.join(_csv_cell(x) for x in r) + '\r\n' for r in kept[1:]))
+                    os.replace(cp + '.tmp', cp)
+        except OSError:
+            pass
+    return res
+
+
+def api_cleanup(_b=None):
+    with CFG_LOCK:
+        days = watch_num(CFG, 'keep_days', 30, 0, 3650)
+    if days <= 0:
+        raise ApiError('Đang để 0 ngày (không tự xóa). Hãy nhập số ngày muốn giữ ảnh.')
+    return evidence_cleanup(days)
+
+
+# ---------------------------------------------------------------- báo cáo cuối buổi
+RANGES = {'2h': 'Hai giờ qua', 'today': 'Hôm nay', '7d': '7 ngày qua', 'all': 'Tất cả'}
+
+
+def report_root():
+    d = os.path.join(os.path.dirname(CONFIG_PATH), 'reports')
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def report_events(rng):
+    import glob
+    root = evidence_root()
+    seen = {}
+    for pth in [os.path.join(root, ALERT_FILE)] + sorted(glob.glob(os.path.join(root, 'alerts-*.old'))):
+        try:
+            with open(pth, 'r', encoding='utf-8') as f:
+                for ln in f:
+                    try:
+                        e = json.loads(ln)
+                        seen[(e['host'], e['file'])] = e
+                    except (ValueError, KeyError, TypeError):
+                        pass
+        except OSError:
+            pass
+    with ALERT_LOCK:
+        for e in ALERTS:
+            seen[(e['host'], e['file'])] = e
+    now = time.time()
+    t = time.localtime()
+    lo = {'2h': now - 7200, 'today': time.mktime((t.tm_year, t.tm_mon, t.tm_mday, 0, 0, 0, 0, 0, -1)),
+          '7d': now - 7 * 86400, 'all': 0}[rng]
+    return sorted((e for e in seen.values() if e.get('ts', 0) >= lo), key=lambda e: e['ts'])
+
+
+def report_episodes(events, gap):
+    """Gộp các ảnh liên tiếp của cùng máy + cùng trang/ứng dụng (cách nhau <= gap giây) thành một lần vi phạm."""
+    out, last = [], {}
+    for e in events:
+        k = (e['host'], e['type'], e['name'])
+        g = last.get(k)
+        if g and e['ts'] - g['last_ts'] <= gap:
+            g['shots'] += 1
+            g['last_ts'] = e['ts']
+        else:
+            g = {'host': e['host'], 'type': e['type'], 'name': e['name'], 'user': e.get('user', ''), 'window': e.get('window', ''),
+                 'date': e['date'], 'time': e['time'], 'first_ts': e['ts'], 'last_ts': e['ts'], 'shots': 1}
+            out.append(g)
+            last[k] = g
+    return out
+
+
+def report_build(rng, cfg=None):
+    from collections import Counter
+    if rng not in RANGES:
+        raise ApiError('Khoảng thời gian không hợp lệ')
+    cfg = cfg or CFG
+    gap = watch_num(cfg, 'alert_group_sec', 60, 10, 3600)
+    ev = report_events(rng)
+    eps = report_episodes(ev, gap)
+    hosts, items, hours = {}, {}, Counter()
+    for g in eps:
+        h = hosts.setdefault(g['host'], {'host': g['host'], 'count': 0, 'shots': 0, 'items': Counter(), 'last': ''})
+        h['count'] += 1
+        h['shots'] += g['shots']
+        h['items'][(g['type'], g['name'])] += 1
+        h['last'] = g['time']
+        it = items.setdefault((g['type'], g['name']), {'type': g['type'], 'name': g['name'], 'count': 0, 'hosts': set()})
+        it['count'] += 1
+        it['hosts'].add(g['host'])
+        hours[g['time'][:2]] += 1
+    by_host = sorted(({'host': h['host'], 'count': h['count'], 'shots': h['shots'], 'last': h['last'],
+                       'top': [{'type': k[0], 'name': k[1], 'count': c} for k, c in h['items'].most_common(3)]}
+                      for h in hosts.values()), key=lambda x: (-x['count'], x['host']))
+    by_item = sorted(({'type': i['type'], 'name': i['name'], 'count': i['count'], 'hosts': len(i['hosts'])} for i in items.values()),
+                     key=lambda x: (-x['count'], x['name']))[:50]
+    return {'range': rng, 'label': RANGES[rng], 'gap': gap, 'generated': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'episodes': len(eps), 'shots': len(ev), 'machines': len(hosts),
+            'first': ev[0]['time'] if ev else '', 'last': ev[-1]['time'] if ev else '',
+            'by_host': by_host, 'by_item': by_item,
+            'by_hour': [{'hour': h, 'count': c} for h, c in sorted(hours.items())],
+            # trang nhiều máy cùng vào: có thể là trang cần cho bài học, đáng cân nhắc thêm vào AllowPage
+            'suggest': [i['name'] for i in by_item if i['type'] == 'site' and i['hosts'] >= 3],
+            '_episodes': eps, '_events': ev}
+
+
+def api_report(q):
+    rep = report_build(q.get('range') or 'today')
+    rep.pop('_episodes')
+    rep.pop('_events')
+    return rep
+
+
+def report_write_xlsx(rep, path):
+    wb = Workbook()
+    head_font = Font(bold=True, color='FFFFFF')
+    head_fill = PatternFill('solid', fgColor='2563EB')
+
+    def sheet(ws, header, rows, widths):
+        ws.append(header)
+        for c in ws[1]:
+            c.font, c.fill = head_font, head_fill
+        for r in rows:
+            ws.append(list(r))
+            for c in ws[ws.max_row]:  # chuỗi bắt đầu bằng = + - @ vẫn là chữ, không bị Excel hiểu thành công thức
+                if isinstance(c.value, str):
+                    c.data_type = 's'
+        for i, w in enumerate(widths):
+            ws.column_dimensions[chr(65 + i)].width = w
+        ws.freeze_panes = 'A2'
+    kind = lambda t: 'Trang web' if t == 'site' else 'Ứng dụng'  # noqa
+    ws = wb.active
+    ws.title = 'Tổng quan'
+    sheet(ws, ['Mục', 'Giá trị'], [
+        ('Khoảng thời gian', rep['label']), ('Lập lúc', rep['generated']),
+        ('Số lần vi phạm', rep['episodes']), ('Số ảnh chụp', rep['shots']), ('Số máy có vi phạm', rep['machines']),
+        ('Vi phạm đầu tiên', rep['first']), ('Vi phạm cuối cùng', rep['last']),
+        ('Ghi chú', 'Một lần vi phạm = các ảnh liên tiếp của cùng máy và cùng trang/ứng dụng, cách nhau không quá %d giây.' % rep['gap']),
+        ('Gợi ý thêm vào AllowPage', ', '.join(rep['suggest']) or '(không có)'),
+    ], [28, 90])
+    sheet(wb.create_sheet('Theo máy'), ['Máy', 'Số lần vi phạm', 'Số ảnh', 'Lần cuối', 'Hay vào nhất'],
+          [(h['host'], h['count'], h['shots'], h['last'], ', '.join('%s (%d)' % (t['name'], t['count']) for t in h['top'])) for h in rep['by_host']],
+          [18, 16, 10, 12, 70])
+    sheet(wb.create_sheet('Theo trang-ứng dụng'), ['Nội dung', 'Loại', 'Số lần vi phạm', 'Số máy'],
+          [(i['name'], kind(i['type']), i['count'], i['hosts']) for i in rep['by_item']], [44, 14, 16, 10])
+    sheet(wb.create_sheet('Chi tiết'), ['Ngày', 'Giờ', 'Máy', 'Tài khoản', 'Loại', 'Nội dung', 'Tiêu đề cửa sổ', 'Ảnh'],
+          [(e['date'], e['time'], e['host'], e.get('user', ''), kind(e['type']), e['name'], e.get('window', ''), e.get('img', '')) for e in rep['_events']],
+          [12, 10, 16, 16, 12, 36, 60, 60])
+    wb.save(path)
+
+
+def api_report_export(b):
+    rep = report_build(b.get('range') or 'today')
+    path = os.path.join(report_root(), 'BaoCao-%s-%s.xlsx' % (rep['range'], time.strftime('%Y%m%d-%H%M%S')))
+    report_write_xlsx(rep, path)
+    return {'path': path}
 
 
 # ---------------------------------------------------------------- tự cập nhật từ GitHub
@@ -2412,7 +3095,7 @@ def api_payload_delete(b):
 
 def api_open(b):
     with CFG_LOCK:
-        folders = {'payload': PAYLOAD_DIR, 'lists': abs_path(CFG['list_dir']), 'data': os.path.dirname(CONFIG_PATH), 'shots': shot_root(), 'evidence': evidence_root()}
+        folders = {'payload': PAYLOAD_DIR, 'lists': abs_path(CFG['list_dir']), 'data': os.path.dirname(CONFIG_PATH), 'shots': shot_root(), 'evidence': evidence_root(), 'reports': report_root()}
     p = folders.get(b.get('what'))
     if not p:
         raise ApiError('Thư mục không hợp lệ')
@@ -2574,12 +3257,12 @@ def api_quit(_b=None):
 
 
 GET_ROUTES = {'/api/update_check': api_update_check, '/api/setup_status': api_setup_status, '/api/state': api_state, '/api/list': api_list_get, '/api/payload': api_payload,
-              '/api/log': api_log, '/api/alerts': api_alerts, '/api/ping': api_ping, '/api/vcfg_info': api_vcfg_info}
-POST_ROUTES = {'/api/update_apply': api_update_apply, '/api/setup_run': api_setup_run, '/api/setup_scan': api_setup_scan, '/api/setup_done': api_setup_done,
+              '/api/log': api_log, '/api/school': api_school, '/api/school_students': api_school_students, '/api/alerts': api_alerts, '/api/report': api_report, '/api/ping': api_ping, '/api/vcfg_info': api_vcfg_info}
+POST_ROUTES = {'/api/school_set': api_school_set, '/api/school_layout': api_school_layout, '/api/update_apply': api_update_apply, '/api/setup_run': api_setup_run, '/api/setup_scan': api_setup_scan, '/api/setup_done': api_setup_done,
                '/api/list': api_list_save, '/api/check': api_check, '/api/hosts': api_hosts, '/api/run': api_run,
                '/api/settings': api_settings, '/api/dist': api_dist, '/api/open': api_open,
                '/api/veyon_list': api_veyon_list, '/api/sync': api_sync, '/api/quit': api_quit,
-               '/api/payload_delete': api_payload_delete, '/api/vcfg_save': api_vcfg_save, '/api/vcfg_run': api_vcfg_run, '/api/shot': api_shot, '/api/watch': api_watch, '/api/alerts_clear': api_alerts_clear}
+               '/api/payload_delete': api_payload_delete, '/api/vcfg_save': api_vcfg_save, '/api/vcfg_run': api_vcfg_run, '/api/shot': api_shot, '/api/watch': api_watch, '/api/alerts_clear': api_alerts_clear, '/api/cleanup': api_cleanup, '/api/report_export': api_report_export}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -2642,8 +3325,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                            'text/html; charset=utf-8')
                 return
             self._send(200, html.replace('__TOKEN__', STATE['token']), 'text/html; charset=utf-8')
-        elif u.path == '/favicon.ico':
-            self._send(204, b'', 'image/x-icon')
+        elif u.path == '/favicon.ico' or u.path.startswith('/assets/'):  # logo, icon (chỉ các file trong web\assets)
+            name = 'icon.ico' if u.path == '/favicon.ico' else os.path.basename(u.path)
+            ctype = ASSET_TYPES.get(os.path.splitext(name)[1].lower())
+            fp = os.path.join(WEB_DIR, 'assets', name)
+            if not ctype or not os.path.isfile(fp):
+                self._send(404, {'error': 'Không có file'})
+                return
+            with open(fp, 'rb') as f:
+                self._send(200, f.read(), ctype)
         elif u.path.startswith('/evidence/'):  # ảnh vi phạm (thẻ <img> không gửi được header nên dùng ?t=mã bảo vệ)
             if not secrets.compare_digest(q.get('t', ''), STATE['token']):
                 self._send(403, {'error': 'Sai mã bảo vệ'})
@@ -2686,12 +3376,40 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         self._api(POST_ROUTES[u.path], body if isinstance(body, dict) else {})
 
+    def _school_upload(self, u, n):
+        """PUT /api/school_upload?kind=classes|timetable&name=...: nhập file Excel, chỉ đọc rồi lưu dữ liệu, không chép xuống máy học sinh."""
+        q = dict(urllib.parse.parse_qsl(u.query))
+        kind = q.get('kind')
+        if kind not in ('classes', 'timetable') or n <= 0 or n > 30 * 1024 * 1024:
+            self.rfile.read(min(max(n, 0), MAX_UPLOAD))
+            self._send(400, {'error': 'File không hợp lệ (tối đa 30 MB, định dạng .xlsx)'})
+            return
+        fname = os.path.basename(q.get('name', '')) or 'file.xlsx'
+        body = self.rfile.read(n)
+        tmp = ''
+        try:
+            fd, tmp = tempfile.mkstemp(suffix='.xlsx')
+            with os.fdopen(fd, 'wb') as f:
+                f.write(body)
+            school_import(kind, tmp, fname)
+            self._send(200, api_school())
+        except ApiError as e:
+            self._send(400, {'error': str(e)})
+        except Exception as e:  # noqa
+            self._send(400, {'error': 'Không đọc được file Excel (%s). Hãy chọn file .xlsx.' % type(e).__name__})
+        finally:
+            if tmp:
+                _rm(tmp)
+
     def do_PUT(self):
         """Tải file lên thư mục payload: PUT /api/upload?name=... (nội dung file là phần thân)."""
         if not self._guard():
             return
         u = urllib.parse.urlparse(self.path)
         n = int(self.headers.get('Content-Length') or 0)
+        if u.path == '/api/school_upload' and self._token_ok():
+            self._school_upload(u, n)
+            return
         if u.path != '/api/upload' or not self._token_ok():
             self.rfile.read(min(n, MAX_UPLOAD))
             self._send(403, {'error': 'Không được phép'})
@@ -2817,6 +3535,8 @@ def main(argv=None):
     log('Sẵn sàng. Thư mục danh sách: %s' % abs_path(CFG['list_dir']), 'head')
     log('Cài đặt lưu tại: %s' % CONFIG_PATH)
     alerts_load()
+    school_load()
+    threading.Thread(target=school_loop, daemon=True).start()
     threading.Thread(target=alert_loop, daemon=True).start()
     threading.Thread(target=watchdog, args=(srv,), daemon=True).start()
     if CFG.get('update_check') and (CFG.get('update_repo') or '').strip():

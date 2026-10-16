@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="100%" height="100%">
+  <defs>
+    <!-- Techno Cyan-Blue Gradient -->
+    <linearGradient id="primary-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe"/>
+      <stop offset="100%" stop-color="#4facfe"/>
+    </linearGradient>
+
+    <!-- Neon Purple Gradient -->
+    <linearGradient id="secondary-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#7f00ff"/>
+      <stop offset="100%" stop-color="#e100ff"/>
+    </linearGradient>
+
+    <!-- Accent Bright Cyan -->
+    <linearGradient id="accent-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00ffcc"/>
+      <stop offset="100%" stop-color="#00b8ff"/>
+    </linearGradient>
+
+    <!-- Glow Filter -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Outer Cyber Ring -->
+  <g filter="url(#glow)">
+    <!-- Tech Circle Segments -->
+    <circle cx="400" cy="340" r="220" fill="none" stroke="url(#primary-grad)" stroke-width="3" stroke-dasharray="100 40 20 40 300 60" opacity="0.8"/>
+    <circle cx="400" cy="340" r="240" fill="none" stroke="url(#secondary-grad)" stroke-width="2" stroke-dasharray="150 80 40 80" opacity="0.6" transform="rotate(45 400 340)"/>
+    
+    <!-- Decorative Tech Nodes -->
+    <circle cx="180" cy="340" r="4" fill="#00f2fe"/>
+    <circle cx="620" cy="340" r="4" fill="#00f2fe"/>
+    <circle cx="400" cy="120" r="5" fill="#e100ff"/>
+  </g>
+
+  <!-- Central Symbol (Interlocking K & V Tech Monogram) -->
+  <g filter="url(#glow)">
+    <!-- Left Stem of 'K' / Shield Base -->
+    <path d="M 280, 200 
+             L 320, 200 
+             L 320, 480 
+             L 280, 480 
+             Z" 
+          fill="url(#primary-grad)"/>
+          
+    <path d="M 290, 180 
+             L 310, 180 
+             L 310, 500 
+             L 290, 500 
+             Z" 
+          fill="#00f2fe" opacity="0.6"/>
+
+    <!-- 'V' Shape & Diagonal of 'K' (Top Right Wing) -->
+    <path d="M 320, 320 
+             L 460, 180 
+             L 510, 180 
+             L 370, 340 
+             Z" 
+          fill="url(#accent-grad)"/>
+
+    <!-- 'V' Shape Right Arm / Bottom Diagonal of 'K' -->
+    <path d="M 340, 320 
+             L 480, 480 
+             L 430, 480 
+             L 310, 350 
+             Z" 
+          fill="url(#secondary-grad)"/>
+
+    <!-- V-Bottom Center Wedge (Connecting Node) -->
+    <path d="M 400, 440 
+             L 450, 260 
+             L 480, 260 
+             L 415, 490 
+             L 385, 490 
+             Z" 
+          fill="url(#primary-grad)"/>
+
+    <!-- Cyber Circuit Accent Lines -->
+    <path d="M 240, 340 L 280, 340" stroke="#00f2fe" stroke-width="4" stroke-linecap="round"/>
+    <path d="M 520, 220 L 550, 220 L 570, 240" fill="none" stroke="#e100ff" stroke-width="3" stroke-linecap="round"/>
+    <path d="M 500, 440 L 530, 440 L 550, 420" fill="none" stroke="#00ffcc" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <!-- Typography -->
+  <!-- Main Title: KHOA VEYON -->
+  <text x="400" y="620" 
+        font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" 
+        font-size="52" 
+        font-weight="900" 
+        letter-spacing="12" 
+        fill="#ffffff" 
+        text-anchor="middle"
+        style="text-transform: uppercase;">
+    KHOA <tspan fill="url(#primary-grad)">VEYON</tspan>
+  </text>
+
+  <!-- Subtitle / Tagline -->
+  <text x="400" y="670" 
+        font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" 
+        font-size="18" 
+        font-weight="600" 
+        letter-spacing="8" 
+        fill="#c9d1d9" 
+        text-anchor="middle"
+        style="text-transform: uppercase;">
+    SUPPORT &amp; CONTROL SYSTEM
+  </text>
+
+  <!-- Bottom Accent Line -->
+  <line x1="300" y1="710" x2="500" y2="710" stroke="url(#accent-grad)" stroke-width="2" stroke-linecap="round" opacity="0.9" filter="url(#glow)"/>
+</svg>
