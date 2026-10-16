@@ -2551,6 +2551,24 @@ def plan_moves(lay, class_names, absent, online):
     return moves, unplaced
 
 
+def plan_shares(lay, unplaced, absent, moves, online):
+    """Em hết máy trống thì ngồi chung với bạn ở máy dùng được gần chỗ cũ nhất (ưu tiên máy ít người ngồi chung). {tên: số máy}."""
+    broken = {int(x) for x in lay.get('broken') or []}
+    pos = seat_grid(lay)
+    occ = {int(k): v for k, v in seats_effective(lay.get('seats'), absent, moves).items()}
+    occ = {k: v for k, v in occ.items() if k not in broken and online.get(k, True) and k in pos}
+    base = {v: int(k) for k, v in (lay.get('seats') or {}).items()}
+    count, out = {}, {}
+    for n in unplaced:
+        if not occ:
+            continue
+        ref = pos.get(base.get(n)) or pos.get(1) or (0, 0)
+        best = min(occ, key=lambda f: (abs(pos[f][0] - ref[0]) + abs(pos[f][1] - ref[1]) + 2 * count.get(f, 0), f))
+        count[best] = count.get(best, 0) + 1
+        out[n] = best
+    return out
+
+
 def att_today():
     return datetime.date.today().strftime('%Y-%m-%d')
 
@@ -2566,7 +2584,7 @@ def att_state(cls):
         moves = dict(e.get('moves', {}))
         seats = seats_effective(lay.get('seats'), absent, moves)
         return {'cls': cls, 'date': att_today(), 'absent': absent, 'moves': moves, 'seats': seats,
-                'offline': list(e.get('offline', [])), 'unplaced': list(e.get('unplaced', [])),
+                'offline': list(e.get('offline', [])), 'unplaced': list(e.get('unplaced', [])), 'shares': dict(e.get('shares', {})),
                 'checked_at': e.get('checked_at', ''), 'silent': bool(e.get('silent')), 'notify': bool(SCHOOL.get('attend_notify', True)),
                 'auto_announce': bool(SCHOOL.get('auto_announce', False))}
 
@@ -2587,6 +2605,7 @@ def att_recompute(cls):
         names = list(SCHOOL['classes'].get(cls, []))
         e = SCHOOL['attendance'].get(key) or {}
         absent, prev = list(e.get('absent', [])), dict(e.get('moves', {}))
+        prev_sh = dict(e.get('shares', {}))
     lay = dict(LAYOUT_DEFAULT, **lay)
     hmap = seat_host_map(lay)
     online = seat_online_map(lay, hmap)  # chạy ngoài khóa vì có chờ mạng
@@ -2597,15 +2616,17 @@ def att_recompute(cls):
         moves, unplaced = plan_moves(lay, names, absent, online)
     else:  # lớp chưa xếp chỗ thì không tự xếp
         moves, unplaced = {}, []
+    shares = plan_shares(lay, unplaced, absent, moves, online) if unplaced else {}
+    unplaced = [n for n in unplaced if n not in shares]
     with SCHOOL_LOCK:
         ent = SCHOOL['attendance'].setdefault(key, {})
-        ent.update({'absent': absent, 'moves': moves, 'unplaced': unplaced,
+        ent.update({'absent': absent, 'moves': moves, 'unplaced': unplaced, 'shares': shares,
                     'offline': sorted(s for s, ok in online.items() if not ok), 'silent': silent, 'checked_at': time.strftime('%H:%M:%S')})
         old = (datetime.date.today() - datetime.timedelta(days=60)).strftime('%Y-%m-%d')
         for k in [k for k in SCHOOL['attendance'] if k.split('|', 1)[0] < old]:
             del SCHOOL['attendance'][k]
     school_save()
-    return {n: s for n, s in moves.items() if prev.get(n) != s}
+    return {n: s for n, s in moves.items() if prev.get(n) != s}, {n: s for n, s in shares.items() if prev_sh.get(n) != s}
 
 
 def api_school_attendance_set(b):
@@ -2641,17 +2662,19 @@ def api_school_attendance_set(b):
     if act == 'setting':
         school_save()
         return att_state(cls)
-    changed = att_recompute(cls)
+    changed, ch_sh = att_recompute(cls)
     st = att_state(cls)
     if act == 'toggle':
         n = str(b.get('name') or '')
         log('Điểm danh lớp %s: %s %s' % (cls, n, 'VẮNG' if n in st['absent'] else 'có mặt'), 'head')
     for n, s in changed.items():
         log('Chuyển chỗ lớp %s: %s -> máy %d (máy trống gần nhất)' % (cls, n, s), 'head')
+    for n, s in st['shares'].items():
+        log('Hết máy trống: %s ngồi chung máy %d với %s' % (n, s, st['seats'].get(str(s), '?')), 'warn')
     if st['unplaced']:
-        log('Lớp %s: không còn máy trống cho %s' % (cls, ', '.join(st['unplaced'])), 'warn')
-    if changed and st['notify']:
-        start_job(job_announce, cls, list(changed), 15, True, False, True)
+        log('Lớp %s: không còn máy nào cho %s' % (cls, ', '.join(st['unplaced'])), 'warn')
+    if (changed or ch_sh) and st['notify']:
+        start_job(job_announce, cls, list(changed) + list(ch_sh), 15, True, False, True)
     st['changed'] = changed
     return st
 
@@ -2704,12 +2727,22 @@ def job_announce(cls, only, seconds, keep, clear, moved=False):
         lay = dict(LAYOUT_DEFAULT, **(SCHOOL['layouts'].get(cls) or {}))
     hmap = seat_host_map(lay)
     items = {}
+    sharers = {}
+    for n, no in st.get('shares', {}).items():
+        sharers.setdefault(str(no), []).append(n)
     for no, name in st['seats'].items():
-        if only and name not in only:
+        mates = sharers.get(no, [])
+        if only and name not in only and not any(m in only for m in mates):
             continue
         h = hmap.get(int(no))
-        if h:
-            items[h] = seat_notice_payload(cls, name, int(no), moved, seconds, keep)
+        if not h:
+            continue
+        pl = seat_notice_payload(cls, name, int(no), moved and not mates, seconds, keep)
+        if mates:  # máy này có bạn ngồi chung
+            pl['title'] = 'HÔM NAY NGỒI CHUNG MÁY VỚI BẠN'
+            pl['name'] = ' & '.join(mates)
+            pl['detail'] = 'Máy của %s · Lớp %s · Máy %d' % (name, cls, int(no))
+        items[h] = pl
     if not items:
         log('Không có máy nào để thông báo: lớp %s chưa xếp chỗ, hoặc số máy chưa khớp tên máy (xem Tên máy mẫu ở sơ đồ chỗ ngồi)' % cls, 'warn')
         return

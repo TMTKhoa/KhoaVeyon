@@ -92,7 +92,7 @@ Nút **Tìm máy học sinh trong mạng** quét dải /24 của mạng hiện t
 - em có mặt nhưng máy của em đang tắt hoặc hỏng;
 - em chưa có chỗ trong sơ đồ (lớp đông hơn số máy, em mới vào lớp...).
 
-Chỗ đổi chỉ áp dụng cho hôm nay, sơ đồ gốc không bị sửa. Trên sơ đồ, ô xám gạch ngang là máy của em vắng, ô xanh là máy em được chuyển đến. Hết máy trống thì báo ở Nhật ký. Nếu **không máy nào trả lời** (chưa bật máy, sai tên máy) thì chương trình bỏ qua việc kiểm tra bật/tắt để không dồn chỗ sai; bật máy rồi bấm **Kiểm tra máy và dồn chỗ**. Điểm danh được lưu 60 ngày trong `data\school.json`. Lớp chưa xếp chỗ thì không tự xếp.
+Chỗ đổi chỉ áp dụng cho hôm nay, sơ đồ gốc không bị sửa. Trên sơ đồ, ô xám gạch ngang là máy của em vắng, ô xanh là máy em được chuyển đến. Hết máy trống thì em đó được xếp **ngồi chung** với bạn ở máy dùng được gần nhất (ưu tiên máy ít người ngồi chung); máy của bạn đó hiện bảng "HÔM NAY NGỒI CHUNG MÁY VỚI BẠN: tên em", Nhật ký và trang đều ghi lại. Nếu **không máy nào trả lời** (chưa bật máy, sai tên máy) thì chương trình bỏ qua việc kiểm tra bật/tắt để không dồn chỗ sai; bật máy rồi bấm **Kiểm tra máy và dồn chỗ**. Điểm danh được lưu 60 ngày trong `data\school.json`. Lớp chưa xếp chỗ thì không tự xếp.
 
 **Thông báo vị trí máy.** Nút **Thông báo cho cả lớp** hiện lên màn hình từng em bảng lớn "MÁY NÀY LÀ CỦA: tên em, lớp, số máy" trong N giây (mặc định 15), rồi thu thành nhãn nhỏ ở góc phải trên cùng nếu bật "giữ nhãn nhỏ". Em bấm vào bảng lớn để thu nhỏ. **Gỡ nhãn trên các máy** xóa nhãn. Em được chuyển chỗ tự nhận bảng "BẠN ĐƯỢC CHUYỂN SANG MÁY NÀY" (tắt được bằng công tắc "Tự báo cho em bị chuyển chỗ"). Công tắc **Tự thông báo khi sang tiết mới** gửi cho cả lớp mỗi khi thời khóa biểu chuyển lớp.
 

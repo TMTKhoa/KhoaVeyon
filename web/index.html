@@ -991,7 +991,9 @@ async function attAct(body) {
     S.att = await api('/api/school_attendance_set', Object.assign({cls: S.seatCls}, body));
     const ch = Object.entries(S.att.changed || {});
     if (ch.length) toast('Đã chuyển chỗ: ' + ch.map(([n, m]) => `${n} → máy ${m}`).join('; '), 'ok');
-    if ((S.att.unplaced || []).length) toast('Hết máy trống cho: ' + S.att.unplaced.join(', '), 'warn');
+    const sh = Object.entries(S.att.shares || {});
+    if (sh.length) toast('Hết máy trống: ' + sh.map(([n, m]) => `${n} ngồi chung máy ${m} với ${S.att.seats[m] || '?'}`).join('; '), 'warn');
+    if ((S.att.unplaced || []).length) toast('Không còn máy nào cho: ' + S.att.unplaced.join(', '), 'warn');
   } catch (err) { toast(err.message, 'err'); }
   render();
 }
@@ -1007,7 +1009,9 @@ function viewAttendance() {
   const names = S.stu[S.seatCls] || [], ab = new Set(a.absent || []), moves = Object.entries(a.moves || {});
   const info = [];
   if (moves.length) info.push(`<div class="note">Đã tự chuyển sang máy trống gần nhất: ${moves.map(([n, m]) => `<b>${esc(n)}</b> → máy ${m}`).join(', ')}</div>`);
-  if ((a.unplaced || []).length) info.push(`<div class="note warn">Hết máy trống cho: <b>${a.unplaced.map(esc).join(', ')}</b></div>`);
+  const sh = Object.entries(a.shares || {});
+  if (sh.length) info.push(`<div class="note warn">Hết máy trống, ngồi chung với bạn gần nhất: ${sh.map(([n, m]) => `<b>${esc(n)}</b> → máy ${m} (cùng <b>${esc(a.seats[m] || '?')}</b>)`).join(', ')}</div>`);
+  if ((a.unplaced || []).length) info.push(`<div class="note warn">Không còn máy nào cho: <b>${a.unplaced.map(esc).join(', ')}</b></div>`);
   if (a.silent) info.push(`<div class="note warn">Không máy nào trả lời (lúc ${esc(a.checked_at)}), nên chưa dồn chỗ theo máy tắt. Hãy bật máy học sinh và kiểm tra tên máy ở sơ đồ, rồi bấm <b>Kiểm tra máy và dồn chỗ</b>.</div>`);
   if ((a.offline || []).length) info.push(`<div class="muted" style="font-size:12.5px">Máy đang tắt hoặc không kết nối được (kiểm tra lúc ${esc(a.checked_at)}): ${a.offline.join(', ')}</div>`);
   return `<section class="card"><div class="toolbar" style="margin-bottom:10px"><b>Điểm danh hôm nay</b><span class="muted">${esc(a.date.split('-').reverse().join('/'))} · lớp ${esc(a.cls)} · vắng ${ab.size}/${names.length}</span><span class="grow"></span>
