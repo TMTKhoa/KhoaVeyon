@@ -566,7 +566,13 @@ def job_dist(hosts, files, mode, cmd, feature, interactive, target, title):
                 n = distribute_to_host(h, files, target)
                 msgs.append('đã chép %d mục' % n)
             except Exception as e:  # noqa
-                return False, 'lỗi chép file: %s%s' % (e, ' (bỏ qua bước chạy)' if mode != 'none' else '')
+                hint = ''
+                es = str(e)
+                if 'WinError 53' in es or 'WinError 67' in es:
+                    hint = ' -> máy học sinh chưa mở chia sẻ C$ (cổng 445): bật File and Printer Sharing / tường lửa, hoặc dùng Setup-MayHocSinh.bat'
+                elif 'WinError 5]' in es or 'WinError 1326' in es:
+                    hint = ' -> bị từ chối quyền: chạy chương trình bằng tài khoản quản trị của máy học sinh, hoặc dùng Setup-MayHocSinh.bat'
+                return False, 'lỗi chép file: %s%s%s' % (e, hint, ' (bỏ qua bước chạy)' if mode != 'none' else '')
         if mode == 'schtasks':
             rc, out = remote_run(h, cmd, interactive)
             if rc != 0:
@@ -696,6 +702,9 @@ def desired_programs(cfg):
 def _veyon_get_programs(cli):
     rc, out = run_args([cli, 'config', 'get', 'DesktopServices/PredefinedPrograms'], timeout=30)
     if rc != 0:
+        # Veyon mới cài chưa có mục nào thì khóa này chưa tồn tại: coi như danh sách rỗng để còn tạo mới
+        if 'does not exist' in out.lower() or 'not exist' in out.lower():
+            return [], ''
         return None, out
     out = out.strip()
     if not out:
