@@ -174,6 +174,29 @@ label.field{display:block;font-weight:600;margin:0 0 6px}
 #toasts{position:fixed;top:18px;right:18px;display:flex;flex-direction:column;gap:10px;z-index:60}
 .toast{background:#1b2437;color:#fff;border-radius:12px;padding:13px 18px;box-shadow:0 10px 30px rgba(0,0,0,.25);max-width:420px;animation:pop .2s;display:flex;gap:10px;line-height:1.45}
 .toast.ok{background:#15803d}.toast.err{background:#b91c1c}.toast.warn{background:#c2410c}
+.nbadge{margin-left:auto;background:#ef4444;color:#fff;border-radius:99px;font-size:12px;font-weight:700;padding:1px 8px;min-width:20px;text-align:center}
+.nav button.alerting .ic{animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.25}}
+.toast.alert{background:#b91c1c;align-items:flex-start;cursor:pointer;width:420px;padding:12px 14px;border:2px solid #fecaca}
+.toast.alert img{width:132px;height:80px;object-fit:cover;border-radius:8px;background:#000;flex-shrink:0}
+.toast.alert .tt{flex:1;min-width:0}
+.toast.alert b{display:block;font-size:15px;margin-bottom:2px}
+.toast.alert .sm{opacity:.9;font-size:12.5px;word-break:break-word}
+.toast.alert .xx{background:none;border:0;color:#fff;font-size:18px;cursor:pointer;line-height:1;padding:0 2px}
+.vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.vcard{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+.vcard.fresh{border-color:#f87171;box-shadow:0 0 0 3px #fee2e2}
+.vcard .shot{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;background:#0d1424;cursor:zoom-in}
+.vcard .noimg{display:grid;place-items:center;width:100%;aspect-ratio:16/9;background:#eef1f7;color:var(--muted);font-size:13px;text-align:center;padding:10px}
+.vcard .vb{padding:12px 14px;line-height:1.5}
+.vcard .vb .pc{font-size:17px;font-weight:800}
+.vcard .vb .what{margin:4px 0;font-weight:600;color:#b91c1c;word-break:break-word}
+.vcard .vb .meta{color:var(--muted);font-size:13px;word-break:break-word}
+.tag{display:inline-block;border-radius:99px;font-size:12px;font-weight:700;padding:1px 9px;margin-left:6px;vertical-align:2px}
+.tag.site{background:#e8effe;color:#1d4ed8}.tag.app{background:#fff1e6;color:#c2410c}
+.lightbox{position:fixed;inset:0;background:rgba(5,9,20,.88);z-index:80;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;animation:fade .15s}
+.lightbox img{max-width:96vw;max-height:82vh;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.lightbox .cap{color:#fff;text-align:center;line-height:1.5;max-width:90vw;word-break:break-word}
 .bye{position:fixed;inset:0;background:var(--bg);display:grid;place-items:center;text-align:center;z-index:100}
 
 @media (max-width:1080px){
@@ -239,6 +262,7 @@ async function api(path, body) {
 const PAGES = [
   {id:'setup', ic:'🚀', name:'Thiết lập ban đầu', title:'Thiết lập ban đầu', sub:'Một nút để chuẩn bị mọi thứ cần thiết trước khi dùng lần đầu.'},
   {id:'control', ic:'🎛️', name:'Điều khiển lớp', title:'Điều khiển lớp học', sub:'Chọn máy học sinh rồi bấm một nút để khóa máy, chặn web hoặc chặn ứng dụng.'},
+  {id:'viol', ic:'🚨', name:'Vi phạm', title:'Vi phạm của học sinh', sub:'Ảnh và thông tin vi phạm tự động gửi về từ các máy học sinh đang được giám sát.'},
   {id:'vcfg', ic:'🛠️', name:'Cấu hình Veyon', title:'Cấu hình Veyon', sub:'Sao lưu, so sánh, khôi phục và đẩy cấu hình xuống máy học sinh, thêm máy vào Veyon Master.'},
   {id:'dist', ic:'📦', name:'Phân phối & chạy', title:'Phân phối và chạy ứng dụng', sub:'Chép file sang máy học sinh rồi chạy ứng dụng chỉ với một nút bấm.'},
   {grp:'Danh sách'},
@@ -249,7 +273,8 @@ const PAGES = [
   {id:'settings', ic:'⚙️', name:'Cài đặt', title:'Cài đặt', sub:'Đường dẫn, mẫu lệnh Veyon và tên các mục điều khiển.'},
 ];
 
-const S = {setup:null, st:null, hosts:[], sel:new Set(), page:'control', lists:{}, payload:[], logSeq:0, logOpen:true, busy:false};
+const S = {setup:null, st:null, hosts:[], sel:new Set(), page:'control', lists:{}, payload:[], logSeq:0, logOpen:true, busy:false,
+  alerts:[], alertSeq:0, alertInit:false, unseen:0, watching:0, violHost:''};
 
 /* ---------- tiện ích giao diện ---------- */
 function toast(msg, kind = '') {
@@ -416,9 +441,9 @@ function viewControl() {
       <section class="card">
         <h3>Giám sát vi phạm (tự chụp ảnh)</h3>
         <p class="sub">Khi cửa sổ đang mở là <b>trang web không có trong AllowPage</b> hoặc <b>ứng dụng không có trong KeepAppList</b>, máy học sinh tự chụp màn hình. Danh sách Excel được đọc lại mỗi 30 giây. Không ghi phím gõ.</p>
-        <div class="row"><button class="btn primary" data-act="watch_start">👁 Bật giám sát</button><button class="btn" data-act="watch_stop">Tắt giám sát</button><button class="btn" data-act="watch_fetch">⬇ Lấy ảnh vi phạm về</button><button class="btn ghost" data-act="openevidence">Mở thư mục ảnh</button></div>
+        <div class="row"><button class="btn primary" data-act="watch_start">👁 Bật giám sát</button><button class="btn" data-act="watch_stop">Tắt giám sát</button><button class="btn" data-act="gopage" data-page-to="viol">🚨 Xem vi phạm</button><button class="btn ghost" data-act="watch_fetch">⬇ Lấy ảnh ngay</button><button class="btn ghost" data-act="openevidence">Mở thư mục ảnh</button><span class="badge" id="watchInfo"></span></div>
         <div class="formgrid" style="margin-top:12px"><div><label class="field">Chụp lại sau (giây) nếu vẫn ở trang đó</label><input type="text" data-cfg="watch_repeat" value="${esc(st.cfg.watch_repeat)}"></div><div><label class="field">Số ảnh tối đa mỗi lần vi phạm</label><input type="text" data-cfg="watch_max" value="${esc(st.cfg.watch_max)}"></div></div>
-        <p class="hint">Ảnh nằm tạm trên máy học sinh (<code>C:\\Users\\Public\\KhoaVeyonEvidence</code>) nên học sinh có thể xóa. Hãy bấm “Lấy ảnh vi phạm về” thường xuyên, ảnh về <code>data\\evidence\\TÊNMÁY</code> kèm file <code>evidence.csv</code> (giờ, trang hoặc ứng dụng, tiêu đề cửa sổ).</p>
+        <p class="hint">Sau khi bật, chương trình <b>tự nhận ảnh vi phạm</b> từ máy học sinh về máy này (vài giây một lần), kêu bíp và hiện thông báo kèm ảnh, tên máy, nội dung vi phạm, ngày giờ. Toàn bộ lưu ở <code>data\\evidence\\TÊNMÁY</code> và bảng <code>violations.csv</code>. Khi đang giám sát, đóng cửa sổ chương trình không làm chương trình thoát (để không bỏ lỡ báo động); muốn thoát hãy bấm “Tắt giám sát” rồi “Thoát chương trình”.</p>
       </section>
       ${groups}
       <section class="card">
@@ -780,14 +805,109 @@ document.addEventListener('change', e => {
   }
 });
 
+
+/* ---------- báo động vi phạm ---------- */
+const imgUrl = e => e.img ? '/evidence/' + e.img.split('/').map(encodeURIComponent).join('/') + '?t=' + encodeURIComponent(TOKEN) : '';
+const kindLabel = e => e.type === 'site' ? 'Trang web' : 'Ứng dụng';
+
+function updWatchInfo() {
+  const el = $('#watchInfo'); if (!el) return;
+  el.textContent = S.watching ? `Đang nhận cảnh báo từ ${S.watching} máy` : 'Chưa bật giám sát';
+}
+
+function showAlert(e) {
+  const box = $('#toasts');
+  const olds = [...box.querySelectorAll('.toast.alert')];
+  while (olds.length >= 4) olds.shift().remove();
+  const el = document.createElement('div');
+  el.className = 'toast alert';
+  el.innerHTML = `${e.img ? `<img src="${imgUrl(e)}" alt="">` : ''}<div class="tt"><b>🚨 ${esc(e.host)} vừa vi phạm</b>${esc(e.text)}<div class="sm">${esc(e.date)} ${esc(e.time)}${e.user ? ' · ' + esc(e.user) : ''}${e.window ? '<br>' + esc(e.window) : ''}</div></div><button class="xx" title="Đóng">×</button>`;
+  el.onclick = ev => { if (!ev.target.closest('.xx')) go('viol'); el.remove(); };
+  el.querySelector('.xx').onclick = ev => { ev.stopPropagation(); el.remove(); };
+  box.appendChild(el);
+  setTimeout(() => el.remove(), 20000);
+}
+
+let titleTimer = null;
+function flashTitle(text) {
+  clearInterval(titleTimer);
+  let n = 0;
+  titleTimer = setInterval(() => {
+    document.title = (n++ % 2) ? 'KhoaVeyon' : '🚨 ' + text;
+    if (n > 12 || document.hasFocus()) { clearInterval(titleTimer); document.title = 'KhoaVeyon'; }
+  }, 800);
+}
+
+async function pollAlerts() {
+  try {
+    const r = await api('/api/alerts?since=' + S.alertSeq);
+    S.watching = r.watching; updWatchInfo();
+    if (!S.alertInit) {                       // lần đầu: nạp lịch sử, không báo động lại việc cũ
+      S.alerts = r.items; S.alertSeq = r.last; S.seenSeq = r.last; S.freshFrom = r.last; S.alertInit = true; return;
+    }
+    if (!r.items.length) return;
+    S.alertSeq = r.last;
+    S.alerts = S.alerts.concat(r.items).slice(-500);
+    if (S.st.cfg.alert_popup !== false) r.items.slice(-4).forEach(showAlert);
+    flashTitle(`${r.items[r.items.length - 1].host} vi phạm`);
+    if (S.page === 'viol') { S.seenSeq = S.alertSeq; render(); } else { S.unseen += r.items.length; buildNav(); }
+  } catch (e) { /* mất kết nối tạm thời */ }
+}
+
+function viewViol() {
+  const st = S.st, c = st.cfg;
+  const hostsIn = [...new Set(S.alerts.map(e => e.host))].sort();
+  const list = S.alerts.filter(e => !S.violHost || e.host === S.violHost).slice().reverse();
+  const opts = `<option value="">Tất cả máy (${S.alerts.length})</option>` + hostsIn.map(h => `<option value="${esc(h)}" ${S.violHost === h ? 'selected' : ''}>${esc(h)} (${S.alerts.filter(e => e.host === h).length})</option>`).join('');
+  const cards = list.map(e => {
+    const idx = S.alerts.indexOf(e);
+    const fresh = e.id > (S.freshFrom || 0);
+    return `<div class="vcard ${fresh ? 'fresh' : ''}">
+      ${e.img ? `<img class="shot" src="${imgUrl(e)}" alt="Ảnh vi phạm" loading="lazy" data-act="viewimg" data-i="${idx}">` : `<div class="noimg">Không có ảnh<br>(ảnh bị xóa hoặc chưa chép được)</div>`}
+      <div class="vb"><div class="pc">🖥 ${esc(e.host)}<span class="tag ${esc(e.type)}">${kindLabel(e)}</span></div>
+        <div class="what">${esc(e.text)}</div>
+        <div class="meta">🕒 ${esc(e.time)} · ${esc(e.date)}${e.user ? '<br>👤 ' + esc(e.user) : ''}${e.window ? '<br>🪟 ' + esc(e.window) : ''}</div></div></div>`;
+  }).join('');
+  return `<div class="stack">
+    <section class="card">
+      <div class="toolbar" style="margin-bottom:0">
+        <select id="violFilter" style="min-width:220px">${opts}</select>
+        <span class="badge" id="watchInfo"></span><span class="grow"></span>
+        <button class="btn" data-act="gopage" data-page-to="control">👁 Bật / tắt giám sát</button>
+        <button class="btn ghost" data-act="openevidence">Mở thư mục ảnh</button>
+        <button class="btn danger" data-act="alertclear">Xóa danh sách</button>
+      </div>
+      <div class="row" style="margin-top:14px;gap:22px">
+        <label class="switch"><input type="checkbox" data-cfg="alert_sound" ${c.alert_sound !== false ? 'checked' : ''}><span class="tr"></span><span>Kêu bíp khi có vi phạm</span></label>
+        <label class="switch"><input type="checkbox" data-cfg="alert_popup" ${c.alert_popup !== false ? 'checked' : ''}><span class="tr"></span><span>Hiện thông báo kèm ảnh</span></label>
+        <span class="row" style="gap:8px"><span class="muted">Nhận ảnh mỗi</span><input type="text" data-cfg="alert_poll" value="${esc(c.alert_poll || '3')}" style="width:60px"><span class="muted">giây</span></span>
+      </div>
+      <p class="hint" style="margin-bottom:0">Mỗi vi phạm gồm ảnh màn hình, tên máy, tài khoản học sinh, nội dung (trang web hoặc ứng dụng), tiêu đề cửa sổ, ngày và giờ. Lịch sử đầy đủ nằm ở <code>data\\evidence\\violations.csv</code> (mở được bằng Excel). Ô viền đỏ là vi phạm mới kể từ lần xem trước.</p>
+    </section>
+    ${list.length ? `<div class="vgrid">${cards}</div>` : `<div class="empty">Chưa có vi phạm nào.<br>Bật giám sát ở trang “Điều khiển lớp”, khi học sinh mở trang web hoặc ứng dụng ngoài danh sách, ảnh sẽ tự hiện ở đây.</div>`}
+  </div>`;
+}
+
+function lightbox(e) {
+  const el = document.createElement('div');
+  el.className = 'lightbox';
+  el.innerHTML = `<img src="${imgUrl(e)}" alt=""><div class="cap"><b>${esc(e.host)}</b> · ${esc(e.text)}<br>${esc(e.date)} ${esc(e.time)}${e.user ? ' · ' + esc(e.user) : ''}${e.window ? '<br>' + esc(e.window) : ''}</div>`;
+  const close = () => { el.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = ev => { if (ev.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  el.onclick = close;
+  document.body.appendChild(el);
+}
+
 /* ---------- điều hướng và vẽ lại ---------- */
 function buildNav() {
   $('#nav').innerHTML = PAGES.map(p => p.grp ? `<div class="grp">${p.grp}</div>`
-    : `<button data-page="${p.id}" class="${S.page === p.id ? 'on' : ''}"><span class="ic">${p.ic}</span><span class="tx">${esc(p.name)}</span></button>`).join('');
+    : `<button data-page="${p.id}" class="${S.page === p.id ? 'on' : ''}${p.id === 'viol' && S.unseen ? ' alerting' : ''}"><span class="ic">${p.ic}</span><span class="tx">${esc(p.name)}</span>${p.id === 'viol' && S.unseen ? `<span class="nbadge">${S.unseen > 99 ? '99+' : S.unseen}</span>` : ''}</button>`).join('');
 }
 
 async function go(id) {
   S.page = id;
+  if (id === 'viol') { S.unseen = 0; S.freshFrom = S.seenSeq || 0; S.seenSeq = S.alertSeq; }
   const p = PAGES.find(x => x.id === id);
   try {
     if (p.list && !S.lists[p.list]) await loadList(p.list);
@@ -809,12 +929,13 @@ function render(top) {
   else if (S.page === 'control') v.innerHTML = viewControl();
   else if (S.page === 'dist') v.innerHTML = viewDist();
   else if (S.page === 'vcfg') v.innerHTML = viewVcfg();
+  else if (S.page === 'viol') v.innerHTML = viewViol();
   else if (S.page === 'settings') v.innerHTML = viewSettings();
   else v.innerHTML = viewList(p.list);
   if (p.list) applyFilter(p.list);
   main.scrollTop = top ? 0 : keep;
   const st = S.st;
-  showUpdate(); $('#verTxt').textContent = 'Quản lý lớp học · v' + st.version;
+  updWatchInfo(); showUpdate(); $('#verTxt').textContent = 'Quản lý lớp học · v' + st.version;
   $('#statusDot').className = 'dot ' + (st.veyon_cli_found ? 'ok' : 'bad');
   $('#statusTxt').textContent = st.veyon_cli_found ? 'Đã tìm thấy veyon-cli' : 'Chưa thấy veyon-cli';
   $('#status').title = st.veyon_cli_path + (st.veyon_cli_found ? '' : ' (không tồn tại, bấm để mở Cài đặt)');
@@ -840,6 +961,9 @@ document.addEventListener('click', async e => {
     case 'scan': scanHosts(); break;
     case 'shot': { const hs = await resolveTargets(); if (!hs) break; try { await api('/api/shot', {hosts: hs}); openLog(); toast(`Đang chụp màn hình ${hs.length} máy`, 'ok'); } catch (err) { toast(err.message, 'err'); } break; }
     case 'watch_start': case 'watch_stop': case 'watch_fetch': { const hs = await resolveTargets(); if (!hs) break; const step = act.slice(6); try { await api('/api/watch', {step, hosts: hs}); openLog(); toast(`Đã gửi lệnh tới ${hs.length} máy`, 'ok'); } catch (err) { toast(err.message, 'err'); } break; }
+    case 'gopage': go(el.dataset.pageTo); break;
+    case 'viewimg': { const ev = S.alerts[+el.dataset.i]; if (ev) lightbox(ev); break; }
+    case 'alertclear': if (await modal({title: 'Xóa danh sách vi phạm?', ok: 'Xóa danh sách', danger: true, html: 'Danh sách trên màn hình sẽ được làm trống. Ảnh vẫn còn trong thư mục <code>data\\evidence</code>.'})) { try { await api('/api/alerts_clear', {}); S.alerts = []; S.unseen = 0; render(); } catch (err) { toast(err.message, 'err'); } } break;
     case 'openevidence': api('/api/open', {what: 'evidence'}).catch(err => toast(err.message, 'warn')); break;
     case 'openshots': api('/api/open', {what: 'shots'}).catch(err => toast(err.message, 'warn')); break;
     case 'vc_backup_master': case 'vc_backup_clients': case 'vc_compare': case 'vc_restore_master': case 'vc_restore_clients':
@@ -941,6 +1065,7 @@ document.addEventListener('change', async e => {
     t.checked ? skip.delete(name) : skip.add(name);
     await saveCfg({dist_payload_skip: [...skip]});
   }
+  else if (t.id === 'violFilter') { S.violHost = t.value; render(); }
   else if (t.dataset.cfg) { await saveCfg({[t.dataset.cfg]: t.type === 'checkbox' ? t.checked : t.value}); if (t.dataset.cfg === 'auto_push') render(); }
   else if (t.id === 'fileInput') { await uploadFiles(t.files); t.value = ''; }
 });
@@ -991,6 +1116,7 @@ async function pollLog() {
   if (S.page === 'setup') { try { await loadSetup(); } catch (e) { toast(e.message, 'err'); } }
   buildNav(); render(true);
   pollLog(); setInterval(pollLog, 900);
+  pollAlerts(); setInterval(pollAlerts, 1500);
   setTimeout(async () => { try { S.st.update = (await api('/api/state')).update; showUpdate(); } catch (e) { /* bỏ qua */ } }, 6000);
 })();
 </script>

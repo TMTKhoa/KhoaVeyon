@@ -18,7 +18,7 @@ import threading
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Border, Side
 
-VERSION = '1.2.0'
+VERSION = '1.3.0'
 APP_TITLE = 'KhoaVeyon - Hỗ trợ quản lý lớp học'
 APP_DIR = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__))
 LEGACY_CONFIG_PATH = os.path.join(APP_DIR, 'KhoaVeyon.json')
@@ -145,6 +145,10 @@ DEFAULT_CONFIG = {
     'shot_before_lock': False,  # chụp màn hình các máy trước khi chạy lệnh khóa / đóng ứng dụng
     'watch_repeat': '10',  # giây giữa hai lần chụp khi học sinh vẫn ở trang/ứng dụng vi phạm
     'watch_max': '5',      # số ảnh tối đa cho mỗi lần vi phạm
+    'watch_hosts': [],     # các máy đang được giám sát (chương trình tự nhận ảnh vi phạm từ các máy này)
+    'alert_poll': '3',     # giây giữa hai lần nhận ảnh vi phạm từ máy học sinh
+    'alert_sound': True,   # kêu bíp trên máy giáo viên khi có vi phạm mới
+    'alert_popup': True,   # hiện thông báo nổi (kèm ảnh) khi có vi phạm mới
     'setup_done': False,  # đã chạy thiết lập ban đầu chưa (chưa thì mở trang Thiết lập khi khởi động)
     'features': {a[0]: a[3] for a in ACTIONS},
 }
@@ -477,8 +481,8 @@ LOCK_KEYS = {'lockall-start', 'lockrun-start', 'lockapp-start', 'blockall', 'all
 FREE_KEYS = {'lockall-stop', 'lockrun-stop', 'lockapp-stop', 'allowall', 'unblockapp', 'unlock'}
 
 STR_KEYS = ['list_dir', 'script_path', 'veyon_cli', 'run_template', 'list_template', 'sync_dir',
-            'dist_target', 'dist_mode', 'dist_cmd', 'dist_action', 'update_repo', 'watch_repeat', 'watch_max']
-BOOL_KEYS = ['auto_sync', 'auto_push', 'dist_include_lists', 'dist_interactive', 'setup_done', 'auto_lock', 'update_check', 'update_auto', 'shot_before_lock']
+            'dist_target', 'dist_mode', 'dist_cmd', 'dist_action', 'update_repo', 'watch_repeat', 'watch_max', 'alert_poll']
+BOOL_KEYS = ['auto_sync', 'auto_push', 'dist_include_lists', 'dist_interactive', 'setup_done', 'auto_lock', 'update_check', 'update_auto', 'shot_before_lock', 'alert_sound', 'alert_popup']
 LIST_KEYS = ['dist_files', 'dist_payload_skip']
 
 
@@ -1641,6 +1645,11 @@ function Take-Shot($kind, $name, $title) {
         if (-not (Test-Path -LiteralPath $csv)) { Set-Content -LiteralPath $csv -Value 'Date,Time,PCName,User,Type,Name,Window,File' -Encoding UTF8 }
         $t = $title -replace '"', '""'
         Add-Content -LiteralPath $csv -Encoding UTF8 -Value ('"{0}","{1}","{2}","{3}","{4}","{5}","{6}","{7}"' -f $now.ToString('yyyy-MM-dd'), $now.ToString('HH:mm:ss'), $pc, $user, $kind, $name, $t, (Split-Path $file -Leaf))
+        # File .json di kem anh: may giao vien doc file nay de biet ten may, noi dung vi pham, ngay gio (ghi xong anh moi ghi json)
+        $meta = [ordered]@{ pc = $pc; user = $user; type = $kind; name = $name; window = $title; date = $now.ToString('yyyy-MM-dd'); time = $now.ToString('HH:mm:ss'); file = (Split-Path $file -Leaf) }
+        $jf = [IO.Path]::ChangeExtension($file, '.json')
+        [IO.File]::WriteAllText($jf + '.tmp', ($meta | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding($true)))
+        Move-Item -LiteralPath ($jf + '.tmp') -Destination $jf -Force
     } catch { Log "Shot failed: $_" }
 }
 
@@ -1717,7 +1726,9 @@ def watch_start_one(cfg, host):
         _q(rdir + '\\' + WATCH_PS1_NAME), _q(cfg['dist_target'].rstrip('\\/')), _q(WATCH_REMOTE_DIR),
         watch_num(cfg, 'watch_repeat', 10, 3, 300), watch_num(cfg, 'watch_max', 5, 1, 50))
     rc, out = remote_run(host, cmd, interactive=True, name=WATCH_TASK)
-    return rc == 0, 'đã bật giám sát' if rc == 0 else out
+    if rc == 0:
+        watch_hosts_set(host, True)  # từ giờ máy giáo viên tự nhận ảnh và báo động
+    return rc == 0, 'đã bật giám sát, ảnh vi phạm sẽ tự gửi về máy này' if rc == 0 else out
 
 
 def watch_stop_one(cfg, host):
@@ -1725,26 +1736,27 @@ def watch_stop_one(cfg, host):
     os.makedirs(ev, exist_ok=True)
     with open(os.path.join(ev, 'stop.flag'), 'w') as f:
         f.write('stop')
+    try:
+        alert_collect_host(cfg, host)  # nhận nốt ảnh còn lại
+    except Exception:  # noqa
+        pass
+    watch_hosts_set(host, False)
     return True, 'đã gửi lệnh dừng (dừng sau vài giây)'
 
 
 def watch_fetch_one(cfg, host):
+    ok, msg, n = alert_collect_host(cfg, host)
+    if not ok:
+        return False, msg
     src = unc_target(host, WATCH_REMOTE_DIR)
-    if not os.path.isdir(src):
-        return True, 'chưa có ảnh vi phạm'
     dest = os.path.join(evidence_root(), vcfg_safe(host))
-    os.makedirs(dest, exist_ok=True)
-    n = 0
-    for f in os.listdir(src):
-        p = os.path.join(src, f)
-        low = f.lower()
-        if low.endswith('.jpg'):
-            shutil.copy2(p, os.path.join(dest, f))
-            os.remove(p)  # đã có bản ở máy giáo viên, xóa bản trên máy học sinh
-            n += 1
-        elif low in ('evidence.csv', 'watch.log'):
-            shutil.copy2(p, os.path.join(dest, f))
-    return True, 'đã lấy %d ảnh về %s' % (n, dest)
+    for name in ('evidence.csv', 'watch.log'):  # bản ghi đầy đủ của máy học sinh
+        try:
+            os.makedirs(dest, exist_ok=True)
+            shutil.copy2(os.path.join(src, name), os.path.join(dest, name))
+        except OSError:
+            pass
+    return True, 'đã lấy %d ảnh vi phạm mới về %s' % (n, dest) if n else 'chưa có ảnh vi phạm mới'
 
 
 def job_watch(step, hosts):
@@ -1763,6 +1775,252 @@ def api_watch(b):
     if not hosts:
         raise ApiError('Chưa có máy nào')
     start_job(job_watch, step, hosts)
+    return {'ok': True}
+
+
+# ---------------------------------------------------------------- báo động vi phạm: tự nhận ảnh từ máy học sinh về máy giáo viên
+ALERTS = []                 # danh sách vi phạm (cũ -> mới), mỗi mục có 'id' tăng dần
+ALERT_LOCK = threading.Lock()
+ALERT_SEQ = [0]
+ALERT_SEEN = set()          # (máy, tên file) đã xử lý, tránh báo trùng
+HOST_ONLINE = {}
+ALERT_FILE = 'alerts.jsonl'
+ALERT_CSV = 'violations.csv'
+ALERT_MAX = 500
+ALERT_PER_CYCLE = 20        # tối đa số vi phạm nhận từ một máy trong một lượt (chống bị học sinh làm ngập)
+ALERT_MAX_IMG = 15 * 1024 * 1024
+LEGACY_JPG = re.compile(r'^(?P<pc>[^_]+)_(?P<d>\d{8})-(?P<t>\d{6})_(?P<kind>site|app)_(?P<name>.+)\.jpg$')
+SAFE_JPG = re.compile(r'^[\w.\-]{1,200}\.jpg$')
+
+
+def watch_hosts_set(host, on):
+    with CFG_LOCK:
+        cur = [h for h in (CFG.get('watch_hosts') or []) if h != host]
+        if on:
+            cur.append(host)
+        if cur != (CFG.get('watch_hosts') or []):
+            CFG['watch_hosts'] = cur
+            save_config(CFG)
+    HOST_ONLINE.pop(host, None)
+
+
+def _clip(v, n):
+    return re.sub(r'[\x00-\x1f]', ' ', str(v or ''))[:n].strip()
+
+
+def alert_text(kind, name):
+    return ('Truy cập trang web ngoài danh sách: %s' if kind == 'site' else 'Mở ứng dụng ngoài danh sách: %s') % name
+
+
+def alerts_load():
+    try:
+        with open(os.path.join(evidence_root(), ALERT_FILE), 'r', encoding='utf-8') as f:
+            lines = f.readlines()[-ALERT_MAX:]
+    except OSError:
+        return
+    for ln in lines:
+        try:
+            e = json.loads(ln)
+        except ValueError:
+            continue
+        if not isinstance(e, dict):
+            continue
+        ALERT_SEQ[0] += 1
+        e['id'] = ALERT_SEQ[0]
+        ALERTS.append(e)
+        ALERT_SEEN.add((e.get('host'), e.get('file')))
+
+
+def _csv_cell(v):
+    v = str(v)
+    if v[:1] in ('=', '+', '-', '@'):  # tránh Excel hiểu nhầm là công thức
+        v = "'" + v
+    return '"%s"' % v.replace('"', '""')
+
+
+def alert_push(e):
+    with ALERT_LOCK:
+        ALERT_SEQ[0] += 1
+        e['id'] = ALERT_SEQ[0]
+        ALERTS.append(e)
+        if len(ALERTS) > ALERT_MAX:
+            del ALERTS[:len(ALERTS) - ALERT_MAX]
+        ALERT_SEEN.add((e['host'], e['file']))
+        root = evidence_root()
+        try:
+            rec = {k: v for k, v in e.items() if k != 'id'}
+            with open(os.path.join(root, ALERT_FILE), 'a', encoding='utf-8') as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + '\n')
+            csv_path = os.path.join(root, ALERT_CSV)
+            new = not os.path.exists(csv_path)
+            with open(csv_path, 'a', encoding='utf-8-sig', newline='') as f:
+                if new:
+                    f.write('Date,Time,PCName,User,Type,Name,Window,File\r\n')
+                f.write(','.join(_csv_cell(x) for x in (e['date'], e['time'], e['host'], e['user'], e['type'], e['name'], e['window'], e['img'])) + '\r\n')
+        except OSError:
+            pass
+
+
+def _rm(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def alert_collect_host(cfg, host):
+    """Lấy ảnh vi phạm mới từ máy học sinh về máy giáo viên rồi tạo báo động. Trả về (ok, mô tả, số vi phạm mới)."""
+    if not tcp_open(host, 445, 1.5):
+        return False, 'không kết nối được (máy tắt hoặc mạng lỗi)', 0
+    src = unc_target(host, WATCH_REMOTE_DIR)
+    try:
+        names = os.listdir(src)
+    except FileNotFoundError:
+        return True, 'chưa có ảnh', 0
+    except OSError as e:
+        return False, str(e), 0
+    dest_dir = os.path.join(evidence_root(), vcfg_safe(host))
+    jobs = []   # (tên file ảnh, siêu dữ liệu, các file nguồn cần xóa)
+    lower = {n.lower(): n for n in names}
+    for n in sorted(names):
+        low = n.lower()
+        if low.endswith('.json'):
+            try:
+                with open(os.path.join(src, n), 'r', encoding='utf-8-sig') as f:
+                    m = json.load(f)
+                if not isinstance(m, dict):
+                    raise ValueError
+            except (OSError, ValueError):
+                try:  # chưa ghi xong thì lần sau thử lại; hỏng quá 60 giây thì dọn đi
+                    if time.time() - os.path.getmtime(os.path.join(src, n)) > 60:
+                        _rm(os.path.join(src, n))
+                except OSError:
+                    pass
+                continue
+            jpg = str(m.get('file') or '')
+            if jpg != os.path.basename(jpg) or not SAFE_JPG.match(jpg):  # tên file lạ (đường dẫn, ký tự đặc biệt): bỏ
+                _rm(os.path.join(src, n))
+                continue
+            jobs.append((jpg, m, [n]))
+        elif low.endswith('.jpg') and low[:-4] + '.json' not in lower:
+            lm = LEGACY_JPG.match(n)  # ảnh do bản giám sát cũ chụp, không có file .json
+            try:
+                old_enough = time.time() - os.path.getmtime(os.path.join(src, n)) > 20
+            except OSError:
+                continue
+            if lm and old_enough and SAFE_JPG.match(n):
+                d, t = lm.group('d'), lm.group('t')
+                jobs.append((n, {'pc': lm.group('pc'), 'type': lm.group('kind'), 'name': lm.group('name'),
+                                 'date': '%s-%s-%s' % (d[:4], d[4:6], d[6:]), 'time': '%s:%s:%s' % (t[:2], t[2:4], t[4:]),
+                                 'window': ''}, []))
+    new = 0
+    for jpg, m, extra in jobs[:ALERT_PER_CYCLE]:
+        key = (host, jpg)
+        jfile = [os.path.join(src, x) for x in extra]
+        if key in ALERT_SEEN:   # đã báo rồi, chỉ dọn file còn sót
+            for x in jfile + [os.path.join(src, jpg)]:
+                _rm(x)
+            continue
+        img = ''
+        sp = os.path.join(src, jpg)
+        try:
+            if os.path.isfile(sp) and os.path.getsize(sp) <= ALERT_MAX_IMG:
+                os.makedirs(dest_dir, exist_ok=True)
+                shutil.copy2(sp, os.path.join(dest_dir, jpg))
+                img = vcfg_safe(host) + '/' + jpg
+        except OSError:
+            continue  # chưa chép được, lần sau thử lại
+        kind = 'site' if m.get('type') == 'site' else 'app'
+        name = _clip(m.get('name'), 200)
+        date = _clip(m.get('date'), 10)
+        tm = _clip(m.get('time'), 8)
+        try:
+            ts = time.mktime(time.strptime(date + ' ' + tm, '%Y-%m-%d %H:%M:%S'))
+        except ValueError:
+            ts = time.time()
+            date, tm = time.strftime('%Y-%m-%d'), time.strftime('%H:%M:%S')
+        alert_push({'host': host, 'pc': _clip(m.get('pc'), 64), 'user': _clip(m.get('user'), 64), 'type': kind,
+                    'name': name, 'window': _clip(m.get('window'), 300), 'date': date, 'time': tm, 'ts': ts,
+                    'file': jpg, 'img': img, 'text': alert_text(kind, name)})
+        for x in jfile + [sp]:
+            _rm(x)
+        new += 1
+        log('[%s] VI PHẠM: %s (%s %s)' % (host, alert_text(kind, name), date, tm), 'warn')
+    return True, 'ok', new
+
+
+def alert_beep():
+    with CFG_LOCK:
+        on = bool(CFG.get('alert_sound', True))
+    if not on or os.name != 'nt':
+        return
+
+    def run():
+        try:
+            import winsound
+            for f in (1100, 1400, 1100):
+                winsound.Beep(f, 160)
+        except Exception:  # noqa
+            pass
+    threading.Thread(target=run, daemon=True).start()
+
+
+def alert_loop():
+    """Chạy nền: cứ vài giây lại lấy ảnh vi phạm mới từ các máy đang giám sát."""
+    while True:
+        wait = 3
+        try:
+            with CFG_LOCK:
+                cfg = json.loads(json.dumps(CFG))
+            wait = watch_num(cfg, 'alert_poll', 3, 2, 60)
+            hosts = list(cfg.get('watch_hosts') or [])
+            if hosts:
+                total = 0
+                with ThreadPoolExecutor(max_workers=min(16, len(hosts))) as ex:
+                    futs = {ex.submit(alert_collect_host, cfg, h): h for h in hosts}
+                    for fut in as_completed(futs):
+                        h = futs[fut]
+                        try:
+                            ok, msg, n = fut.result()
+                        except Exception as e:  # noqa
+                            ok, msg, n = False, str(e), 0
+                        total += n
+                        prev = HOST_ONLINE.get(h)
+                        if ok != prev:  # chỉ ghi nhật ký khi trạng thái đổi, tránh đầy nhật ký
+                            HOST_ONLINE[h] = ok
+                            if not ok:
+                                log('[%s] không nhận được ảnh vi phạm: %s' % (h, msg), 'warn')
+                            elif prev is False:
+                                log('[%s] đã kết nối lại, tiếp tục nhận ảnh vi phạm' % h, 'ok')
+                if total:
+                    alert_beep()
+        except Exception as e:  # noqa
+            log('Lỗi khi nhận ảnh vi phạm: %s' % e, 'err')
+        time.sleep(wait)
+
+
+def api_alerts(q):
+    try:
+        since = int(q.get('since') or 0)
+    except ValueError:
+        since = 0
+    with ALERT_LOCK:
+        items = [e for e in ALERTS if e['id'] > since]
+        last = ALERT_SEQ[0]
+    with CFG_LOCK:
+        watching = len(CFG.get('watch_hosts') or [])
+    return {'items': items[-200:], 'last': last, 'watching': watching}
+
+
+def api_alerts_clear(_b=None):
+    with ALERT_LOCK:
+        ALERTS.clear()
+        p = os.path.join(evidence_root(), ALERT_FILE)
+        try:
+            if os.path.exists(p):
+                os.replace(p, os.path.join(evidence_root(), 'alerts-%s.old' % time.strftime('%Y%m%d-%H%M%S')))
+        except OSError:
+            pass
     return {'ok': True}
 
 
@@ -2316,12 +2574,12 @@ def api_quit(_b=None):
 
 
 GET_ROUTES = {'/api/update_check': api_update_check, '/api/setup_status': api_setup_status, '/api/state': api_state, '/api/list': api_list_get, '/api/payload': api_payload,
-              '/api/log': api_log, '/api/ping': api_ping, '/api/vcfg_info': api_vcfg_info}
+              '/api/log': api_log, '/api/alerts': api_alerts, '/api/ping': api_ping, '/api/vcfg_info': api_vcfg_info}
 POST_ROUTES = {'/api/update_apply': api_update_apply, '/api/setup_run': api_setup_run, '/api/setup_scan': api_setup_scan, '/api/setup_done': api_setup_done,
                '/api/list': api_list_save, '/api/check': api_check, '/api/hosts': api_hosts, '/api/run': api_run,
                '/api/settings': api_settings, '/api/dist': api_dist, '/api/open': api_open,
                '/api/veyon_list': api_veyon_list, '/api/sync': api_sync, '/api/quit': api_quit,
-               '/api/payload_delete': api_payload_delete, '/api/vcfg_save': api_vcfg_save, '/api/vcfg_run': api_vcfg_run, '/api/shot': api_shot, '/api/watch': api_watch}
+               '/api/payload_delete': api_payload_delete, '/api/vcfg_save': api_vcfg_save, '/api/vcfg_run': api_vcfg_run, '/api/shot': api_shot, '/api/watch': api_watch, '/api/alerts_clear': api_alerts_clear}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -2386,6 +2644,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(200, html.replace('__TOKEN__', STATE['token']), 'text/html; charset=utf-8')
         elif u.path == '/favicon.ico':
             self._send(204, b'', 'image/x-icon')
+        elif u.path.startswith('/evidence/'):  # ảnh vi phạm (thẻ <img> không gửi được header nên dùng ?t=mã bảo vệ)
+            if not secrets.compare_digest(q.get('t', ''), STATE['token']):
+                self._send(403, {'error': 'Sai mã bảo vệ'})
+                return
+            base = os.path.realpath(evidence_root())
+            p = os.path.realpath(os.path.join(base, *urllib.parse.unquote(u.path[len('/evidence/'):]).split('/')))
+            try:
+                inside = os.path.commonpath([base, p]) == base
+            except ValueError:
+                inside = False
+            if not inside or not p.lower().endswith('.jpg') or not os.path.isfile(p):
+                self._send(404, {'error': 'Không tìm thấy ảnh'})
+                return
+            with open(p, 'rb') as f:
+                self._send(200, f.read(), 'image/jpeg')
         elif u.path in GET_ROUTES:
             if not self._token_ok():
                 self._send(403, {'error': 'Sai mã bảo vệ'})
@@ -2506,7 +2779,8 @@ def open_ui(url):
 def watchdog(srv):
     while True:
         time.sleep(5)
-        if STATE['pinged'] and STATE['busy'] == 0 and time.time() - STATE['last_ping'] > IDLE_EXIT_SECONDS:
+        watching = bool(CFG.get('watch_hosts'))  # đang giám sát thì giữ chương trình chạy để không bỏ lỡ báo động
+        if STATE['pinged'] and STATE['busy'] == 0 and not watching and time.time() - STATE['last_ping'] > IDLE_EXIT_SECONDS:
             srv.shutdown()
             return
 
@@ -2542,6 +2816,8 @@ def main(argv=None):
         pass
     log('Sẵn sàng. Thư mục danh sách: %s' % abs_path(CFG['list_dir']), 'head')
     log('Cài đặt lưu tại: %s' % CONFIG_PATH)
+    alerts_load()
+    threading.Thread(target=alert_loop, daemon=True).start()
     threading.Thread(target=watchdog, args=(srv,), daemon=True).start()
     if CFG.get('update_check') and (CFG.get('update_repo') or '').strip():
         threading.Thread(target=startup_update_check, daemon=True).start()

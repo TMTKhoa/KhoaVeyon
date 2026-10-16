@@ -37,16 +37,29 @@ Nút **Tìm máy học sinh trong mạng** quét dải /24 của mạng hiện t
 - **Chưa kiểm chứng trên Windows thật:** tác vụ chạy dưới tài khoản người dùng có thể đòi mật khẩu hoặc bị từ chối (cùng giới hạn với tùy chọn "Hiện cửa sổ cho học sinh"). Thử trên 1 máy trước.
 - Chưa có quay video màn hình. Quay cần ffmpeg có mặt trên máy học sinh.
 
-### Giám sát vi phạm: tự chụp ảnh khi học sinh mở trang hoặc ứng dụng ngoài danh sách
+### Giám sát vi phạm: tự chụp ảnh, báo động và gửi ảnh về máy giáo viên (từ bản 1.3.0)
 
-Ở trang **Điều khiển lớp**, khối **Giám sát vi phạm** có nút **Bật giám sát**, **Tắt giám sát**, **Lấy ảnh vi phạm về**.
+Ở trang **Điều khiển lớp**, khối **Giám sát vi phạm** có nút **Bật giám sát**, **Tắt giám sát**, **Xem vi phạm**, **Lấy ảnh ngay**.
 
 - Bật xong, máy học sinh chạy `KhoaVeyonWatch.ps1` (ẩn, trong phiên đăng nhập của học sinh, chép vào `C:\cmd\vcfg`). Cứ 2 giây kiểm tra cửa sổ đang ở trên cùng:
   - Là **trình duyệt** (Chrome, Edge, Firefox, Brave, Opera, Cốc Cốc, Vivaldi): đọc URL từ thanh địa chỉ bằng UI Automation, lấy tên miền, so với `AllowPage.xlsx` (tên miền con tính là khớp, bỏ `www.`). Không có trong danh sách thì chụp.
   - Là **ứng dụng khác**: so tên tiến trình hoặc đường dẫn với `KeepAppList.xlsx` (cùng quy tắc `-keepapp`, bỏ qua tiến trình hệ thống và Veyon). Không có trong danh sách thì chụp.
 - Chụp ngay khi chuyển sang trang/ứng dụng vi phạm, sau đó chụp lại mỗi N giây (mặc định 10) nếu học sinh vẫn ở đó, tối đa M ảnh (mặc định 5) cho mỗi lần. Chuyển sang nơi khác rồi quay lại thì tính là lần mới.
 - Hai danh sách Excel được đọc lại mỗi 30 giây, nên bấm **Lưu** ở trang danh sách là áp dụng, không cần bật lại. Danh sách rỗng thì phần tương ứng (trang hoặc ứng dụng) không bị giám sát.
-- Ảnh và `evidence.csv` (giờ, loại, tên trang/ứng dụng, tiêu đề cửa sổ) nằm ở `C:\Users\Public\KhoaVeyonEvidence` trên máy học sinh. **Học sinh có thể xóa**, hãy bấm **Lấy ảnh vi phạm về** thường xuyên. Ảnh về `data\evidence\TÊNMÁY` và bị xóa khỏi máy học sinh.
+
+**Báo động và tự gửi ảnh về máy giáo viên:**
+
+- Mỗi ảnh vi phạm đi kèm một file `.json` ghi **tên máy, tài khoản học sinh, loại (trang web hoặc ứng dụng), tên trang/ứng dụng, tiêu đề cửa sổ, ngày, giờ**.
+- Sau khi bật giám sát, KhoaVeyon trên máy giáo viên cứ vài giây (mặc định 3 giây, đổi ở trang **Vi phạm**) lấy ảnh và file `.json` mới qua `\\máy\C$` (cùng đường chép file đang dùng), **xóa bản trên máy học sinh** rồi báo động ngay:
+  - **Kêu bíp** trên máy giáo viên (tắt được ở trang Vi phạm).
+  - **Thông báo nổi** góc phải màn hình, có ảnh thu nhỏ, tên máy, nội dung vi phạm, ngày giờ. Bấm vào để mở trang Vi phạm. Tiêu đề cửa sổ nhấp nháy khi bạn đang ở cửa sổ khác.
+  - Mục **🚨 Vi phạm** trên menu nhấp nháy kèm số vi phạm chưa xem.
+- Trang **Vi phạm** hiện thẻ cho từng vi phạm (mới nhất ở đầu): ảnh (bấm để phóng to), tên máy, tài khoản, nội dung, tiêu đề cửa sổ, giờ, ngày. Lọc theo máy được. Ô viền đỏ là vi phạm mới từ lần xem trước.
+- Ảnh lưu ở `data\evidence\TÊNMÁY`. Lịch sử đầy đủ ở `data\evidence\violations.csv` (mở bằng Excel) và `alerts.jsonl` (chương trình nạp lại khi mở lại). **Xóa danh sách** chỉ làm trống màn hình, file lịch sử được đổi tên thành `alerts-<ngày-giờ>.old`.
+- Khi đang giám sát, đóng cửa sổ chương trình **không** làm chương trình tự thoát (để không bỏ lỡ báo động). Muốn thoát: bấm **Tắt giám sát** rồi **Thoát chương trình**. Mở lại bằng `Chay-KhoaVeyon.bat` thì chương trình tiếp tục nhận ảnh từ các máy đã bật giám sát.
+- Máy học sinh tắt hoặc mất mạng thì tạm dừng nhận từ máy đó, chỉ ghi một dòng ở Nhật ký, có lại mạng thì tự nhận tiếp. Ảnh nằm tạm trên máy học sinh nên trong vài giây trước khi được lấy, học sinh vẫn có thể xóa.
+- Chống làm ngập: mỗi máy tối đa 20 vi phạm mỗi lượt nhận, file có tên lạ hoặc ảnh quá 15 MB bị bỏ qua.
+- **Cập nhật từ bản cũ:** nếu máy học sinh đang chạy bản giám sát cũ (từ trước 1.3.0), hãy bấm **Tắt giám sát**, đợi vài giây rồi **Bật giám sát** để chép script mới. Ảnh do bản cũ chụp (không có file `.json`) vẫn được nhận về, nhưng thiếu tài khoản và tiêu đề cửa sổ.
 - Không ghi phím gõ hay nội dung trang. Ghi hình học sinh nên được nhà trường đồng ý và thông báo trước.
 
 **Hạn chế, chưa kiểm chứng trên Windows thật:**
@@ -54,6 +67,7 @@ Nút **Tìm máy học sinh trong mạng** quét dải /24 của mạng hiện t
 - Tiến trình giám sát chạy bằng quyền học sinh nên học sinh có thể tắt bằng Task Manager. Dùng **Khóa Task Manager / Settings** để giảm rủi ro. Máy khởi động lại thì phải bật giám sát lại.
 - Tác vụ chạy dưới tài khoản người dùng có thể đòi mật khẩu hoặc bị từ chối (cùng giới hạn với chụp màn hình).
 - Máy không có ai đăng nhập thì không bật được.
+- Phần báo động và tự nhận ảnh (1.3.0) đã được thử logic với thư mục giả thay cho `\\máy\C$` và máy chủ HTTP thật trên Linux; chưa thử trên Windows với nhiều máy học sinh thật. Tiếng bíp dùng `winsound` của Windows. Hãy thử trên 1 máy trước, mở một trang web ngoài `AllowPage.xlsx` rồi xem báo động có hiện trong vòng vài giây không.
 
 ## Cấu hình Veyon (trang mới, từ bản 1.1.0)
 
