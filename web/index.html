@@ -52,6 +52,13 @@ button,input,select,textarea{font:inherit;color:inherit}
 .pill{display:inline-flex;align-items:center;gap:8px;background:var(--primary-l);color:var(--primary-d);padding:7px 14px;border-radius:99px;font-weight:600;font-size:13px}
 .spin{width:12px;height:12px;border-radius:50%;border:2px solid #93b4fb;border-top-color:var(--primary);animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
+.pill{position:relative;overflow:hidden}
+.pill .pbar{position:absolute;left:0;bottom:0;height:3px;background:var(--primary);width:0;transition:width .3s}
+#topbar{position:fixed;left:0;top:0;right:0;height:3px;z-index:9999;overflow:hidden;opacity:0;pointer-events:none;transition:opacity .2s}
+#topbar.on{opacity:1}
+#topbar i{display:block;height:100%;width:35%;background:var(--primary);animation:slide 1.1s ease-in-out infinite}
+@keyframes slide{from{margin-left:-35%}to{margin-left:100%}}
+body.waiting,body.waiting *{cursor:progress}
 
 /* ---------- thẻ, nút ---------- */
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)}
@@ -267,10 +274,11 @@ label.field{display:block;font-weight:600;margin:0 0 6px}
     </div>
   </aside>
 
+  <div id="topbar"><i></i></div>
   <main class="main" id="main">
     <header class="top">
       <div><h1 id="title"></h1><p id="sub"></p></div>
-      <div class="row" style="gap:10px"><span class="badge clsbadge hidden" id="classBadge" title="Bấm để mở Lớp và lịch dạy"></span><span class="pill hidden" id="busy"><i class="spin"></i>Đang thực hiện...</span></div>
+      <div class="row" style="gap:10px"><span class="badge clsbadge hidden" id="classBadge" title="Bấm để mở Lớp và lịch dạy"></span><span class="pill hidden" id="busy"><i class="spin"></i><span id="busyText">Đang thực hiện...</span><span class="pbar" id="busyBar"></span></span></div>
     </header>
     <div id="updbar" class="note hidden" style="margin-bottom:18px"></div>
     <div id="view"></div>
@@ -292,14 +300,39 @@ const TOKEN = '__TOKEN__';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+const QUIET = ['/api/log', '/api/alerts', '/api/ping'];   // các lệnh hỏi ngầm, không hiện "đang tải"
+const L = {inflight: 0, pending: 0, jobs: [], serverBusy: false, since: 0, timer: null};
+function updBusy() {
+  const on = L.inflight > 0 || L.pending > 0 || L.serverBusy;
+  const el = $('#busy'); if (!el) return;
+  el.classList.toggle('hidden', !on);
+  $('#topbar').classList.toggle('on', on);
+  document.body.classList.toggle('waiting', on);
+  let text = 'Đang thực hiện...', pct = 0;
+  if (L.jobs.length) {
+    const j = L.jobs[0], more = L.jobs.length > 1 ? ` (+${L.jobs.length - 1} việc)` : '';
+    text = `${j.title}: ${j.done}/${j.total} máy${j.err ? `, ${j.err} lỗi` : ''}${more}`;
+    pct = j.total ? Math.round(100 * j.done / j.total) : 0;
+  } else if (L.inflight > 0) text = 'Đang xử lý, vui lòng chờ...';
+  else if (L.pending > 0) text = 'Đang gửi lệnh...';
+  $('#busyText').textContent = text;
+  $('#busyBar').style.width = pct + '%';
+}
+function pollSoon() { clearTimeout(L.timer); L.timer = setTimeout(pollLog, 250); }
 async function api(path, body) {
+  const quiet = QUIET.some(q => path.startsWith(q));
   const init = {method: body === undefined ? 'GET' : 'POST', headers: {'X-Token': TOKEN}};
   if (body !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
   let r;
-  try { r = await fetch(path, init); } catch (e) { throw new Error('Mất kết nối với chương trình. Hãy mở lại bằng Chay-KhoaVeyon.bat'); }
-  const data = await r.json().catch(() => ({error: 'Phản hồi không hợp lệ'}));
-  if (!r.ok || data.error) throw new Error(data.error || ('Lỗi ' + r.status));
-  return data;
+  if (!quiet) { L.inflight++; updBusy(); }
+  try {
+    try { r = await fetch(path, init); } catch (e) { throw new Error('Mất kết nối với chương trình. Hãy mở lại bằng Chay-KhoaVeyon.bat'); }
+    const data = await r.json().catch(() => ({error: 'Phản hồi không hợp lệ'}));
+    if (!r.ok || data.error) throw new Error(data.error || ('Lỗi ' + r.status));
+    return data;
+  } finally {
+    if (!quiet) { L.inflight--; updBusy(); }
+  }
 }
 
 const PAGES = [
@@ -385,7 +418,12 @@ async function runAction(key) {
   const a = action(key);
   const hosts = await resolveTargets(); if (!hosts) return;
   if (!(await confirmRisky(a, hosts.length))) return;
-  try { await api('/api/run', {key, hosts}); toast(`Đã gửi lệnh "${a.label}" tới ${hosts.length} máy`, 'ok'); openLog(); }
+  try {
+    toast(`Đang gửi lệnh "${a.label}" tới ${hosts.length} máy...`);
+    await api('/api/run', {key, hosts}); openLog();
+    L.pending++; updBusy(); pollSoon();            // hiện "đang chạy" ngay, không chờ lần hỏi tiếp theo
+    setTimeout(() => { L.pending = Math.max(0, L.pending - 1); updBusy(); }, 4000);
+  }
   catch (e) { toast(e.message, 'err'); }
 }
 
@@ -415,6 +453,7 @@ function viewSetup() {
       <div class="files">
         ${row(u.cli, 'Tìm thấy veyon-cli', u.cli ? esc(u.cli_path) : 'Chưa thấy. Cài Veyon (Master) trên máy này hoặc đặt đường dẫn ở trang Cài đặt.', u.cli ? '' : b('gosettings', 'Mở Cài đặt'))}
         ${row(itemsOk, `Mục điều khiển trong Veyon (${u.items_have}/${u.items_total})`, itemsOk ? 'Đã đủ. Các nút ở trang Điều khiển lớp dùng được.' : (u.items_err ? 'Chưa đọc được: ' + esc(u.items_err) : 'Chưa đủ. Bấm tạo tự động, Windows sẽ hỏi quyền quản trị' + (u.admin ? '' : ' (hộp thoại UAC)') + '.'), b('setupveyon', itemsOk ? 'Cập nhật lại' : 'Tạo mục trong Veyon'))}
+        ${row((u.auth_names || []).length ? true : null, 'Khóa xác thực Veyon', (u.auth_names || []).length ? 'Đang dùng cặp khóa có sẵn: <b>' + esc(u.auth_names.join(', ')) + '</b>. Bấm để chép khóa public xuống các máy học sinh (máy đã có đúng khóa thì bỏ qua).' : 'Chưa thấy cặp khóa nào. Bấm để tự tạo cặp khóa rồi chép khóa public xuống các máy học sinh.', b('setupkeys', 'Chép khóa xuống máy học sinh'))}
         ${row(u.lists_ok === u.lists_total, `Danh sách Excel (${u.lists_ok}/${u.lists_total} file)`, 'Tạo file mẫu (Chrome, ONLYOFFICE, Paint cho ứng dụng được phép; vài trang học tập; game phổ biến để chặn). Không ghi đè file đã có.', u.lists_ok === u.lists_total ? '' : b('setuplists', 'Tạo file mẫu'))}
         ${row(scriptOk, esc(u.script_name) + ' để gửi cho máy học sinh', scriptOk ? (u.script_in_payload ? 'Đã có trong thư mục payload.' : 'Tìm thấy trên máy này, sẽ tự chép vào payload.') : 'Chưa tìm thấy. Thêm file này vào thư mục payload (trang Phân phối &amp; chạy, nút Thêm file).', b('setuppayload', 'Chuẩn bị file'))}
         ${row(u.student_bat, 'Setup-MayHocSinh.bat cho máy học sinh', 'Chạy <b>một lần</b> trên mỗi máy học sinh bằng quyền quản trị: tạo C:\\cmd, mở tường lửa chia sẻ file và Task Scheduler từ xa, bật Veyon Service. Sau bước này mọi thứ còn lại làm từ máy giáo viên.', b('openpayload', 'Mở thư mục payload'))}
@@ -811,10 +850,10 @@ function viewVcfg() {
       <p class="hint">Tên khóa gợi ý chưa được kiểm chứng trên Veyon thật. Sau khi đẩy, dùng “So sánh” giữa máy học sinh và bản sao lưu trước đó để xem khóa nào thật sự đổi.</p>
     </section>
     <section class="card"><h3>Danh sách máy của Veyon Master</h3>
-      <p class="sub">Thêm các máy học sinh đang chọn vào danh sách máy của Veyon Master (<code>veyon-cli networkobject add</code>). Máy đã có thì bỏ qua. Dùng sau khi “Tìm máy học sinh trong mạng”.</p>
-      <div class="formgrid"><div><label class="field">Tên nhóm (location) trong Master</label><input type="text" data-vc="loc" value="${esc(v.location)}"><div class="hint" style="margin-top:5px">Để trống nếu không muốn gom nhóm.</div></div></div>
-      <div class="row" style="margin-top:14px"><button class="btn primary" data-act="vc_netobj">➕ Thêm ${targets().all ? 'tất cả ' : ''}${hosts.length} máy vào Veyon Master</button></div>
-      <p class="hint">Cần quyền quản trị nên Windows có thể hiện hộp thoại UAC. Chưa kiểm chứng định dạng kết quả của <code>networkobject list</code>, nên việc nhận biết máy “đã có” dựa vào việc tên máy xuất hiện trong kết quả đó.</p>
+      <p class="sub">Thêm các máy học sinh đang chọn vào danh sách máy của Veyon Master (<code>veyon-cli networkobjects add</code>). Máy đã có thì bỏ qua. Dùng sau khi “Tìm máy học sinh trong mạng”.</p>
+      <div class="formgrid"><div><label class="field">Tên nhóm có sẵn trong Master</label><input type="text" data-vc="loc" list="vc-locs" value="${esc(v.location)}"><datalist id="vc-locs">${(v.locations || []).map(n => `<option value="${esc(n)}">`).join('')}</datalist><div class="hint" style="margin-top:5px">Gõ đúng tên nhóm đang có trong Veyon Master (không phân biệt hoa thường). Để trống để tool tự làm: dùng nhóm có sẵn trong Veyon, chưa có nhóm nào thì tự tạo nhóm “KhoaVeyon”.</div></div></div>
+      <div class="row" style="margin-top:14px"><button class="btn" data-act="vc_netobj_scan">🔍 Tự dò nhóm trong máy</button><button class="btn primary" data-act="vc_netobj">➕ Thêm ${targets().all ? 'tất cả ' : ''}${hosts.length} máy vào Veyon Master</button></div>
+      <p class="hint">Cần quyền quản trị nên Windows có thể hiện hộp thoại UAC. Chưa kiểm chứng định dạng kết quả của <code>networkobjects list</code>, nên việc nhận biết máy “đã có” dựa vào việc tên máy xuất hiện trong kết quả đó.</p>
     </section>
   </div>`;
 }
@@ -838,6 +877,7 @@ async function vcAction(act, el) {
   if (act === 'vc_addrow') { vcCollect(); v.push.push({key: '', value: ''}); render(); return; }
   if (act === 'vc_delrow') { vcCollect(); v.push.splice(+el.dataset.i, 1); render(); return; }
   if (act === 'vc_savepush') { try { await api('/api/vcfg_save', vcCollect()); toast('Đã lưu', 'ok'); } catch (e) { toast(e.message, 'err'); } return; }
+  if (act === 'vc_netobj_scan') return vcRun({step: 'netobj_scan'}, 'Đang dò nhóm, kết quả ở Nhật ký');
   if (act === 'vc_backup_master') return vcRun({step: 'backup_master'}, 'Đang sao lưu cấu hình master');
   if (act === 'vc_compare') { if (!S.vcA || !S.vcB) { toast('Chọn hai bên để so sánh', 'warn'); return; } return vcRun({step: 'compare', a: S.vcA, b: S.vcB}, 'Đang so sánh, kết quả ở Nhật ký'); }
   const hosts = await resolveTargets(); if (!hosts) return;
@@ -1351,6 +1391,7 @@ document.addEventListener('click', async e => {
   switch (act) {
     case 'setupall': setupStep('all', false); break;
     case 'setupveyon': setupStep('veyon', false); break;
+    case 'setupkeys': setupStep('authkeys', true); break;
     case 'setuplists': setupStep('lists', false); break;
     case 'setuppayload': setupStep('payload', false); break;
     case 'diagnose': setupStep('diagnose', true); break;
@@ -1358,8 +1399,8 @@ document.addEventListener('click', async e => {
     case 'lockcmd': if (await modal({title: 'Khóa thư mục C:\\cmd?', ok: 'Khóa', html: 'Học sinh sẽ chỉ đọc và chạy được file trong C:\\cmd, không sửa hay xóa được. Giáo viên vẫn cập nhật qua KhoaVeyon. Máy học sinh phải dùng tài khoản người dùng thường.'})) setupStep('lock', true); break;
     case 'unlockcmd': setupStep('unlock', true); break;
     case 'scan': scanHosts(); break;
-    case 'shot': { const hs = await resolveTargets(); if (!hs) break; try { await api('/api/shot', {hosts: hs}); openLog(); toast(`Đang chụp màn hình ${hs.length} máy`, 'ok'); } catch (err) { toast(err.message, 'err'); } break; }
-    case 'watch_start': case 'watch_stop': case 'watch_fetch': { const hs = await resolveTargets(); if (!hs) break; const step = act.slice(6); try { await api('/api/watch', {step, hosts: hs}); openLog(); toast(`Đã gửi lệnh tới ${hs.length} máy`, 'ok'); } catch (err) { toast(err.message, 'err'); } break; }
+    case 'shot': { const hs = await resolveTargets(); if (!hs) break; try { await api('/api/shot', {hosts: hs}); openLog(); L.pending++; updBusy(); pollSoon(); setTimeout(() => { L.pending = Math.max(0, L.pending - 1); updBusy(); }, 4000); toast(`Đang chụp màn hình ${hs.length} máy`, 'ok'); } catch (err) { toast(err.message, 'err'); } break; }
+    case 'watch_start': case 'watch_stop': case 'watch_fetch': { const hs = await resolveTargets(); if (!hs) break; const step = act.slice(6); try { await api('/api/watch', {step, hosts: hs}); openLog(); L.pending++; updBusy(); pollSoon(); setTimeout(() => { L.pending = Math.max(0, L.pending - 1); updBusy(); }, 4000); toast(`Đã gửi lệnh tới ${hs.length} máy`, 'ok'); } catch (err) { toast(err.message, 'err'); } break; }
     case 'gopage': go(el.dataset.pageTo); break;
     case 'reportreload': try { await loadReport(); render(); } catch (err) { toast(err.message, 'err'); } break;
     case 'reportexport': try { const r = await api('/api/report_export', {range: S.reportRange}); toast('Đã xuất báo cáo: ' + r.path, 'ok'); api('/api/open', {what: 'reports'}).catch(() => {}); } catch (err) { toast(err.message, 'err'); } break;
@@ -1386,7 +1427,7 @@ document.addEventListener('click', async e => {
     case 'openevidence': api('/api/open', {what: 'evidence'}).catch(err => toast(err.message, 'warn')); break;
     case 'openshots': api('/api/open', {what: 'shots'}).catch(err => toast(err.message, 'warn')); break;
     case 'vc_backup_master': case 'vc_backup_clients': case 'vc_compare': case 'vc_restore_master': case 'vc_restore_clients':
-    case 'vc_addrow': case 'vc_delrow': case 'vc_savepush': case 'vc_push': case 'vc_netobj': vcAction(act, el); break;
+    case 'vc_addrow': case 'vc_delrow': case 'vc_savepush': case 'vc_push': case 'vc_netobj': case 'vc_netobj_scan': vcAction(act, el); break;
     case 'refreshsetup': refreshSetup(); break;
     case 'gosettings': go('settings'); break;
     case 'checkupd': checkUpdate(); break;
@@ -1548,8 +1589,10 @@ async function pollLog() {
       logLines += r.items.length; $('#logcount').textContent = logLines + ' dòng';
       if (atEnd) body.scrollTop = body.scrollHeight;
     }
-    S.busy = !!r.busy; $('#busy').classList.toggle('hidden', !r.busy);
+    S.busy = !!r.busy; L.serverBusy = !!r.busy; L.jobs = r.jobs || []; if (r.busy) L.pending = 0; updBusy();
   } catch (e) { /* mất kết nối tạm thời */ }
+  clearTimeout(L.timer);
+  L.timer = setTimeout(pollLog, (L.serverBusy || L.pending) ? 350 : 1500);   // đang chạy thì hỏi dày hơn
 }
 
 /* ---------- khởi động ---------- */
@@ -1563,7 +1606,7 @@ async function pollLog() {
   S.page = S.st.cfg.setup_done ? 'control' : 'setup';
   if (S.page === 'setup') { try { await loadSetup(); } catch (e) { toast(e.message, 'err'); } }
   buildNav(); render(true);
-  pollLog(); setInterval(pollLog, 900);
+  pollLog();
   pollAlerts(); setInterval(pollAlerts, 1500);
   setTimeout(async () => { try { S.st.update = (await api('/api/state')).update; showUpdate(); } catch (e) { /* bỏ qua */ } }, 6000);
 })();

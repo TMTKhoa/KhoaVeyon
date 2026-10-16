@@ -27,7 +27,9 @@ Nút **Tìm máy học sinh trong mạng** quét dải /24 của mạng hiện t
 
 **Việc duy nhất phải làm tay:** chạy `Setup-MayHocSinh.bat` một lần trên mỗi máy học sinh (chuột phải, Run as administrator). File này mở tường lửa cho chia sẻ file và Task Scheduler từ xa, đặt `LocalAccountTokenFilterPolicy`, tạo `C:\cmd` và bật Veyon Service. Không thể làm từ xa vì chính các quyền này chưa mở.
 
-**Chưa kiểm chứng trên Windows và Veyon thật:** tên khóa cấu hình `DesktopServices/PredefinedPrograms` và định dạng JSON của mục, mã nhóm tường lửa dạng `@FirewallAPI.dll`. Đã thử logic ghi, gộp và quét mạng bằng `veyon-cli` giả. Nếu Veyon báo thiếu mục sau khi tạo, chương trình ghi cảnh báo ở Nhật ký và bạn tạo thủ công theo mục "Kết nối với Veyon".
+**Chưa kiểm chứng trên Windows và Veyon thật:** tên khóa cấu hình `DesktopServices/PredefinedPrograms` và định dạng JSON của mục, mã nhóm tường lửa dạng `@FirewallAPI.dll`. Đã thử logic ghi, gộp và quét mạng bằng `veyon-cli` giả. Nếu `config set` không làm Veyon nhận đủ mục, chương trình tự thử cách 2 (xuất cấu hình, sửa khóa, nhập lại; bản gốc lưu trong `veyon-config-truoc-khi-import.json`). Nếu vẫn thiếu, Nhật ký ghi kết quả đọc lại của Veyon và chương trình tạo sẵn file `veyon-programs-import.json` để đối chiếu. Nút **Thiết lập máy giáo viên** sau khi tạo mục sẽ tự phân phối (kiểm tra, gửi file, cài dịch vụ) xuống các máy học sinh đang có trong danh sách.
+
+**Ưu tiên cấu hình Veyon có sẵn:** chương trình đọc cấu hình Veyon đã cài và thiết lập từ trước qua `veyon-cli`. Mục "Programs & websites" nào đã có (cùng tên hoặc cùng dòng lệnh) thì giữ nguyên, chỉ thêm mục còn thiếu; nếu đã đủ thì không ghi gì. Nhóm trong Veyon Master cũng dùng nhóm có sẵn trước, máy đã có trong danh sách thì bỏ qua.
 
 ### Chụp màn hình trước khi khóa
 
@@ -106,9 +108,9 @@ Trang **Cấu hình Veyon** có 3 khối. Bản sao lưu lưu ở `data\veyon-ba
 
 1. **Sao lưu, so sánh, khôi phục.** Sao lưu master bằng `veyon-cli config export`. Máy học sinh được đọc từ xa: chương trình chép `vcfg-export.bat` vào `C:\cmd\vcfg`, chạy bằng `schtasks` (SYSTEM), rồi lấy file về. **So sánh** chọn hai bên bất kỳ (master hiện tại, máy học sinh đọc trực tiếp, hoặc file sao lưu), kết quả hiện ở Nhật ký. **Khôi phục** dùng `config import` nên thay toàn bộ cấu hình; cấu hình cũ của máy đó được tự lưu trước.
 2. **Đẩy cấu hình Veyon Service xuống máy học sinh.** Bạn nhập danh sách khóa `Nhóm/Tên` và giá trị, chương trình ghi từng khóa bằng `config set` trên máy học sinh (không đụng khóa khác), tùy chọn khởi động lại `VeyonService`, và lưu cấu hình cũ trước khi đẩy. Đường dẫn `veyon-cli.exe` trên máy học sinh đặt ngay trong khối này.
-3. **Danh sách máy của Veyon Master.** Thêm các máy đang chọn vào Master bằng `veyon-cli networkobject add` (nhóm `location` tùy chọn). Máy đã có thì bỏ qua. Cần quyền quản trị nên Windows hiện UAC.
+3. **Danh sách máy của Veyon Master.** Thêm các máy đang chọn vào Master bằng `veyon-cli networkobjects add` (nhóm `location` tùy chọn). Máy đã có thì bỏ qua. Cần quyền quản trị nên Windows hiện UAC.
 
-**Chưa kiểm chứng trên Windows và Veyon thật:** định dạng kết quả `networkobject list` (dùng để nhận biết máy đã có), tên các khóa gợi ý (`Network/PrimaryServicePort`, `Network/FirewallExceptionEnabled`, `Service/Autostart`), và việc `config import` có thay toàn bộ hay gộp tùy phiên bản Veyon. Logic đã thử với `veyon-cli` giả trên Linux. Hãy thử trên 1 máy trước, rồi dùng **So sánh** để kiểm tra kết quả.
+**Chưa kiểm chứng trên Windows và Veyon thật:** định dạng kết quả `networkobjects list` (dùng để nhận biết máy đã có), tên các khóa gợi ý (`Network/PrimaryServicePort`, `Network/FirewallExceptionEnabled`, `Service/Autostart`), và việc `config import` có thay toàn bộ hay gộp tùy phiên bản Veyon. Logic đã thử với `veyon-cli` giả trên Linux. Hãy thử trên 1 máy trước, rồi dùng **So sánh** để kiểm tra kết quả.
 
 ## Tự cập nhật từ GitHub
 

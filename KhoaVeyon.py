@@ -143,7 +143,8 @@ DEFAULT_CONFIG = {
     'client_veyon_cli': r'C:\Program Files\Veyon\veyon-cli.exe',  # đường dẫn veyon-cli trên máy học sinh
     'vcfg_push': [],      # các khóa cấu hình Veyon đẩy xuống máy học sinh: [{'key','value'}]
     'vcfg_restart': True,  # khởi động lại Veyon Service sau khi đẩy cấu hình
-    'netobj_location': 'KhoaVeyon',  # nhóm (location) trong danh sách máy của Veyon Master
+    'auth_key_name': '',  # tên cặp khóa xác thực có sẵn trong Veyon; để trống = tự chọn cặp có sẵn, chưa có thì tạo mới
+    'netobj_location': '',  # tên nhóm (location) CÓ SẴN trong Veyon Master; để trống = tự chọn nhóm có sẵn, chưa có thì tự tạo
     'shot_before_lock': False,  # chụp màn hình các máy trước khi chạy lệnh khóa / đóng ứng dụng
     'watch_repeat': '10',  # giây giữa hai lần chụp khi học sinh vẫn ở trang/ứng dụng vi phạm
     'watch_max': '5',      # số ảnh tối đa cho mỗi lần vi phạm
@@ -504,34 +505,60 @@ def log(msg, kind=''):
             del LOG[:300]
 
 
+BUSY_LOCK = threading.Lock()
+JOBS = {}                # id -> {'title', 'done', 'total', 'err'}; giao diện đọc qua /api/log
+JOB_SEQ = [0]
+
+
+def _busy(delta):
+    with BUSY_LOCK:
+        STATE['busy'] += delta
+
+
 def start_job(fn, *args):
     def run():
-        STATE['busy'] += 1
+        _busy(1)
         try:
             fn(*args)
         except Exception as e:  # noqa
             log('LỖI không mong muốn: %s' % e, 'err')
         finally:
-            STATE['busy'] -= 1
+            _busy(-1)
     threading.Thread(target=run, daemon=True).start()
 
 
-def pool_run(fn, hosts):
+def pool_run(fn, hosts, title='Đang thực hiện'):
     ok_n = err_n = 0
-    with ThreadPoolExecutor(max_workers=min(8, max(1, len(hosts)))) as ex:
-        futs = {ex.submit(fn, h): h for h in hosts}
-        for fut in as_completed(futs):
-            h = futs[fut]
-            try:
-                ok, text = fut.result()
-            except Exception as e:  # noqa
-                ok, text = False, str(e)
-            if ok:
-                ok_n += 1
-            else:
-                err_n += 1
-            log('[%s] %s %s' % (h, 'OK' if ok else 'LỖI', text), 'ok' if ok else 'err')
+    with BUSY_LOCK:
+        JOB_SEQ[0] += 1
+        jid = JOB_SEQ[0]
+        JOBS[jid] = {'title': title, 'done': 0, 'total': len(hosts), 'err': 0}
+    try:
+        with ThreadPoolExecutor(max_workers=min(16, max(1, len(hosts)))) as ex:
+            futs = {ex.submit(fn, h): h for h in hosts}
+            for fut in as_completed(futs):
+                h = futs[fut]
+                try:
+                    ok, text = fut.result()
+                except Exception as e:  # noqa
+                    ok, text = False, str(e)
+                if ok:
+                    ok_n += 1
+                else:
+                    err_n += 1
+                with BUSY_LOCK:
+                    JOBS[jid]['done'] += 1
+                    JOBS[jid]['err'] = err_n
+                log('[%s] %s %s' % (h, 'OK' if ok else 'LỖI', text), 'ok' if ok else 'err')
+    finally:
+        with BUSY_LOCK:
+            JOBS.pop(jid, None)
     log('--- xong: %d thành công, %d lỗi ---' % (ok_n, err_n), 'warn' if err_n else 'head')
+
+
+def split_host_port(h):
+    m = re.match(r'^(.+):(\d{1,5})$', h)
+    return (m.group(1), int(m.group(2))) if m and h.count(':') == 1 else (h, VEYON_PORT)
 
 
 # ---------------------------------------------------------------- các công việc chạy nền
@@ -551,9 +578,12 @@ def job_action(key, hosts):
                 cmd = veyon_command(CFG, h, feature)
         except Exception as e:  # noqa
             return False, 'Lỗi mẫu lệnh: %s' % e
-        rc, out = run_shell(cmd)
+        hh, pp = split_host_port(h)
+        if not tcp_open(hh, pp, 1.5):  # máy tắt: báo lỗi sau vài giây thay vì chờ veyon-cli hết 60 giây
+            return False, 'máy không trả lời (đang tắt, sai tên máy hoặc Veyon Service chưa chạy)'
+        rc, out = run_shell(cmd, timeout=30)
         return rc == 0, out if rc == 0 else '(%s) %s' % (rc, out)
-    pool_run(one, hosts)
+    pool_run(one, hosts, label)
 
 
 def job_dist(hosts, files, mode, cmd, feature, interactive, target, title):
@@ -589,7 +619,7 @@ def job_dist(hosts, files, mode, cmd, feature, interactive, target, title):
                 return False, '%schạy mục Veyon lỗi (%s) %s' % (', '.join(msgs) + ', ' if msgs else '', rc, out)
             msgs.append('đã kích hoạt mục Veyon')
         return True, ', '.join(msgs)
-    pool_run(one, hosts)
+    pool_run(one, hosts, title)
 
 
 def job_after_save(hosts, path, push, apply_key, target):
@@ -699,6 +729,23 @@ def desired_programs(cfg):
     return [(cfg['features'].get(a[0]) or a[3], 'cmd.exe /c %s %s' % (cfg['script_path'], a[2])) for a in ACTIONS]
 
 
+PROGRAMS_KEY = 'DesktopServices/PredefinedPrograms'
+
+
+def _norm_programs(data):
+    """Mỗi mục có thể trả về dạng object hoặc chuỗi JSON: đưa hết về dict."""
+    out = []
+    for x in data:
+        if isinstance(x, str):
+            try:
+                x = json.loads(x)
+            except Exception:  # noqa
+                continue
+        if isinstance(x, dict):
+            out.append(x)
+    return out
+
+
 def _veyon_get_programs(cli):
     rc, out = run_args([cli, 'config', 'get', 'DesktopServices/PredefinedPrograms'], timeout=30)
     if rc != 0:
@@ -713,9 +760,20 @@ def _veyon_get_programs(cli):
         data = json.loads(out)
         if isinstance(data, str):
             data = json.loads(data)
-        return (data if isinstance(data, list) else []), ''
+        return (_norm_programs(data) if isinstance(data, list) else []), ''
     except Exception as e:  # noqa
         return None, 'Không đọc được kết quả veyon-cli: %s' % e
+
+
+def _path_key(p):
+    return re.sub(r'\s+', ' ', str(p or '')).strip().lower()
+
+
+def _programs_missing(cur, want):
+    """Mục còn thiếu so với cấu hình Veyon hiện có. Mục đã có sẵn (cùng tên HOẶC cùng dòng lệnh) coi như đủ, không đụng tới."""
+    names = {str(x.get('Name', '')) for x in cur if isinstance(x, dict)}
+    paths = {_path_key(x.get('Path')) for x in cur if isinstance(x, dict)}
+    return [n for n, c in want if n not in names and _path_key(c) not in paths]
 
 
 def veyon_items_status(cfg):
@@ -726,8 +784,7 @@ def veyon_items_status(cfg):
     cur, err = _veyon_get_programs(cli)
     if cur is None:
         return 0, len(ACTIONS), err
-    have = {str(x.get('Name', '')): str(x.get('Path', '')) for x in cur if isinstance(x, dict)}
-    ok = sum(1 for n, c in desired_programs(cfg) if have.get(n) == c)
+    ok = len(desired_programs(cfg)) - len(_programs_missing(cur, desired_programs(cfg)))
     return ok, len(ACTIONS), ''
 
 
@@ -746,26 +803,84 @@ def apply_veyon_items(cfg):
     except OSError:
         pass
     items = [x for x in cur if isinstance(x, dict)]
-    by_name = {str(x.get('Name', '')): x for x in items}
+    want = desired_programs(cfg)
+    todo = set(_programs_missing(items, want))
+    kept = len(want) - len(todo)
+    if not todo:  # Veyon đã được thiết lập sẵn đủ: dùng nguyên, không ghi gì
+        return True, 'Veyon đã có sẵn đủ %d mục, giữ nguyên cấu hình hiện có (không ghi gì).' % len(want)
+    extra = {}  # khóa phụ (vd. Type) lấy theo mục có sẵn để mục mới cùng dạng
+    for x in items:
+        extra = {k: v for k, v in x.items() if k not in ('Name', 'Path', 'Uid')}
+        if extra:
+            break
     added = updated = 0
-    for name, path in desired_programs(cfg):
-        x = by_name.get(name)
-        if x is None:
-            items.append({'Name': name, 'Path': path, 'Uid': '{%s}' % uuid.uuid4()})
+    for name, path in want:
+        if name in todo:
+            it = {'Name': name, 'Path': path, 'Uid': '{%s}' % uuid.uuid4()}
+            it.update(extra)
+            items.append(it)
             added += 1
-        elif x.get('Path') != path:
-            x['Path'] = path
-            updated += 1
-    rc, out = run_args([cli, 'config', 'set', 'DesktopServices/PredefinedPrograms',
-                        json.dumps(items, ensure_ascii=False, separators=(',', ':'))], timeout=60)
+
+    def missing():
+        again, _e = _veyon_get_programs(cli)
+        return _programs_missing(again or [], want)
+
+    value = json.dumps(items, ensure_ascii=False, separators=(',', ':'))
+    notes = []
+    rc, out = run_args([cli, 'config', 'set', PROGRAMS_KEY, value], timeout=60)  # cách 1
     if rc != 0:
-        return False, 'veyon-cli config set lỗi (%s): %s' % (rc, out)
-    again, err = _veyon_get_programs(cli)
-    have = {str(x.get('Name', '')) for x in (again or []) if isinstance(x, dict)}
-    miss = [n for n, _ in desired_programs(cfg) if n not in have]
+        notes.append('config set lỗi (%s): %s' % (rc, out[:200]))
+    miss = missing()
+    method = 'config set'
+    if miss:  # cách 2, tự động: xuất cấu hình -> sửa file -> nhập lại
+        ok2, note2 = _apply_programs_via_import(cli, items)
+        notes.append(note2)
+        miss = missing()
+        method = 'export/import'
     if miss:
-        return False, 'Đã ghi nhưng Veyon chưa nhận đủ mục (thiếu %d). Có thể bản Veyon này lưu khác, hãy tạo thủ công theo README.' % len(miss)
-    return True, 'Đã thêm %d mục, cập nhật %d mục. Hãy mở lại Veyon Master để thấy các mục mới.' % (added, updated)
+        pth = os.path.join(os.path.dirname(CONFIG_PATH), 'veyon-programs-import.json')
+        try:
+            with open(pth, 'w', encoding='utf-8') as f:
+                json.dump({'DesktopServices': {'PredefinedPrograms': items}}, f, ensure_ascii=False, indent=2)
+        except OSError:
+            pth = '(không ghi được file)'
+        rc3, raw = run_args([cli, 'config', 'get', PROGRAMS_KEY], timeout=30)
+        return False, ('Đã tự thử 2 cách (config set, rồi export/import) nhưng Veyon vẫn thiếu %d/%d mục. %s '
+                       'Kết quả đọc lại (mã %s): %s. Đã tạo sẵn file %s để đối chiếu.'
+                       % (len(miss), len(want), ' | '.join(notes), rc3, (raw or '(trống)')[:300].replace('\n', ' '), pth))
+    return True, 'Giữ nguyên %d mục có sẵn, thêm %d mục còn thiếu (bằng %s). Hãy mở lại Veyon Master để thấy các mục mới.' % (kept, added, method)
+
+
+def _apply_programs_via_import(cli, items):
+    """Xuất toàn bộ cấu hình Veyon, sửa khóa PredefinedPrograms rồi nhập lại. Có sao lưu bản xuất gốc."""
+    base = os.path.dirname(CONFIG_PATH)
+    tmp = os.path.join(base, 'veyon-export-tmp.json')
+    rc, out = run_args([cli, 'config', 'export', tmp], timeout=60)
+    if rc != 0 or not os.path.isfile(tmp):
+        return False, 'config export lỗi (%s): %s' % (rc, out[:200])
+    try:
+        with open(tmp, 'r', encoding='utf-8-sig') as f:
+            data = json.load(f)
+        with open(os.path.join(base, 'veyon-config-truoc-khi-import.json'), 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        if PROGRAMS_KEY in data:
+            data[PROGRAMS_KEY] = items
+        else:
+            if not isinstance(data.get('DesktopServices'), dict):
+                data['DesktopServices'] = {}
+            data['DesktopServices']['PredefinedPrograms'] = items
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False)
+    except Exception as e:  # noqa
+        return False, 'không sửa được file xuất: %s' % e
+    rc, out = run_args([cli, 'config', 'import', tmp], timeout=60)
+    try:
+        os.remove(tmp)
+    except OSError:
+        pass
+    if rc != 0:
+        return False, 'config import lỗi (%s): %s' % (rc, out[:200])
+    return True, 'đã thử export/import'
 
 
 def elevated_apply_veyon_items(cfg):
@@ -811,12 +926,50 @@ def local_ips():
     return {i for i in ips if i and not i.startswith('127.')}
 
 
+_TCP_CACHE = {}          # (host, port) -> (thời điểm, kết quả); máy tắt chỉ phải chờ một lần mỗi vài giây
+_TCP_CACHE_LOCK = threading.Lock()
+TCP_NEG_TTL = 8          # giây nhớ kết quả "không kết nối được"
+TCP_POS_TTL = 3          # giây nhớ kết quả "kết nối được"
+
+
+def _resolve(host, timeout=2.0):
+    """Phân giải tên máy có giới hạn thời gian. Trên Windows, tên máy đã tắt có thể làm getaddrinfo chờ nhiều giây
+    (DNS rồi LLMNR rồi NetBIOS) và tham số timeout của socket không áp dụng cho bước này."""
+    if re.match(r'^\d{1,3}(\.\d{1,3}){3}$', host):
+        return host
+    box = []
+
+    def run():
+        try:
+            box.append(socket.getaddrinfo(host, None, socket.AF_INET)[0][4][0])
+        except OSError:
+            box.append('')
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    t.join(timeout)
+    return box[0] if box else ''
+
+
 def tcp_open(host, port, timeout=0.5):
-    try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except OSError:
-        return False
+    key = (host, port)
+    now = time.time()
+    with _TCP_CACHE_LOCK:
+        hit = _TCP_CACHE.get(key)
+    if hit and now - hit[0] < (TCP_POS_TTL if hit[1] else TCP_NEG_TTL):
+        return hit[1]
+    ok = False
+    ip = _resolve(host)
+    if ip:
+        try:
+            with socket.create_connection((ip, port), timeout=timeout):
+                ok = True
+        except OSError:
+            ok = False
+    with _TCP_CACHE_LOCK:
+        if len(_TCP_CACHE) > 2000:
+            _TCP_CACHE.clear()
+        _TCP_CACHE[key] = (time.time(), ok)
+    return ok
 
 
 def scan_veyon_hosts(prefix=None, timeout=0.5):
@@ -935,7 +1088,7 @@ def job_cmd_lock(hosts, lock):
             return False, 'không chép được %s: %s' % (CMDLOCK_NAME, e)
         ok, msg = remote_run_wait(h, 'cmd.exe /c %s\\%s %s <nul' % (target, CMDLOCK_NAME, 'lock' if lock else 'unlock'))
         return ok, ('đã khóa, học sinh chỉ đọc (log vẫn ghi được)' if lock else 'đã mở khóa') if ok else msg
-    pool_run(one, hosts)
+    pool_run(one, hosts, 'Khóa hoặc mở khóa thư mục C:\\cmd')
 
 
 def job_setup_diagnose(hosts, push):
@@ -974,7 +1127,7 @@ def job_setup_diagnose(hosts, push):
                 # <nul để lệnh pause trong script không treo khi chạy nền bằng SYSTEM
                 ok, msg = remote_run_wait(h, 'cmd.exe /c %s -install <nul' % cfg['script_path'])
                 return ok, 'đã cài dịch vụ' if ok else '-install lỗi: ' + msg
-            pool_run(inst, todo)
+            pool_run(inst, todo, 'Cài dịch vụ trên máy học sinh')
         elif todo:
             log('Chưa có %s trong payload nên chưa cài dịch vụ được.' % sname, 'warn')
         if cfg.get('auto_lock'):
@@ -1004,7 +1157,13 @@ def job_setup_all(hosts):
     with CFG_LOCK:
         CFG['setup_done'] = True
         save_config(CFG)
-    log('--- xong thiết lập máy giáo viên. Máy học sinh làm riêng bằng nút "Thiết lập máy học sinh" ---', 'head')
+    if hosts:  # tự động phân phối: kiểm tra, gửi file thiết lập và cài dịch vụ cho các máy học sinh
+        log('>>> Tự động phân phối xuống %d máy học sinh' % len(hosts), 'head')
+        job_setup_diagnose(hosts, True)
+    else:
+        log('Chưa có máy học sinh nên chưa phân phối được: bấm "Tìm máy học sinh trong mạng" rồi chạy lại.', 'warn')
+    job_authkeys(hosts)
+    log('--- xong thiết lập máy giáo viên và phân phối ---', 'head')
 
 
 def run_apply_mode():
@@ -1208,25 +1367,42 @@ def vcfg_restore_master(cfg, path):
     return True, 'Đã khôi phục cấu hình master (cấu hình cũ đã lưu trong veyon-backups). Hãy mở lại Veyon Master.'
 
 
+AUTO_LOCATION = 'KhoaVeyon'  # tên nhóm tự tạo khi Veyon Master chưa có nhóm nào và ô tên nhóm để trống
+
+
 def vcfg_netobj_apply(cfg, hosts, location):
     """Thêm máy vào danh sách máy của Veyon Master bằng veyon-cli networkobject. Máy đã có thì bỏ qua."""
     cli = find_veyon_cli(cfg['veyon_cli'])
     if not os.path.isfile(cli):
         return False, 'Chưa thấy veyon-cli.exe'
-    rc, out = run_args([cli, 'networkobject', 'list'], timeout=30)
-    existing = out.lower() if rc == 0 else ''
+    rc, out = run_args([cli, 'networkobjects', 'list'], timeout=30)
+    raw_list = out if rc == 0 else ''
+    existing = raw_list.lower()
     location = (location or '').strip()
+    auto_note = ''
+    if not location:
+        # Tự động: dùng nhóm có sẵn đầu tiên trong Veyon; chưa có nhóm nào thì tự tạo nhóm mặc định.
+        found = parse_locations(raw_list)
+        if found:
+            location = found[0]
+            auto_note = ' Tự chọn nhóm có sẵn \"%s\"%s.' % (location, ' (còn %d nhóm khác)' % (len(found) - 1) if len(found) > 1 else '')
+        else:
+            location = AUTO_LOCATION
+            auto_note = ' Chưa có nhóm nào nên tự tạo nhóm \"%s\".' % location
+    # Dùng nhóm có sẵn: chỉ tạo nhóm khi tên đó chưa xuất hiện trong danh sách của Veyon.
+    # Nếu lệnh tạo nhóm lỗi (vd. nhóm đã có nhưng danh sách in theo định dạng khác) thì vẫn thử thêm máy vào nhóm đó.
+    loc_note = ''
     if location and location.lower() not in existing:
-        rc, out = run_args([cli, 'networkobject', 'add', 'location', location], timeout=30)
+        rc, out = run_args([cli, 'networkobjects', 'add', 'location', location], timeout=30)
         if rc != 0:
-            return False, 'Không tạo được nhóm "%s" (%s): %s' % (location, rc, out)
+            loc_note = ' (không tạo được nhóm "%s" nên coi như nhóm đã có sẵn)' % location
     added = skipped = 0
     errs = []
     for h in hosts:
         if re.search(r'(?<![\w.-])%s(?![\w.-])' % re.escape(h.lower()), existing):
             skipped += 1
             continue
-        args = [cli, 'networkobject', 'add', 'computer', h, h, '']
+        args = [cli, 'networkobjects', 'add', 'computer', h, h, '']
         if location:
             args.append(location)
         rc, out = run_args(args, timeout=30)
@@ -1234,13 +1410,14 @@ def vcfg_netobj_apply(cfg, hosts, location):
             added += 1
         else:
             errs.append('%s (%s) %s' % (h, rc, out))
-    msg = 'Đã thêm %d máy, bỏ qua %d máy đã có trong danh sách.' % (added, skipped)
+    msg = 'Đã thêm %d máy, bỏ qua %d máy đã có trong danh sách%s.' % (added, skipped, loc_note)
     if errs:
-        return False, msg + ' Lỗi: ' + '; '.join(errs[:5])
-    return True, msg + ' Hãy mở lại Veyon Master để thấy danh sách mới.'
+        return False, msg + auto_note + ' Lỗi: ' + '; '.join(errs[:5])
+    return True, msg + auto_note + ' Hãy mở lại Veyon Master để thấy danh sách mới.'
 
 
 ELEV_OPS = {
+    'authkeys': lambda cfg, a: authkeys_prepare_master(cfg, a.get('name', '')),
     'netobj': lambda cfg, a: vcfg_netobj_apply(cfg, a.get('hosts') or [], a.get('location', '')),
     'restore': lambda cfg, a: vcfg_restore_master(cfg, a['path']),
 }
@@ -1325,7 +1502,7 @@ def job_vcfg_backup(hosts, master):
         ok, msg = vcfg_export_master(cfg, dest)
         log('[master] %s' % (('OK đã lưu ' + os.path.basename(dest)) if ok else 'LỖI ' + msg), 'ok' if ok else 'err')
     if hosts:
-        pool_run(lambda h: vcfg_backup_client(cfg, h), hosts)
+        pool_run(lambda h: vcfg_backup_client(cfg, h), hosts, 'Sao lưu cấu hình Veyon')
 
 
 def job_vcfg_restore(target, hosts, path):
@@ -1335,7 +1512,7 @@ def job_vcfg_restore(target, hosts, path):
         ok, msg = elevated_op('restore', {'path': path})
         log('[master] %s %s' % ('OK' if ok else 'LỖI', msg), 'ok' if ok else 'err')
     else:
-        pool_run(lambda h: vcfg_restore_client(cfg, h, path), hosts)
+        pool_run(lambda h: vcfg_restore_client(cfg, h, path), hosts, 'Khôi phục cấu hình Veyon')
 
 
 def job_vcfg_push(hosts, items, restart):
@@ -1343,7 +1520,156 @@ def job_vcfg_push(hosts, items, restart):
     log('>>> Đẩy %d khóa cấu hình Veyon xuống %d máy' % (len(items), len(hosts)), 'head')
     for k, v in items:
         log('    %s = %s' % (k, v))
-    pool_run(lambda h: vcfg_push_client(cfg, h, items, restart), hosts)
+    pool_run(lambda h: vcfg_push_client(cfg, h, items, restart), hosts, 'Đẩy cấu hình Veyon')
+
+
+AUTHKEY_DEFAULT = 'KhoaVeyon'  # tên cặp khóa tự tạo khi Veyon chưa có cặp khóa nào
+
+
+def parse_authkeys(out):
+    """Đọc kết quả `veyon-cli authkeys list` thành {tên: {'private', 'public'}}. Định dạng chưa kiểm chứng nên thử nhiều cách."""
+    keys = {}
+    for m in re.finditer(r'([^\s/\\:;|,]+)/(private|public)\b', out or '', re.I):
+        keys.setdefault(m.group(1), set()).add(m.group(2).lower())
+    if not keys:
+        for line in (out or '').splitlines():
+            parts = [x for x in re.split(r'[\s;|]+', line.strip()) if x]
+            if len(parts) >= 2 and parts[1].lower() in ('private', 'public'):
+                keys.setdefault(parts[0], set()).add(parts[1].lower())
+    return keys
+
+
+def authkeys_dir():
+    d = os.path.join(vcfg_dir(), 'authkeys')
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def authkeys_prepare_master(cfg, want=''):
+    """Dùng cặp khóa có sẵn trên máy giáo viên (ưu tiên), chưa có mới tạo; xuất khóa public ra file để chép xuống máy học sinh."""
+    cli = find_veyon_cli(cfg['veyon_cli'])
+    if not os.path.isfile(cli):
+        return False, 'Chưa thấy veyon-cli.exe'
+    rc, out = run_args([cli, 'authkeys', 'list'], timeout=30)
+    keys = parse_authkeys(out) if rc == 0 else {}
+    want = (want or '').strip()
+    name, note = '', ''
+    if want and want in keys:
+        name = want
+    elif want and not keys.get(want):
+        name = want  # người dùng chỉ định tên chưa có: sẽ tạo
+    else:
+        pairs = sorted(n for n, t in keys.items() if 'private' in t)
+        both = [n for n in pairs if 'public' in keys[n]]
+        name = (both or pairs or [''])[0]
+    if name and 'private' in keys.get(name, ()):
+        note = 'dùng cặp khóa có sẵn "%s"' % name
+        if 'public' not in keys[name]:
+            rc, out = run_args([cli, 'authkeys', 'extract', name], timeout=30)
+            if rc != 0:
+                return False, 'authkeys extract lỗi (%s): %s' % (rc, out[:200])
+            note += ' (đã tách khóa public)'
+    else:
+        name = name or AUTHKEY_DEFAULT
+        rc, out = run_args([cli, 'authkeys', 'create', name], timeout=30)
+        if rc != 0:
+            return False, 'Chưa có cặp khóa và tạo mới lỗi (%s): %s' % (rc, out[:200])
+        note = 'chưa có cặp khóa nên đã tạo mới "%s"' % name
+    dest = os.path.join(authkeys_dir(), '%s_public.pem' % name)
+    try:
+        if os.path.exists(dest):
+            os.remove(dest)
+    except OSError:
+        pass
+    rc, out = run_args([cli, 'authkeys', 'export', '%s/public' % name, dest], timeout=30)
+    if rc != 0 or not os.path.isfile(dest) or os.path.getsize(dest) == 0:
+        return False, 'authkeys export lỗi (%s): %s' % (rc, out[:200])
+    with open(os.path.join(authkeys_dir(), 'current.txt'), 'w', encoding='utf-8') as f:
+        f.write(name)
+    return True, '%s, đã xuất khóa public ra %s' % (note, dest)
+
+
+def authkeys_push_client(cfg, host, name, pub):
+    """Chép khóa public xuống máy học sinh. Máy đã có đúng khóa này (so từng byte) thì bỏ qua."""
+    t, cli = vcfg_remote_dir(cfg), client_cli_path(cfg)
+    k = '%s/public' % name
+    cur, new = t + '\\cur-key.pem', t + '\\key.pem'
+    lines = ['chcp 65001 >nul',
+             'del "%s" >nul 2>&1' % cur,
+             '"%s" authkeys export "%s" "%s" >nul 2>&1' % (cli, k, cur),
+             'if not exist "%s" goto imp' % cur,
+             'fc /b "%s" "%s" >nul 2>&1' % (cur, new),
+             'if errorlevel 1 goto imp',
+             'del "%s" "%s" >nul 2>&1' % (cur, new),
+             'exit /b 0',
+             ':imp',
+             '"%s" authkeys import "%s" "%s"' % (cli, k, new),
+             'set R=%errorlevel%',
+             'del "%s" "%s" >nul 2>&1' % (cur, new),
+             'exit /b %R%']
+    ok, msg = client_script_run(host, cfg, 'authkey-push.bat', _bat(lines), files={'key.pem': pub}, timeout=90)
+    return ok, ('khóa "%s" đã khớp với máy giáo viên' % name) if ok else 'import khóa lỗi: %s' % msg
+
+
+def job_authkeys(hosts):
+    with CFG_LOCK:
+        cfg = json.loads(json.dumps(CFG))
+    log('>>> Khóa xác thực Veyon: dùng khóa có sẵn và chép xuống máy học sinh', 'head')
+    ok, msg = elevated_op('authkeys', {'name': cfg.get('auth_key_name', '')})
+    log('[master] %s %s' % ('OK' if ok else 'LỖI', msg), 'ok' if ok else 'err')
+    if not ok:
+        return
+    try:
+        with open(os.path.join(authkeys_dir(), 'current.txt'), 'r', encoding='utf-8') as f:
+            name = f.read().strip()
+    except OSError:
+        log('Không đọc được tên khóa vừa xuất', 'err')
+        return
+    pub = os.path.join(authkeys_dir(), '%s_public.pem' % name)
+    if not hosts:
+        log('Chưa có máy học sinh nên chưa chép khóa được: bấm "Tìm máy học sinh trong mạng" rồi chạy lại.', 'warn')
+        return
+    pool_run(lambda h: authkeys_push_client(cfg, h, name, pub), hosts, 'Gửi khóa xác thực')
+
+
+DETECTED_LOCS = []  # tên nhóm (location) dò được trong Veyon Master
+
+
+def parse_locations(out):
+    """Lấy tên các nhóm từ kết quả `veyon-cli networkobjects list`. Định dạng chưa kiểm chứng nên thử nhiều cách tách cột."""
+    names = []
+    for line in (out or '').splitlines():
+        line = line.strip().strip('{}[]')
+        if not line or 'location' not in line.lower():
+            continue
+        parts = [x.strip().strip('\'"') for x in re.split(r'[;\t|,]', line)]
+        low = [x.lower() for x in parts]
+        if 'location' not in low:
+            continue
+        rest = [x for i, x in enumerate(parts) if low[i] != 'location' and x and not re.fullmatch(r'\{?[0-9a-fA-F-]{32,38}\}?', x)]
+        if rest and rest[0] not in names:
+            names.append(rest[0])
+    return names
+
+
+def job_vcfg_netobj_scan():
+    global DETECTED_LOCS
+    cfg = json.loads(json.dumps(CFG))
+    log('>>> Dò nhóm có sẵn trong Veyon Master', 'head')
+    cli = find_veyon_cli(cfg['veyon_cli'])
+    if not os.path.isfile(cli):
+        log('[master] LỖI Chưa thấy veyon-cli.exe (đặt đường dẫn ở Cài đặt)', 'err')
+        return
+    rc, out = run_args([cli, 'networkobjects', 'list'], timeout=30)
+    if rc != 0:
+        log('[master] LỖI networkobjects list (%s): %s' % (rc, out), 'err')
+        return
+    DETECTED_LOCS = parse_locations(out)
+    log('--- kết quả gốc của veyon-cli ---\n%s' % (out or '(trống)'))
+    if DETECTED_LOCS:
+        log('[master] OK Tìm thấy %d nhóm: %s. Mở lại trang này để chọn trong ô tên nhóm.' % (len(DETECTED_LOCS), ', '.join(DETECTED_LOCS)), 'ok')
+    else:
+        log('[master] Không nhận ra nhóm nào từ kết quả trên. Gửi kết quả gốc ở trên để chỉnh lại cách đọc, hoặc gõ tay tên nhóm.', 'err')
 
 
 def job_vcfg_netobj(hosts, location):
@@ -1390,7 +1716,7 @@ def api_vcfg_info(_q=None):
         if f.lower().endswith('.json') and os.path.isfile(p):
             files.append({'name': f, 'size': os.path.getsize(p), 'time': time.strftime('%d/%m %H:%M', time.localtime(os.path.getmtime(p)))})
     return {'backups': files, 'dir': vcfg_dir(), 'push': cfg.get('vcfg_push') or [], 'restart': bool(cfg.get('vcfg_restart', True)),
-            'location': cfg.get('netobj_location', ''), 'client_cli': client_cli_path(cfg),
+            'location': cfg.get('netobj_location', ''), 'locations': list(DETECTED_LOCS), 'client_cli': client_cli_path(cfg),
             'presets': [{'key': k, 'value': v, 'desc': d} for k, v, d in VCFG_PRESETS]}
 
 
@@ -1432,12 +1758,14 @@ def api_vcfg_run(b):
             raise ApiError('Chưa có máy học sinh nào')
         items = vcfg_check_items(b.get('push'))
         start_job(job_vcfg_push, hosts, items, bool(b.get('restart', True)))
+    elif step == 'netobj_scan':
+        start_job(job_vcfg_netobj_scan)
     elif step == 'netobj':
         if not hosts:
             raise ApiError('Chưa có máy học sinh nào')
         start_job(job_vcfg_netobj, hosts, str(b.get('location', '')).strip())
     else:
-        raise ApiError('Bước không hợp lệ')
+        raise ApiError('Bước "%s" không hợp lệ. Nếu vừa chép file mới, hãy tắt KhoaVeyon (Task Manager, pythonw.exe) rồi chạy lại Chay-KhoaVeyon.bat.' % step)
     return {'ok': True}
 
 
@@ -1506,7 +1834,7 @@ def job_shot(hosts, title='Chụp màn hình'):
     folder = os.path.join(shot_root(), time.strftime('%Y%m%d-%H%M%S'))
     os.makedirs(folder, exist_ok=True)
     log('>>> %s (%d máy) -> %s' % (title, len(hosts), folder), 'head')
-    pool_run(lambda h: shot_one(cfg, h, folder), hosts)
+    pool_run(lambda h: shot_one(cfg, h, folder), hosts, title)
 
 
 def job_shot_then_action(key, hosts):
@@ -1828,7 +2156,7 @@ def job_watch(step, hosts):
         cfg = json.loads(json.dumps(CFG))
     fn = {'start': watch_start_one, 'stop': watch_stop_one, 'fetch': watch_fetch_one}[step]
     log('>>> %s giám sát vi phạm (%d máy)' % ({'start': 'Bật', 'stop': 'Tắt', 'fetch': 'Lấy ảnh'}[step], len(hosts)), 'head')
-    pool_run(lambda h: fn(cfg, h), hosts)
+    pool_run(lambda h: fn(cfg, h), hosts, 'Giám sát vi phạm')
 
 
 def api_watch(b):
@@ -2729,7 +3057,7 @@ def job_announce(cls, only, seconds, keep, clear, moved=False):
     if clear:
         hosts = clean_hosts(cfg.get('hosts') or [])
         log('>>> Gỡ nhãn chỗ ngồi (%d máy)' % len(hosts), 'head')
-        pool_run(lambda h: seat_notice_one(cfg, h, {'stamp': '%.3f' % time.time(), 'clear': True}), hosts)
+        pool_run(lambda h: seat_notice_one(cfg, h, {'stamp': '%.3f' % time.time(), 'clear': True}), hosts, 'Gỡ nhãn chỗ ngồi')
         return
     st = att_state(cls)
     with SCHOOL_LOCK:
@@ -2756,7 +3084,7 @@ def job_announce(cls, only, seconds, keep, clear, moved=False):
         log('Không có máy nào để thông báo: lớp %s chưa xếp chỗ, hoặc số máy chưa khớp tên máy (xem Tên máy mẫu ở sơ đồ chỗ ngồi)' % cls, 'warn')
         return
     log('>>> Thông báo chỗ ngồi lớp %s (%d máy)' % (cls, len(items)), 'head')
-    pool_run(lambda h: seat_notice_one(cfg, h, items[h]), sorted(items))
+    pool_run(lambda h: seat_notice_one(cfg, h, items[h]), sorted(items), 'Thông báo chỗ ngồi')
 
 
 def api_school_announce(b):
@@ -3565,9 +3893,14 @@ def api_setup_status(_q=None):
         cfg = json.loads(json.dumps(CFG))
     cli = find_veyon_cli(cfg['veyon_cli'])
     have, total, err = veyon_items_status(cfg)
+    auth_names = []
+    if os.path.isfile(cli):
+        rc_k, out_k = run_args([cli, 'authkeys', 'list'], timeout=20)
+        if rc_k == 0:
+            auth_names = sorted(n for n, t in parse_authkeys(out_k).items() if 'private' in t)
     lists_ok = sum(1 for k in LISTS if os.path.exists(list_path(k)))
     sname = os.path.basename((cfg.get('script_path') or '').replace('\\', '/')) or 'KhoaVeyonServices.bat'
-    return {'cli': os.path.isfile(cli), 'cli_path': cli, 'items_have': have, 'items_total': total, 'items_err': err,
+    return {'cli': os.path.isfile(cli), 'cli_path': cli, 'items_have': have, 'items_total': total, 'items_err': err, 'auth_names': auth_names,
             'admin': is_admin(), 'lists_ok': lists_ok, 'lists_total': len(LISTS),
             'script_name': sname, 'script_in_payload': os.path.isfile(os.path.join(PAYLOAD_DIR, sname)),
             'script_found': bool(find_script_file(cfg)),
@@ -3590,6 +3923,8 @@ def api_setup_run(b):
         log('Đã tạo payload\\%s' % STUDENT_SETUP_BAT + (', lấy %s' % ', '.join(got) if got else ''), 'ok')
         if missing:
             log('Chưa tìm thấy %s: hãy thêm vào payload (trang Phân phối & chạy)' % ', '.join(missing), 'warn')
+    elif step == 'authkeys':
+        start_job(job_authkeys, hosts)
     elif step == 'veyon':
         def work():
             ok, msg = elevated_apply_veyon_items(cfg)
@@ -3604,7 +3939,7 @@ def api_setup_run(b):
             raise ApiError('Chưa có máy học sinh nào')
         start_job(job_setup_diagnose, hosts, step == 'push')
     else:
-        raise ApiError('Bước không hợp lệ')
+        raise ApiError('Bước "%s" không hợp lệ. Nếu vừa chép file mới, hãy tắt KhoaVeyon (Task Manager, pythonw.exe) rồi chạy lại Chay-KhoaVeyon.bat.' % step)
     return {'ok': True}
 
 
@@ -3675,7 +4010,9 @@ def api_log(q):
     with LOG_LOCK:
         items = [e for e in LOG if e['id'] > since]
         last = LOG_SEQ[0]
-    return {'items': items, 'last': last, 'busy': STATE['busy']}
+    with BUSY_LOCK:
+        jobs = [dict(j) for j in JOBS.values()]
+    return {'items': items, 'last': last, 'busy': STATE['busy'], 'jobs': jobs}
 
 
 def api_ping(_q=None):
