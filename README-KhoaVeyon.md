@@ -84,7 +84,7 @@ Nút **Tìm máy học sinh trong mạng** quét dải /24 của mạng hiện t
 - Tác vụ tự chạy lại (nhóm Users, kích hoạt khi đăng nhập, tạo từ XML qua `schtasks /Create /S máy /XML`) chưa thử trên Windows thật; nếu Nhật ký báo chưa cài được, hãy gửi nội dung lỗi để chỉnh. Thử bằng cách bật giám sát, khởi động lại máy học sinh, đăng nhập rồi mở một trang ngoài danh sách.
 - Phần báo động và tự nhận ảnh (1.3.0) đã được thử logic với thư mục giả thay cho `\\máy\C$` và máy chủ HTTP thật trên Linux; chưa thử trên Windows với nhiều máy học sinh thật. Tiếng bíp dùng `winsound` của Windows. Hãy thử trên 1 máy trước, mở một trang web ngoài `AllowPage.xlsx` rồi xem báo động có hiện trong vòng vài giây không.
 
-## Điểm danh vắng, dồn chỗ và thông báo "Máy này của ai" (từ bản 1.6.0)
+## Điểm danh vắng, dồn chỗ và thông báo "Máy này của ai" (từ bản 3.0.0)
 
 Ở trang **Lớp & lịch dạy**, dưới thời khóa biểu (cần đã nhập danh sách lớp và xếp chỗ ngồi):
 

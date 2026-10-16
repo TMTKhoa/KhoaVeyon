@@ -19,7 +19,7 @@ import threading
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Border, Side
 
-VERSION = '1.6.0'
+VERSION = '3.0.0'
 APP_TITLE = 'KhoaVeyon - Hỗ trợ quản lý lớp học'
 APP_DIR = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__))
 LEGACY_CONFIG_PATH = os.path.join(APP_DIR, 'KhoaVeyon.json')

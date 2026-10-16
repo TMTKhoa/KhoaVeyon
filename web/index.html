@@ -60,11 +60,32 @@ button,input,select,textarea{font:inherit;color:inherit}
 .stack{display:flex;flex-direction:column;gap:18px}
 .clsbadge{cursor:pointer;font-size:13px;padding:4px 12px}.clsbadge.off{background:#eef1f6;color:#6b7a99}
 .sgrid{border-collapse:separate;border-spacing:4px;width:100%}.sgrid th{font-size:12px;color:var(--muted);font-weight:700;text-align:center;padding:4px}.sgrid td{background:#f3f6fb;border-radius:8px;text-align:center;padding:9px 4px;font-weight:700;min-width:64px}.sgrid td.tm{background:none;color:var(--muted);font-weight:600;font-size:12px;white-space:nowrap}.sgrid td.on{background:var(--primary);color:#fff}.sgrid td.nil{background:none;border:0;padding:0}
-.seatwrap{overflow:auto;padding:4px}.tdesk{margin:0 auto 10px;width:min(360px,70%);text-align:center;background:#e7ecf6;border-radius:10px;padding:7px;font-weight:700;font-size:13px;color:#51607f}.tdoor{margin:10px auto 0;width:min(240px,50%);text-align:center;border-top:4px solid #8aa0c9;padding-top:5px;font-size:12px;color:var(--muted)}
-.seats{display:grid;gap:8px;justify-content:center}.seat{width:104px;min-height:56px;border:1px solid #d3dae8;border-radius:10px;background:#fff;padding:5px 6px;cursor:pointer;text-align:left;line-height:1.25}.seat:hover{border-color:var(--primary)}.seat b{font-size:12px;color:var(--muted)}.seat span{display:block;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.seat.bad{background:#fde8e8;border-color:#f3b4b4}.seat.bad b{color:#b91c1c}.seat.bad span{color:#b91c1c}.seat.guest{background:#fff4e0;border-color:#f5cf8f}.seat.guest b{color:#b45309}
-.frontrow{display:flex;gap:10px;margin-bottom:10px}.frontrow>div{flex:1;display:flex;flex-direction:column;gap:6px;align-items:center}.frontrow .tdesk,.frontrow .tdoor2{width:100%;margin:0}.tdoor2{text-align:center;background:#e8f3ec;border-radius:10px;padding:7px;font-weight:700;font-size:13px;color:#2f6b4a}
-.seat.full{background:var(--primary-l);border-color:#b8cdfa}.seat.full b{color:var(--primary-d)}
-.seat.absent{background:#f1f2f5;border-color:#d9dce3;border-style:dashed}.seat.absent span{color:#8a92a6;text-decoration:line-through}.seat.moved{background:#e6f6ec;border-color:#9bd4b0}.seat.moved b{color:#1f7a45}.seat.off b::after{content:' · tắt';color:#b45309}
+.room{background:linear-gradient(180deg,#f7f9fd,#eef2f9);border:1px solid var(--line);border-radius:18px;padding:22px 18px 18px;overflow:auto}
+.room .inner{width:max-content;margin:0 auto}
+.frontrow{display:flex;gap:12px;margin-bottom:14px}.frontrow>div{flex:1;display:flex;flex-direction:column;gap:6px;align-items:center}
+.tdesk{width:100%;text-align:center;background:#dfe6f4;border-radius:12px;padding:9px;font-weight:700;font-size:13px;color:#46557a;box-shadow:inset 0 -3px 0 #c9d3e8}
+.tdoor2{width:100%;text-align:center;background:#e1f3e8;border-radius:12px;padding:9px;font-weight:700;font-size:13px;color:#2f6b4a}
+.tdoor{margin:16px auto 0;width:200px;text-align:center;border-top:4px solid #9db0d6;padding-top:6px;font-size:12px;color:var(--muted)}
+.dayhead{font-size:11.5px;font-weight:700;color:var(--muted);text-align:center;text-transform:uppercase;letter-spacing:.04em}
+.seats{display:grid;column-gap:22px;row-gap:10px;justify-content:center}
+.seat{position:relative;width:132px;height:84px;border:1.5px solid #cfd8ea;border-radius:12px;background:#fff;padding:8px 8px 6px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;transition:.12s;box-shadow:0 1px 2px rgba(15,27,51,.05)}
+.seat:hover{border-color:var(--primary);transform:translateY(-1px);box-shadow:0 4px 12px rgba(37,99,235,.15)}
+.seat .sn{position:absolute;top:5px;left:5px;min-width:22px;height:22px;border-radius:7px;background:#e6ebf5;color:#51607f;font-size:11.5px;font-weight:700;line-height:22px;font-style:normal;text-align:center;padding:0 4px}
+.seat .av{width:30px;height:30px;border-radius:50%;background:#e6ebf5;color:#51607f;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;margin-top:2px}
+.seat .nm{font-size:12.5px;font-weight:700;line-height:1.15;text-align:center;max-width:116px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;color:var(--text)}
+.seat .tg{position:absolute;top:5px;right:5px;font-size:10px;font-weight:800;border-radius:6px;padding:2px 6px;font-style:normal}
+.seat.empty{border-style:dashed;background:transparent}.seat.empty .av{background:transparent;border:1.5px dashed #b9c4dc;color:#98a5c0;font-size:16px}.seat.empty .nm{color:#98a5c0;font-weight:600}
+.seat.full{background:#eaf1ff;border-color:#a9c3f7}.seat.full .sn{background:#cfe0ff;color:var(--primary-d)}.seat.full .av{background:var(--primary);color:#fff}
+.seat.guest{background:#fff6e5;border-color:#f2cf8e}.seat.guest .av{background:#f59e0b;color:#fff}.seat.guest .sn{background:#fde8bf;color:#b45309}
+.seat.absent{background:#f2f3f6;border-style:dashed;border-color:#cfd3dd}.seat.absent .av{background:#d5d9e3;color:#fff}.seat.absent .nm{text-decoration:line-through;color:#8a92a6}.seat.absent .tg{background:#e1e4ec;color:#6b7387}
+.seat.moved{background:#e7f7ed;border-color:#8fd0a8;box-shadow:0 0 0 3px rgba(22,163,74,.12)}.seat.moved .av{background:var(--ok);color:#fff}.seat.moved .sn{background:#c8ecd5;color:#1f7a45}.seat.moved .tg{background:var(--ok);color:#fff}
+.seat.shared{box-shadow:0 0 0 3px rgba(234,88,12,.15);border-color:#f5a672}.seat.shared .tg{background:var(--warn);color:#fff}
+.seat.bad{background:repeating-linear-gradient(135deg,#fdecec,#fdecec 8px,#fbe0e0 8px,#fbe0e0 16px);border-color:#f0a8a8}.seat.bad .av{background:var(--err);color:#fff}.seat.bad .nm{color:#b91c1c}.seat.bad .sn{background:#f8c9c9;color:#b91c1c}
+.seat.off::after{content:'';position:absolute;bottom:6px;right:7px;width:9px;height:9px;border-radius:50%;background:#f59e0b;box-shadow:0 0 0 2px #fff}
+.sstats{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.sstat{background:#f1f4fa;border-radius:99px;padding:5px 12px;font-size:13px;font-weight:600;color:#46557a}.sstat b{color:var(--text)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted);margin:12px 0 0;justify-content:center}.legend i{display:inline-block;width:12px;height:12px;border-radius:4px;margin-right:5px;vertical-align:-2px;border:1.5px solid}
+.lgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px 16px;margin-bottom:14px;padding:14px;background:#f7f9fd;border:1px solid var(--line);border-radius:12px}
+.lgrid label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:600}.lgrid input,.lgrid select{width:100%;padding:8px 10px;border:1px solid #d3dae8;border-radius:10px;font:inherit;background:#fff}
 .achips{display:flex;flex-wrap:wrap;gap:6px}.achip{border:1px solid #d3dae8;background:#fff;border-radius:99px;padding:5px 12px;cursor:pointer;font-size:13px;font-weight:600}.achip:hover{border-color:var(--primary)}.achip.ab{background:#fde8e8;border-color:#f3b4b4;color:#b91c1c;text-decoration:line-through}
 .cchips{display:flex;flex-wrap:wrap;gap:8px}.cchip{border:1px solid #d3dae8;background:#fff;border-radius:10px;padding:7px 12px;cursor:pointer;font-weight:700}.cchip small{color:var(--muted);font-weight:500;margin-left:6px}.cchip:hover{border-color:var(--primary)}.cchip.on{background:var(--primary-l);border-color:var(--primary);color:var(--primary-d)}
 .badge{background:var(--primary-l);color:var(--primary-d);border-radius:99px;font-size:12px;font-weight:700;padding:2px 10px}
@@ -298,7 +319,7 @@ const PAGES = [
 ];
 
 const S = {setup:null, st:null, hosts:[], sel:new Set(), page:'control', lists:{}, payload:[], logSeq:0, logOpen:true, busy:false,
-  school:null, att:null, schoolBrief:null, seatCls:'', stu:{}, violCls:'', report:null, reportRange:'today', groupToasts:{}, alerts:[], alertSeq:0, alertInit:false, unseen:0, watching:0, violHost:''};
+  school:null, att:null, layOpen:false, schoolBrief:null, seatCls:'', stu:{}, violCls:'', report:null, reportRange:'today', groupToasts:{}, alerts:[], alertSeq:0, alertInit:false, unseen:0, watching:0, violHost:''};
 
 /* ---------- tiện ích giao diện ---------- */
 function toast(msg, kind = '') {
@@ -1121,42 +1142,58 @@ async function seatPick(n) {
   await seatSave({seats, broken: [...broken]});
 }
 
+function seatInit(name) {
+  const w = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!w.length) return '＋';
+  return (w.length > 1 ? w[0][0] + w[w.length - 1][0] : w[0].slice(0, 2)).toUpperCase();
+}
+
 function viewSeats() {
   const sc = S.school, cls = (sc.classes || []);
   if (!cls.length) return '';
   if (!S.seatCls || !cls.some(c => c.name === S.seatCls)) S.seatCls = (sc.current && cls.some(c => c.name === sc.current.cls)) ? sc.current.cls : cls[0].name;
   const lay = curLay(), num = seatNumbers(lay), cnt = (cls.find(c => c.name === S.seatCls) || {}).count || 0;
-  const by = lay.seats, inCls0 = new Set(S.stu[S.seatCls] || []), filled = Object.values(by).filter(v => !inCls0.size || inCls0.has(v)).length;
-  const bad = new Set(lay.broken || []), inCls = new Set(S.stu[S.seatCls] || []);
+  const by = lay.seats, inCls = new Set(S.stu[S.seatCls] || []), filled = Object.values(by).filter(v => !inCls.size || inCls.has(v)).length;
+  const bad = new Set(lay.broken || []);
   const att = (S.att && S.att.cls === S.seatCls) ? S.att : null, eff = att ? att.seats : by, off = new Set(att ? att.offline : []);
+  const shareAt = {}; if (att) Object.entries(att.shares || {}).forEach(([n, m]) => { (shareAt[m] = shareAt[m] || []).push(n); });
+  const dayNo = c => lay.first === 'left' ? c + 1 : lay.cols - c;
+  const head = num[0].map((_, c) => `<div class="dayhead">Dãy ${dayNo(c)}</div>`).join('');
   const cells = num.map(row => row.map(n => {
     const isBad = bad.has(n), shown = eff[n] || '', guest = shown && inCls.size && !inCls.has(shown);
     const moved = att && shown && att.moves[shown] === n, gone = att && !moved && by[n] && att.absent.includes(by[n]);
-    const cl = isBad ? 'bad' : moved ? 'moved' : gone ? 'absent' : guest ? 'guest' : shown ? 'full' : '';
-    const label = isBad ? '' : gone ? by[n] : shown;
-    return `<button class="seat ${cl} ${off.has(n) && !isBad ? 'off' : ''}" data-act="seatpick" data-n="${n}" title="${esc(isBad ? 'Máy hỏng' : gone ? 'Vắng: ' + by[n] : moved ? shown + ' (được chuyển đến)' : shown || 'Chưa xếp')}"><b>Máy ${n}${isBad ? ' · hỏng' : gone ? ' · vắng' : moved ? ' · mới' : ''}</b><span>${esc(label)}${guest ? ' (ngoài lớp)' : ''}</span></button>`; }).join('')).join('');
+    const mates = shareAt[n] || [];
+    const cl = isBad ? 'bad' : moved ? 'moved' : gone ? 'absent' : guest ? 'guest' : shown ? 'full' : 'empty';
+    const nm = isBad ? 'Máy hỏng' : gone ? by[n] : shown || 'Trống';
+    const av = isBad ? '✕' : gone ? seatInit(by[n]) : shown ? seatInit(shown) : '＋';
+    const tag = isBad ? '' : gone ? '<em class="tg">vắng</em>' : mates.length ? `<em class="tg">+${mates.length} chung</em>` : moved ? '<em class="tg">mới</em>' : '';
+    const tip = isBad ? 'Máy hỏng' : gone ? 'Vắng: ' + by[n] : moved ? shown + ' (được chuyển đến)' : (shown || 'Chưa xếp') + (mates.length ? ' · ngồi chung với ' + mates.join(', ') : '') + (off.has(n) ? ' · máy đang tắt' : '');
+    return `<button class="seat ${cl} ${mates.length ? 'shared' : ''} ${off.has(n) && !isBad ? 'off' : ''}" data-act="seatpick" data-n="${n}" title="${esc(tip)}"><i class="sn">${n}</i>${tag}<span class="av">${esc(av)}</span><span class="nm">${esc(nm)}</span></button>`; }).join('')).join('');
   const slot = {left: [], center: [], right: []};
   slot[lay.gv].push('<div class="tdesk">🖥 Bàn giáo viên</div>');
   if (lay.door === 'tl') slot.left.push('<div class="tdoor2">🚪 Cửa ra vào</div>');
   if (lay.door === 'tr') slot.right.push('<div class="tdoor2">🚪 Cửa ra vào</div>');
-  const front = `<div class="frontrow" style="width:${lay.cols * 104 + (lay.cols - 1) * 8}px;margin-left:auto;margin-right:auto">${['left', 'center', 'right'].map(k => `<div>${slot[k].join('')}</div>`).join('')}</div>`;
+  const gw = lay.cols * 132 + (lay.cols - 1) * 22;
+  const front = `<div class="frontrow" style="width:${gw}px">${['left', 'center', 'right'].map(k => `<div>${slot[k].join('')}</div>`).join('')}</div>`;
   const opt = (v, cur, t) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${t}</option>`;
+  const settings = S.layOpen ? `<div class="lgrid">
+      <label>Số dãy<input type="number" min="1" max="12" data-lay="cols" value="${lay.cols}"></label>
+      <label>Máy mỗi dãy<input type="number" min="1" max="20" data-lay="per" value="${lay.per}"></label>
+      <label>Đánh số từ<select data-lay="from">${opt('teacher', lay.from, 'Bàn giáo viên (đầu dãy)')}${opt('door', lay.from, 'Cửa ra vào (cuối dãy)')}</select></label>
+      <label>Dãy số 1 ở bên<select data-lay="first">${opt('left', lay.first, 'Trái')}${opt('right', lay.first, 'Phải')}</select></label>
+      <label>Tên máy mẫu<input type="text" data-lay="pattern" value="${esc(lay.pattern)}" placeholder="MAY{n}"></label>
+      <label>Bàn giáo viên<select data-lay="gv">${opt('left', lay.gv, 'Góc trái')}${opt('center', lay.gv, 'Giữa')}${opt('right', lay.gv, 'Góc phải')}</select></label>
+      <label>Cửa ra vào<select data-lay="door">${opt('back', lay.door, 'Cuối lớp')}${opt('tl', lay.door, 'Trên cùng, bên trái')}${opt('tr', lay.door, 'Trên cùng, bên phải')}</select></label>
+      <label>&nbsp;<button class="btn ghost sm" data-act="seatall" title="Chép số dãy, số máy và cách đánh số sang tất cả các lớp">Áp dụng kiểu phòng cho mọi lớp</button></label>
+      <p class="hint" style="grid-column:1/-1;margin:0">Số máy tăng dần dọc theo từng dãy, ${lay.from === 'teacher' ? 'bắt đầu từ máy gần bàn giáo viên' : 'bắt đầu từ máy gần cửa'}, dãy số 1 ở bên ${lay.first === 'left' ? 'trái' : 'phải'} (nhìn từ bàn giáo viên xuống lớp). Số máy đổi thành tên máy bằng <b>Tên máy mẫu</b> (ví dụ <code>MAY{n}</code> khớp MAY1, MAY01, MAY12); để trống thì theo thứ tự danh sách máy ở trang Điều khiển lớp.</p></div>` : '';
+  const lg = (bg, bd, t) => `<span><i style="background:${bg};border-color:${bd}"></i>${t}</span>`;
   return `${viewAttendance()}<section class="card"><div class="toolbar" style="margin-bottom:12px"><b>Sơ đồ chỗ ngồi</b>
-      <select id="seatClsSel">${cls.map(c => `<option value="${esc(c.name)}" ${c.name === S.seatCls ? 'selected' : ''}>Lớp ${esc(c.name)}</option>`).join('')}</select>
-      <span class="muted">${filled}/${cnt} học sinh đã có chỗ · ${lay.cols * lay.per - bad.size} máy dùng được${bad.size ? ` · ${bad.size} máy hỏng` : ''}</span><span class="grow"></span>
-      <button class="btn" data-act="seatauto">Tự xếp theo danh sách</button><button class="btn ghost" data-act="seatclear">Xóa chỗ ngồi</button></div>
-    <div class="row" style="gap:16px;flex-wrap:wrap;margin-bottom:14px">
-      <label class="row" style="gap:6px"><span class="muted">Số dãy</span><input type="number" min="1" max="12" data-lay="cols" value="${lay.cols}" style="width:64px"></label>
-      <label class="row" style="gap:6px"><span class="muted">Máy mỗi dãy</span><input type="number" min="1" max="20" data-lay="per" value="${lay.per}" style="width:64px"></label>
-      <label class="row" style="gap:6px"><span class="muted">Đánh số từ</span><select data-lay="from">${opt('teacher', lay.from, 'Bàn giáo viên (đầu dãy)')}${opt('door', lay.from, 'Cửa ra vào (cuối dãy)')}</select></label>
-      <label class="row" style="gap:6px"><span class="muted">Dãy số 1 ở bên</span><select data-lay="first">${opt('left', lay.first, 'Trái')}${opt('right', lay.first, 'Phải')}</select></label>
-      <label class="row" style="gap:6px"><span class="muted">Tên máy mẫu</span><input type="text" data-lay="pattern" value="${esc(lay.pattern)}" placeholder="MAY{n}" style="width:120px"></label>
-      <label class="row" style="gap:6px"><span class="muted">Bàn giáo viên</span><select data-lay="gv">${opt('left', lay.gv, 'Góc trái')}${opt('center', lay.gv, 'Giữa')}${opt('right', lay.gv, 'Góc phải')}</select></label>
-      <label class="row" style="gap:6px"><span class="muted">Cửa ra vào</span><select data-lay="door">${opt('back', lay.door, 'Cuối lớp')}${opt('tl', lay.door, 'Trên cùng, bên trái')}${opt('tr', lay.door, 'Trên cùng, bên phải')}</select></label>
-      <button class="btn ghost sm" data-act="seatall" title="Chép số dãy, số máy và cách đánh số sang tất cả các lớp">Áp dụng kiểu phòng cho mọi lớp</button>
-    </div>
-    <div class="seatwrap">${front}<div class="seats" style="grid-template-columns:repeat(${lay.cols},104px)">${cells}</div>${lay.door === 'back' ? '<div class="tdoor">🚪 Cửa ra vào</div>' : ''}</div>
-    <p class="hint" style="margin-bottom:0">Số máy tăng dần dọc theo từng dãy, ${lay.from === 'teacher' ? 'bắt đầu từ máy gần bàn giáo viên' : 'bắt đầu từ máy gần cửa'}, dãy số 1 ở bên ${lay.first === 'left' ? 'trái' : 'phải'} (nhìn từ bàn giáo viên xuống lớp). Bàn giáo viên và cửa chỉ để vẽ cho giống phòng thật, không ảnh hưởng cách đánh số. Số máy được đổi thành tên máy bằng <b>Tên máy mẫu</b> (ví dụ <code>MAY{n}</code> khớp MAY1, MAY01, MAY12). Để trống thì lấy theo thứ tự danh sách máy ở trang Điều khiển lớp. Khi học sinh vi phạm, chương trình ghi tên em ngồi máy đó.</p></section>`;
+      <select id="seatClsSel">${cls.map(c => `<option value="${esc(c.name)}" ${c.name === S.seatCls ? 'selected' : ''}>Lớp ${esc(c.name)}</option>`).join('')}</select><span class="grow"></span>
+      <button class="btn" data-act="seatauto">Tự xếp theo danh sách</button><button class="btn ghost" data-act="seatclear">Xóa chỗ ngồi</button><button class="btn ghost" data-act="layopen">⚙ ${S.layOpen ? 'Ẩn cài đặt phòng' : 'Cài đặt phòng'}</button></div>
+    <div class="sstats" style="margin-bottom:12px"><span class="sstat"><b>${filled}/${cnt}</b> học sinh đã có chỗ</span><span class="sstat"><b>${lay.cols * lay.per - bad.size}</b> máy dùng được</span>${bad.size ? `<span class="sstat" style="background:#fdecec;color:#b91c1c"><b>${bad.size}</b> máy hỏng</span>` : ''}${att && att.absent.length ? `<span class="sstat"><b>${att.absent.length}</b> vắng hôm nay</span>` : ''}<span class="muted" style="font-size:12.5px">Bấm vào một máy để xếp chỗ hoặc báo máy hỏng</span></div>
+    ${settings}
+    <div class="room"><div class="inner">${front}<div class="seats" style="grid-template-columns:repeat(${lay.cols},132px)">${head}${cells}</div>${lay.door === 'back' ? '<div class="tdoor">🚪 Cửa ra vào</div>' : ''}</div></div>
+    <div class="legend">${lg('#eaf1ff', '#a9c3f7', 'Có người ngồi')}${lg('transparent', '#b9c4dc', 'Trống')}${lg('#f2f3f6', '#cfd3dd', 'Vắng')}${lg('#e7f7ed', '#8fd0a8', 'Được chuyển đến')}${lg('#fff6e5', '#f2cf8e', 'Ngoài danh sách lớp')}${lg('#fdecec', '#f0a8a8', 'Máy hỏng')}<span><i style="background:#f59e0b;border-color:#f59e0b;border-radius:50%"></i>Máy đang tắt</span></div></section>`;
 }
 
 function viewSchool() {
@@ -1397,6 +1434,7 @@ document.addEventListener('click', async e => {
     case 'schoolimport': $('#schoolFile_' + el.dataset.kind).click(); break;
     case 'schoolset': await schoolSet({action: 'set', cls: el.dataset.cls}); break;
     case 'seatpick': await seatPick(+el.dataset.n); break;
+    case 'layopen': S.layOpen = !S.layOpen; render(); break;
     case 'attoggle': await attAct({action: 'toggle', name: el.dataset.name}); break;
     case 'attpresent': await attAct({action: 'present'}); break;
     case 'attrecheck': toast('Đang kiểm tra máy bật/tắt...'); await attAct({action: 'recheck'}); break;
