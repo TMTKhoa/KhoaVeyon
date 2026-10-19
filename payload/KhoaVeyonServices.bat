@@ -4,11 +4,14 @@ REM ============================================================
 REM  KhoaVeyonServices.bat  -  for Veyon clients (keep in C:\cmd)
 REM
 REM  -install      one-time setup per PC (needs admin password once)
+REM                (also installs service KhoaVeyonAutoLog: activity log at every logon)
 REM  -uninstall    remove services, rules and app blocks
 REM  -killapp      force close all open apps
 REM  -blockall     block all internet (LAN stays on)
 REM  -allowpage    block internet EXCEPT sites listed in AllowPage.xlsx
 REM  -allowall     allow all internet again
+REM  -webonly      allow ONLY the sites in AllowPage.xlsx via browser policy (covers subdomains + their API requests)
+REM  -weboff       undo -webonly (restore the browser policy that was there before)
 REM  -blockapp     block apps/folders listed in BlockAppList.xlsx
 REM  -unblockapp   unblock those apps again
 REM  -keepapp      close all apps EXCEPT those listed in KeepAppList.xlsx
@@ -31,11 +34,22 @@ REM                      Settings, Registry Editor, cmd and PowerShell)
 REM  -lockall-stop       undo all of the above
 REM  -clearhistory       close Chrome/Firefox and clear their browsing history
 REM                      (Firefox: this also clears bookmarks, see README)
+REM  -blockai            BLOCK ALL AI TOOLS: AI websites (browser policy + hosts file),
+REM                      AI built into the browser (Gemini in Chrome, Copilot in Edge,
+REM                      Firefox AI, Brave Leo) and AI desktop apps. Needs the service
+REM  -allowai            undo -blockai (puts back the settings that were there before)
 REM ============================================================
 
 REM ===== SETTINGS =====
 REM Folder that holds AllowPage.xlsx and BlockAppList.xlsx (keep the last backslash)
 set "LISTDIR=C:\cmd\"
+REM -blockai options (1 = yes, 0 = no)
+REM AI_USE_HOSTS        also block AI sites in the hosts file (covers browsers without policy support)
+REM AI_CLOSE_BROWSERS   close open browsers the first time -blockai runs, so open AI tabs stop working
+REM AI_BLOCK_EXTENSIONS stop installing and running ALL Chrome/Edge extensions (AI helper extensions)
+set "AI_USE_HOSTS=1"
+set "AI_CLOSE_BROWSERS=1"
+set "AI_BLOCK_EXTENSIONS=0"
 REM ====================
 
 set "SELF=%~f0"
@@ -48,6 +62,8 @@ if /i "%ACT%"=="-uninstall"  goto UNINSTALL
 if /i "%ACT%"=="-blockall"   set "MODE=blockall"
 if /i "%ACT%"=="-allowpage"  set "MODE=allowpage"
 if /i "%ACT%"=="-allowall"   set "MODE=allowall"
+if /i "%ACT%"=="-webonly"    set "MODE=webonly"
+if /i "%ACT%"=="-weboff"     set "MODE=weboff"
 if /i "%ACT%"=="-blockapp"   set "MODE=blockapp"
 if /i "%ACT%"=="-unblockapp" set "MODE=unblockapp"
 if /i "%ACT%"=="-keepapp"    set "MODE=keepapp"
@@ -66,6 +82,8 @@ if /i "%ACT%"=="-lockrun-start"      set "MODE=lockrun-start"
 if /i "%ACT%"=="-lockrun-stop"       set "MODE=lockrun-stop"
 if /i "%ACT%"=="-lockall-start"      set "MODE=lockall-start"
 if /i "%ACT%"=="-lockall-stop"       set "MODE=lockall-stop"
+if /i "%ACT%"=="-blockai"            set "MODE=blockai"
+if /i "%ACT%"=="-allowai"            set "MODE=allowai"
 if not defined MODE goto HELP
 
 REM These run in the kid's own session, so they need no admin rights and no service
@@ -80,6 +98,9 @@ set "KV_MODE=%MODE%"
 set "KV_DIR=%~dp0"
 set "KV_LIST=%LISTDIR%"
 set "KV_SELF=%SELF%"
+set "KV_AI_HOSTS=%AI_USE_HOSTS%"
+set "KV_AI_CLOSE=%AI_CLOSE_BROWSERS%"
+set "KV_AI_EXT=%AI_BLOCK_EXTENSIONS%"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$t=[IO.File]::ReadAllText($env:KV_SELF); iex $t.Substring($t.IndexOf('#PS1'+'START'))"
 exit /b 0
 
@@ -95,7 +116,7 @@ if errorlevel 1 (
   powershell -NoProfile -Command "Start-Process '%SELF%' -ArgumentList '-install' -Verb RunAs"
   exit /b
 )
-for %%M in (blockall allowpage allowall blockapp unblockapp) do (
+for %%M in (blockall allowpage allowall webonly weboff blockapp unblockapp blockai allowai) do (
   sc stop KhoaVeyonService_%%M >nul 2>&1
   sc delete KhoaVeyonService_%%M >nul 2>&1
   sc create KhoaVeyonService_%%M binPath= "cmd.exe /c %SELF% -%%M" start= demand >nul
@@ -106,20 +127,41 @@ REM The SYSTEM services below execute these .bat files as SYSTEM, so anyone who 
 REM edit this folder can run arbitrary code as SYSTEM. See the README security note.
 if not exist "C:\cmd\log" mkdir "C:\cmd\log" >nul 2>&1
 
-REM Auto-start activity logging whenever any student logs on (registered once, fires for every logon)
-powershell -NoProfile -Command ^
- "$a = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c \"%SELF%\" -activitylog-start';" ^
- "$t = New-ScheduledTaskTrigger -AtLogOn;" ^
- "$p = New-ScheduledTaskPrincipal -GroupId 'BUILTIN\Users' -RunLevel Limited;" ^
- "$s = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries;" ^
- "Register-ScheduledTask -TaskName 'KhoaVeyonAutoLog' -Action $a -Trigger $t -Principal $p -Settings $s -Force | Out-Null"
+REM --- Evidence folder: students may ADD screenshots but may NOT delete/rename them (so a student
+REM     cannot wipe the evidence in the few seconds before the teacher PC collects it).
+REM     We deny the "delete / delete-child / change-permissions / take-ownership" rights to the
+REM     INTERACTIVE group (anyone logged on AT the PC = the student). The teacher reaches the files
+REM     over the network as an admin (NETWORK logon, not INTERACTIVE), so the teacher can still
+REM     copy AND delete them. SIDs used so it works on any Windows language:
+REM       S-1-5-18 SYSTEM, S-1-5-32-544 Administrators, S-1-5-32-545 Users, S-1-5-4 INTERACTIVE.
+set "KVEVID=C:\Users\Public\KhoaVeyonEvidence"
+if not exist "%KVEVID%" mkdir "%KVEVID%" >nul 2>&1
+icacls "%KVEVID%" /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)(RX,WD,AD,WA,WEA,REA,RA)" >nul 2>&1
+icacls "%KVEVID%" /deny "*S-1-5-4:(OI)(CI)(DE,DC,WDAC,WO)" >nul 2>&1
 
-call :LOGEVENT install "Setup completed"
+REM Auto-start activity logging whenever any student logs on: Windows service KhoaVeyonAutoLog
+REM (replaces the old scheduled task of the same name, which is removed). The service code and
+REM its installer are in the KVSVC block (between the KVSVC markers) near the end of this file.
+set "KV_SELF=%SELF%"
+set "AUTOLOG_OK=1"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$t=[IO.File]::ReadAllText($env:KV_SELF); $i=$t.IndexOf('#KVSVC'+'START'); $j=$t.IndexOf('#KVSVC'+'END'); iex $t.Substring($i, $j-$i)"
+if errorlevel 1 set "AUTOLOG_OK=0"
+
+if "%AUTOLOG_OK%"=="1" (
+  call :LOGEVENT install "Setup completed"
+) else (
+  call :LOGEVENT install "Setup completed, but service KhoaVeyonAutoLog FAILED"
+)
 echo.
 echo Install done. Services KhoaVeyonService_* created.
-echo Activity logging will start automatically at every logon.
+if "%AUTOLOG_OK%"=="1" (
+  echo Activity logging will start automatically at every logon ^(service KhoaVeyonAutoLog^).
+) else (
+  echo WARNING: service KhoaVeyonAutoLog could not be installed, see the message above.
+)
 echo Log folder: C:\cmd\log
 pause
+if "%AUTOLOG_OK%"=="0" exit /b 2
 exit /b 0
 
 :UNINSTALL
@@ -129,16 +171,26 @@ if errorlevel 1 (
   exit /b
 )
 call "%SELF%" -allowall
+call "%SELF%" -weboff
 call "%SELF%" -unblockapp
 call "%SELF%" -activitylog-stop
 call "%SELF%" -lockapp-stop
 call "%SELF%" -lockall-stop
-for %%M in (blockall allowpage allowall blockapp unblockapp) do (
+call "%SELF%" -allowai
+for %%M in (blockall allowpage allowall webonly weboff blockapp unblockapp blockai allowai) do (
   sc stop KhoaVeyonService_%%M >nul 2>&1
   sc delete KhoaVeyonService_%%M >nul 2>&1
 )
+sc stop KhoaVeyonAutoLog >nul 2>&1
+powershell -NoProfile -Command "try { (Get-Service KhoaVeyonAutoLog -ErrorAction Stop).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20)) } catch {}"
+sc delete KhoaVeyonAutoLog >nul 2>&1
+if exist "%ProgramFiles%\KhoaVeyon\KhoaVeyonAutoLog.exe" del /f /q "%ProgramFiles%\KhoaVeyon\KhoaVeyonAutoLog.exe" >nul 2>&1
+rd "%ProgramFiles%\KhoaVeyon" >nul 2>&1
+REM Old versions used a scheduled task with the same name: remove it too if it is still there
 schtasks /delete /tn "KhoaVeyonAutoLog" /f >nul 2>&1
-call :LOGEVENT uninstall "Removed services, rules and scheduled tasks"
+REM Give the evidence folder its normal (inherited) permissions back
+icacls "C:\Users\Public\KhoaVeyonEvidence" /reset /T /C >nul 2>&1
+call :LOGEVENT uninstall "Removed services (incl. KhoaVeyonAutoLog), rules and app blocks"
 echo.
 echo Uninstall done.
 pause
@@ -153,8 +205,391 @@ powershell -NoProfile -Command ^
 exit /b 0
 
 :HELP
-echo Usage: KhoaVeyonServices.bat [-install ^| -uninstall ^| -killapp ^| -blockall ^| -allowpage ^| -allowall ^| -blockapp ^| -unblockapp ^| -keepapp ^| -lockdown ^| -unlock ^| -mute ^| -unmute ^| -activitylog-start ^| -activitylog-stop ^| -exportlog ^| -lockapp-start ^| -lockapp-stop ^| -lockrun-start ^| -lockrun-stop ^| -lockall-start ^| -lockall-stop ^| -clearhistory]
+echo Usage: KhoaVeyonServices.bat [-install ^| -uninstall ^| -killapp ^| -blockall ^| -allowpage ^| -allowall ^| -webonly ^| -weboff ^| -blockapp ^| -unblockapp ^| -keepapp ^| -lockdown ^| -unlock ^| -mute ^| -unmute ^| -activitylog-start ^| -activitylog-stop ^| -exportlog ^| -lockapp-start ^| -lockapp-stop ^| -lockrun-start ^| -lockrun-stop ^| -lockall-start ^| -lockall-stop ^| -blockai ^| -allowai ^| -clearhistory]
 exit /b 0
+
+#KVSVCSTART
+# ---------------------------------------------------------------------------------------------
+# Installs the Windows service KhoaVeyonAutoLog (replaces the old "KhoaVeyonAutoLog" scheduled
+# task). Called only from :INSTALL, already elevated. The batch code never reaches this block
+# (every label above ends with exit /b), and the embedded PowerShell part below never includes it.
+#
+# Why a real service and not "sc create ... cmd.exe" like the others: a service runs in
+# session 0 and cannot see the student's windows, but -activitylog-start must run INSIDE the
+# student's session. So the service (SYSTEM) listens for logon events and starts
+#     cmd.exe /c "<this .bat>" -activitylog-start
+# in that session, with the student's own (limited) token, hidden. Same effect as the old task
+# (group Users, at logon, RunLevel Limited), plus: it also covers a student who is already
+# logged on when the service starts (right after -install, or a slow boot).
+# Exit code: 0 = service installed and running, 1 = failed (reason printed).
+# ---------------------------------------------------------------------------------------------
+$ErrorActionPreference = 'Continue'
+$svcName = 'KhoaVeyonAutoLog'
+$bat     = $env:KV_SELF
+$svcDir  = Join-Path $env:ProgramFiles 'KhoaVeyon'   # admin-only folder: students cannot swap the exe
+$svcExe  = Join-Path $svcDir 'KhoaVeyonAutoLog.exe'
+$binPath = '"{0}" "{1}"' -f $svcExe, $bat
+
+$csSource = @'
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.ServiceProcess;
+using System.Text;
+using System.Threading;
+
+public class KvAutoLogService : ServiceBase
+{
+    static string Script = @"C:\cmd\KhoaVeyonServices.bat";
+    static readonly object Gate = new object();
+    static readonly Dictionary<int, DateTime> LastLaunch = new Dictionary<int, DateTime>();
+    // "Guard" processes to keep alive in each student session (e.g. the violation monitor). The teacher
+    // PC writes one command line per guard into vcfg\kvguard.txt; this service relaunches a guard within
+    // ~30s whenever it is not running (for example after a student kills it in Task Manager). Removing the
+    // line (teacher turns the feature off) stops the relaunching.
+    static readonly Dictionary<string, int> GuardPids = new Dictionary<string, int>();
+    static System.Threading.Timer GuardTimer;
+
+    static string GuardFile
+    {
+        get
+        {
+            string dir = Path.GetDirectoryName(Script);
+            if (string.IsNullOrEmpty(dir)) dir = @"C:\cmd";
+            return Path.Combine(dir, "vcfg", "kvguard.txt");
+        }
+    }
+
+    public KvAutoLogService()
+    {
+        ServiceName = "KhoaVeyonAutoLog";
+        CanStop = true;
+        CanHandleSessionChangeEvent = true;
+        AutoLog = false;
+    }
+
+    protected override void OnStart(string[] args)
+    {
+        // Students already logged on (service just installed, or it started after the logon)
+        ThreadPool.QueueUserWorkItem(delegate { LaunchForActiveSessions(); });
+        // Keep the guard processes (violation monitor) alive, checking every 30 seconds.
+        GuardTimer = new System.Threading.Timer(delegate { try { EnsureGuards(); } catch { } }, null, 15000, 30000);
+    }
+
+    protected override void OnStop()
+    {
+        if (GuardTimer != null) { GuardTimer.Dispose(); GuardTimer = null; }
+    }
+
+    protected override void OnSessionChange(SessionChangeDescription d)
+    {
+        if (d.Reason == SessionChangeReason.SessionLogon)
+        {
+            int id = d.SessionId;
+            ThreadPool.QueueUserWorkItem(delegate { LaunchWithRetry(id, 5); try { EnsureGuards(); } catch { } });
+        }
+    }
+
+    // ---------- Win32 ----------
+    [StructLayout(LayoutKind.Sequential)]
+    struct WTS_SESSION_INFO { public int SessionId; public IntPtr pWinStationName; public int State; }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct STARTUPINFO
+    {
+        public int cb; public string lpReserved; public string lpDesktop; public string lpTitle;
+        public int dwX; public int dwY; public int dwXSize; public int dwYSize;
+        public int dwXCountChars; public int dwYCountChars; public int dwFillAttribute;
+        public int dwFlags; public short wShowWindow; public short cbReserved2;
+        public IntPtr lpReserved2; public IntPtr hStdInput; public IntPtr hStdOutput; public IntPtr hStdError;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct PROCESS_INFORMATION { public IntPtr hProcess; public IntPtr hThread; public int dwProcessId; public int dwThreadId; }
+
+    [DllImport("wtsapi32.dll", SetLastError = true)]
+    static extern bool WTSQueryUserToken(int sessionId, out IntPtr token);
+    [DllImport("wtsapi32.dll", SetLastError = true)]
+    static extern bool WTSEnumerateSessions(IntPtr server, int reserved, int version, out IntPtr info, out int count);
+    [DllImport("wtsapi32.dll")]
+    static extern void WTSFreeMemory(IntPtr p);
+    [DllImport("userenv.dll", SetLastError = true)]
+    static extern bool CreateEnvironmentBlock(out IntPtr env, IntPtr token, bool inherit);
+    [DllImport("userenv.dll", SetLastError = true)]
+    static extern bool DestroyEnvironmentBlock(IntPtr env);
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    static extern bool CreateProcessAsUser(IntPtr token, string app, StringBuilder cmd, IntPtr pa, IntPtr ta,
+        bool inherit, int flags, IntPtr env, string cwd, ref STARTUPINFO si, out PROCESS_INFORMATION pi);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool CloseHandle(IntPtr h);
+
+    const int WTSActive = 0;
+    const int STARTF_USESHOWWINDOW = 0x1;
+    const short SW_HIDE = 0;
+    const int CREATE_UNICODE_ENVIRONMENT = 0x400;
+    const int CREATE_NO_WINDOW = 0x08000000;
+
+    static void LaunchForActiveSessions()
+    {
+        IntPtr info; int count;
+        if (!WTSEnumerateSessions(IntPtr.Zero, 0, 1, out info, out count)) return;
+        try
+        {
+            int size = Marshal.SizeOf(typeof(WTS_SESSION_INFO));
+            for (int i = 0; i < count; i++)
+            {
+                WTS_SESSION_INFO s = (WTS_SESSION_INFO)Marshal.PtrToStructure(new IntPtr(info.ToInt64() + i * size), typeof(WTS_SESSION_INFO));
+                if (s.SessionId != 0 && s.State == WTSActive) LaunchWithRetry(s.SessionId, 0);
+            }
+        }
+        finally { WTSFreeMemory(info); }
+    }
+
+    // The user token can be missing for a few seconds right after logon: wait, then retry for ~1 minute.
+    static void LaunchWithRetry(int sessionId, int firstDelaySec)
+    {
+        if (firstDelaySec > 0) Thread.Sleep(firstDelaySec * 1000);
+        lock (Gate)
+        {
+            DateTime last;
+            if (LastLaunch.TryGetValue(sessionId, out last) && (DateTime.Now - last).TotalSeconds < 60) return;
+            LastLaunch[sessionId] = DateTime.Now;
+        }
+        string cmdExe = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+        string activity = "\"" + cmdExe + "\" /c \"\"" + Script + "\" -activitylog-start\"";
+        for (int attempt = 1; attempt <= 12; attempt++)
+        {
+            string err; int pid = Launch(sessionId, cmdExe, activity, out err);
+            if (pid > 0) { Log("session " + sessionId + ": started -activitylog-start"); return; }
+            if (attempt == 12) Log("session " + sessionId + ": could not start activity log (" + err + ")");
+            Thread.Sleep(5000);
+        }
+    }
+
+    // Keep each guard command (one per line in kvguard.txt) running in every active student session.
+    static void EnsureGuards()
+    {
+        string[] lines;
+        try
+        {
+            if (!File.Exists(GuardFile)) { return; }
+            lines = File.ReadAllLines(GuardFile);
+        }
+        catch { return; }
+
+        var cmds = new System.Collections.Generic.List<string>();
+        foreach (string raw in lines) { string l = (raw ?? "").Trim(); if (l.Length > 0) cmds.Add(l); }
+
+        var sessions = ActiveSessions();
+        lock (Gate)
+        {
+            // Drop tracking for commands/sessions that are no longer wanted
+            var stale = new System.Collections.Generic.List<string>();
+            foreach (var key in GuardPids.Keys)
+            {
+                int bar = key.IndexOf('|');
+                int sid = int.Parse(key.Substring(0, bar));
+                string cmd = key.Substring(bar + 1);
+                if (!cmds.Contains(cmd) || !sessions.Contains(sid)) stale.Add(key);
+            }
+            foreach (var k in stale) GuardPids.Remove(k);
+        }
+
+        foreach (int sid in sessions)
+        {
+            foreach (string cmd in cmds)
+            {
+                string key = sid + "|" + cmd;
+                int pid;
+                lock (Gate) { if (!GuardPids.TryGetValue(key, out pid)) pid = -1; }
+                // Already running? The watch script refreshes alive.txt every 10s, so a fresh heartbeat means it is
+                // up (even the copy the teacher PC started directly). Otherwise fall back to the PID we launched.
+                if (GuardAlive(cmd, pid)) continue;
+                string err; int newPid = Launch(sid, null, cmd, out err);
+                if (newPid > 0)
+                {
+                    lock (Gate) { GuardPids[key] = newPid; }
+                    Log("session " + sid + ": (re)started guard");
+                }
+            }
+        }
+    }
+
+    static bool ProcessAlive(int pid)
+    {
+        if (pid <= 0) return false;
+        try { Process.GetProcessById(pid); return true; }
+        catch { return false; }
+    }
+
+    // Is this guard already running? Prefer the watch heartbeat file (-Out ...\alive.txt, refreshed every 10s);
+    // if the command has no -Out, fall back to the PID we last launched.
+    static bool GuardAlive(string cmd, int trackedPid)
+    {
+        string outDir = ExtractArg(cmd, "-Out");
+        if (!string.IsNullOrEmpty(outDir))
+        {
+            try
+            {
+                string alive = Path.Combine(outDir, "alive.txt");
+                if (File.Exists(alive) && (DateTime.Now - File.GetLastWriteTime(alive)).TotalSeconds < 40) return true;
+            }
+            catch { }
+            return false;   // has a heartbeat location but it is stale -> not running
+        }
+        return ProcessAlive(trackedPid);
+    }
+
+    // Read the value after a flag (e.g. -Out) from a command line, handling a "quoted value".
+    static string ExtractArg(string cmd, string flag)
+    {
+        if (string.IsNullOrEmpty(cmd)) return null;
+        int i = cmd.IndexOf(flag + " ", StringComparison.OrdinalIgnoreCase);
+        if (i < 0) return null;
+        int p = i + flag.Length;
+        while (p < cmd.Length && cmd[p] == ' ') p++;
+        if (p >= cmd.Length) return null;
+        if (cmd[p] == '"')
+        {
+            int end = cmd.IndexOf('"', p + 1);
+            if (end < 0) return null;
+            return cmd.Substring(p + 1, end - p - 1);
+        }
+        int sp = cmd.IndexOf(' ', p);
+        return sp < 0 ? cmd.Substring(p) : cmd.Substring(p, sp - p);
+    }
+
+    static System.Collections.Generic.List<int> ActiveSessions()
+    {
+        var res = new System.Collections.Generic.List<int>();
+        IntPtr info; int count;
+        if (!WTSEnumerateSessions(IntPtr.Zero, 0, 1, out info, out count)) return res;
+        try
+        {
+            int size = Marshal.SizeOf(typeof(WTS_SESSION_INFO));
+            for (int i = 0; i < count; i++)
+            {
+                WTS_SESSION_INFO s = (WTS_SESSION_INFO)Marshal.PtrToStructure(new IntPtr(info.ToInt64() + i * size), typeof(WTS_SESSION_INFO));
+                if (s.SessionId != 0 && s.State == WTSActive) res.Add(s.SessionId);
+            }
+        }
+        finally { WTSFreeMemory(info); }
+        return res;
+    }
+
+    // Launch a command line in the given session, hidden, as that student. app may be null (exe taken from cmdLine).
+    // Returns the new process id (>0) on success, or -1 with err set.
+    static int Launch(int sessionId, string app, string cmdLine, out string err)
+    {
+        err = null;
+        IntPtr token, env = IntPtr.Zero;
+        if (!WTSQueryUserToken(sessionId, out token)) { err = "no user token, error " + Marshal.GetLastWin32Error(); return -1; }
+        try
+        {
+            if (!CreateEnvironmentBlock(out env, token, false)) env = IntPtr.Zero;
+            STARTUPINFO si = new STARTUPINFO();
+            si.cb = Marshal.SizeOf(typeof(STARTUPINFO));
+            si.lpDesktop = @"winsta0\default";
+            si.dwFlags = STARTF_USESHOWWINDOW;
+            si.wShowWindow = SW_HIDE;
+            StringBuilder cmd = new StringBuilder(cmdLine);
+            string cwd = Path.GetDirectoryName(Script);
+            if (string.IsNullOrEmpty(cwd) || !Directory.Exists(cwd)) cwd = Environment.SystemDirectory;
+            int flags = CREATE_NO_WINDOW | (env != IntPtr.Zero ? CREATE_UNICODE_ENVIRONMENT : 0);
+            PROCESS_INFORMATION pi;
+            if (!CreateProcessAsUser(token, app, cmd, IntPtr.Zero, IntPtr.Zero, false, flags, env, cwd, ref si, out pi))
+            { err = "CreateProcessAsUser error " + Marshal.GetLastWin32Error(); return -1; }
+            int newPid = pi.dwProcessId;
+            CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
+            return newPid;
+        }
+        finally
+        {
+            if (env != IntPtr.Zero) DestroyEnvironmentBlock(env);
+            CloseHandle(token);
+        }
+    }
+
+    // Same line format as Log() in the PowerShell part, so -exportlog picks these lines up too.
+    static void Log(string m)
+    {
+        try
+        {
+            string dir = Path.GetDirectoryName(Script);
+            if (string.IsNullOrEmpty(dir)) return;
+            File.AppendAllText(Path.Combine(dir, "KhoaVeyonService.log"),
+                DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  PC=" + Environment.MachineName +
+                "  Student=-  RunAs=SYSTEM  [autolog-service]  " + m + Environment.NewLine);
+        }
+        catch { }
+    }
+
+    public static void Main(string[] args)
+    {
+        // ImagePath: "...\KhoaVeyonAutoLog.exe" "C:\cmd\KhoaVeyonServices.bat"
+        if (args.Length > 0 && args[0].Length > 0) Script = args[0];
+        ServiceBase.Run(new KvAutoLogService());
+    }
+}
+'@
+
+# 1. Remove the scheduled task left by older versions, so logging is not started twice.
+try { Unregister-ScheduledTask -TaskName $svcName -Confirm:$false -ErrorAction Stop } catch {}
+
+# 2. Stop the service if it already exists (re-install), so its exe can be replaced.
+$existing = Get-Service -Name $svcName -ErrorAction SilentlyContinue
+if ($existing -and $existing.Status -ne 'Stopped') {
+    Stop-Service -Name $svcName -Force -ErrorAction SilentlyContinue
+    try { $existing.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20)) } catch {}
+}
+
+# 3. Compile the service with the C# compiler that ships with .NET Framework 4 (Windows 8/10/11).
+$csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+if (-not (Test-Path -LiteralPath $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe' }
+if (-not (Test-Path -LiteralPath $csc)) { Write-Host 'AutoLog service: csc.exe (.NET Framework 4) not found'; exit 1 }
+if (-not (Test-Path -LiteralPath $svcDir)) { New-Item -ItemType Directory -Path $svcDir -Force | Out-Null }
+$csFile = Join-Path $env:TEMP 'KhoaVeyonAutoLog.cs'
+$newExe = Join-Path $env:TEMP 'KhoaVeyonAutoLog.new.exe'
+Set-Content -LiteralPath $csFile -Value $csSource -Encoding UTF8
+Remove-Item -LiteralPath $newExe -Force -ErrorAction SilentlyContinue
+$cscOut = & $csc /nologo /target:winexe /optimize+ /r:System.ServiceProcess.dll "/out:$newExe" $csFile 2>&1
+Remove-Item -LiteralPath $csFile -Force -ErrorAction SilentlyContinue
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $newExe)) {
+    Write-Host 'AutoLog service: compile failed'; $cscOut | ForEach-Object { Write-Host "  $_" }
+    if (-not (Test-Path -LiteralPath $svcExe)) { exit 1 }
+    Write-Host 'AutoLog service: keeping the exe from the previous install'
+} else {
+    try { Move-Item -LiteralPath $newExe -Destination $svcExe -Force -ErrorAction Stop }
+    catch { Write-Host "AutoLog service: cannot replace $svcExe ($_)"; if (-not (Test-Path -LiteralPath $svcExe)) { exit 1 } }
+}
+
+# 4. Create the service, or point the existing one at the new exe / script path.
+if ($existing) {
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$svcName" -Name ImagePath -Value $binPath
+    Set-Service -Name $svcName -StartupType Automatic
+} else {
+    try {
+        New-Service -Name $svcName -BinaryPathName $binPath -StartupType Automatic `
+            -DisplayName 'KhoaVeyon AutoLog' -ErrorAction Stop | Out-Null
+    } catch { Write-Host "AutoLog service: create failed ($_)"; exit 1 }
+}
+& sc.exe description $svcName 'KhoaVeyon: starts the activity log (-activitylog-start) in every student session at logon.' | Out-Null
+# Students may only see the service, not stop or change it (same idea as KhoaVeyonService_*).
+& sc.exe sdset $svcName 'D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)' | Out-Null
+# If it ever crashes, Windows restarts it after 1 minute.
+& sc.exe failure $svcName reset= 86400 actions= restart/60000/restart/60000/restart/60000 | Out-Null
+
+# 5. Start it now (it also starts the log for a student who is already logged on).
+Start-Service -Name $svcName -ErrorAction SilentlyContinue
+$s = Get-Service -Name $svcName -ErrorAction SilentlyContinue
+try { $s.WaitForStatus('Running', [TimeSpan]::FromSeconds(15)) } catch {}
+$s.Refresh()
+if ($s.Status -ne 'Running') { Write-Host "AutoLog service: installed but not running (status $($s.Status))"; exit 1 }
+Write-Host "AutoLog service: $svcName is running ($svcExe)"
+exit 0
+#KVSVCEND
 
 #PS1START
 $ErrorActionPreference = 'Continue'
@@ -287,6 +722,251 @@ function Apply-Block($extra) {
     New-NetFirewallRule -DisplayName 'KhoaVeyonBlock6' -Direction Outbound -Action Block -Profile Any -RemoteAddress '2000::/3' | Out-Null
 }
 
+
+# ---------- AI blocking helpers (-blockai / -allowai) ----------
+# Backup of the settings that were there before -blockai. It lives in a folder only SYSTEM and
+# Administrators can write (NOT C:\cmd\log, which students can write), because -allowai replays it as SYSTEM.
+$aiDir    = Join-Path $env:ProgramData 'KhoaVeyon'
+$aiBackup = Join-Path $aiDir 'ai_backup.json'
+$aiHostsBegin = '# KhoaVeyon-AI-BEGIN'
+$aiHostsEnd   = '# KhoaVeyon-AI-END'
+$aiHostsFile  = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
+# Used when BlockAIList.xlsx is missing; the Excel list is the real, editable list
+$aiBuiltIn = @('chatgpt.com','openai.com','gemini.google.com','claude.ai','copilot.microsoft.com','perplexity.ai','deepseek.com','grok.com')
+# Never block these as a whole (a typo in the list must not cut off the whole internet). A path such as bing.com/chat is fine.
+$aiTooBroad = @('google.com','microsoft.com','bing.com','live.com','office.com','windows.com','windowsupdate.com','github.com','youtube.com','wikipedia.org','x.com','apple.com','amazon.com','facebook.com')
+$global:AiRec = New-Object System.Collections.Generic.List[object]
+
+function Get-AiTargets {
+    $items = @($aiBuiltIn) + @(Read-ColumnA (Join-Path $list 'BlockAIList.xlsx'))
+    $res = New-Object System.Collections.Generic.List[object]
+    $seen = @{}
+    foreach ($i in $items) {
+        if (-not $i) { continue }
+        $s = ([string]$i).ToLower().Trim()
+        $s = $s -replace '^[a-z]+://', ''
+        $s = $s -replace '[?#].*$', ''
+        $s = $s.TrimEnd('/')
+        $s = $s -replace '^www\.', ''
+        if ($s -notmatch '^[a-z0-9-]+(\.[a-z0-9-]+)+(/[A-Za-z0-9._~%/-]*)?$') { continue }
+        $hasPath = $s.Contains('/')
+        $hostName = ($s -split '/')[0]
+        if (-not $hasPath -and ($aiTooBroad -contains $hostName)) { Log "SKIPPED (too broad, would block normal sites): $s"; continue }
+        if ($seen.ContainsKey($s)) { continue }
+        $seen[$s] = $true
+        $res.Add([pscustomobject]@{ Url = $s; HostName = $hostName; HasPath = $hasPath })
+    }
+    return $res.ToArray()
+}
+
+function Ai-Remember-Value($path, $name) {
+    $ex = $false; $val = $null; $kind = 'DWord'
+    try {
+        $k = Get-Item -LiteralPath $path -ErrorAction Stop
+        if ($k.GetValueNames() -contains $name) { $ex = $true; $val = $k.GetValue($name); $kind = [string]$k.GetValueKind($name) }
+    } catch {}
+    $global:AiRec.Add([pscustomobject]@{ T = 'v'; Path = $path; Name = $name; Existed = $ex; Value = $val; Kind = $kind })
+}
+
+function Ai-Set-Dword($path, $name, $value) {
+    try {
+        if (-not (Test-Path -LiteralPath $path)) { New-Item -Path $path -Force | Out-Null }
+        Ai-Remember-Value $path $name
+        New-ItemProperty -LiteralPath $path -Name $name -Value ([int]$value) -PropertyType DWord -Force | Out-Null
+    } catch { Log ("Policy not set {0}\{1}: {2}" -f $path, $name, $_.Exception.Message) }
+}
+
+function Ai-Set-String($path, $name, $value) {
+    try {
+        if (-not (Test-Path -LiteralPath $path)) { New-Item -Path $path -Force | Out-Null }
+        Ai-Remember-Value $path $name
+        New-ItemProperty -LiteralPath $path -Name $name -Value ([string]$value) -PropertyType String -Force | Out-Null
+    } catch { Log ("Policy not set {0}\{1}: {2}" -f $path, $name, $_.Exception.Message) }
+}
+
+# List policies (URLBlocklist ...) are values named 1, 2, 3 ... Keep what the school already has and add ours.
+function Ai-Set-List($path, $newItems) {
+    try {
+        $keyExisted = Test-Path -LiteralPath $path
+        $existing = @()
+        if ($keyExisted) {
+            $k = Get-Item -LiteralPath $path
+            $existing = @($k.GetValueNames() | Where-Object { $_ -match '^\d+$' } | Sort-Object { [int]$_ } | ForEach-Object { [string]$k.GetValue($_) })
+        } else { New-Item -Path $path -Force | Out-Null }
+        $global:AiRec.Add([pscustomobject]@{ T = 'l'; Path = $path; KeyExisted = $keyExisted; Items = @($existing) })
+        $all = New-Object System.Collections.Generic.List[string]
+        foreach ($e in $existing) { $all.Add($e) }
+        foreach ($n in $newItems) { if ($all -notcontains $n) { $all.Add($n) } }
+        foreach ($nm in @((Get-Item -LiteralPath $path).GetValueNames() | Where-Object { $_ -match '^\d+$' })) {
+            Remove-ItemProperty -LiteralPath $path -Name $nm -ErrorAction SilentlyContinue
+        }
+        $n = 1
+        foreach ($v in $all) { New-ItemProperty -LiteralPath $path -Name ([string]$n) -Value $v -PropertyType String -Force | Out-Null; $n++ }
+    } catch { Log ("List policy not set {0}: {1}" -f $path, $_.Exception.Message) }
+}
+
+function Ai-Restore {
+    if (-not (Test-Path -LiteralPath $aiBackup)) { return $false }
+    $bk = $null
+    try { $bk = Get-Content -LiteralPath $aiBackup -Raw | ConvertFrom-Json } catch { Log "AI backup unreadable: $($_.Exception.Message)"; return $false }
+    foreach ($r in @($bk)) {
+        try {
+            # Only ever touch the policy area, even if the backup file was edited
+            if (-not ([string]$r.Path).StartsWith('HKLM:\SOFTWARE\Policies\', [StringComparison]::OrdinalIgnoreCase)) { Log "Restore skipped (path not allowed): $($r.Path)"; continue }
+            if ($r.T -eq 'v') {
+                if ($r.Existed) {
+                    if (-not (Test-Path -LiteralPath $r.Path)) { New-Item -Path $r.Path -Force | Out-Null }
+                    $kind = if ($r.Kind) { [string]$r.Kind } else { 'DWord' }
+                    $val = $r.Value
+                    if ($kind -eq 'DWord') { $val = [int]$val }
+                    New-ItemProperty -LiteralPath $r.Path -Name $r.Name -Value $val -PropertyType $kind -Force | Out-Null
+                } else {
+                    Remove-ItemProperty -LiteralPath $r.Path -Name $r.Name -ErrorAction SilentlyContinue
+                }
+            } elseif ($r.T -eq 'l') {
+                if (Test-Path -LiteralPath $r.Path) {
+                    foreach ($nm in @((Get-Item -LiteralPath $r.Path).GetValueNames() | Where-Object { $_ -match '^\d+$' })) {
+                        Remove-ItemProperty -LiteralPath $r.Path -Name $nm -ErrorAction SilentlyContinue
+                    }
+                    $n = 1
+                    foreach ($v in @($r.Items)) { if ($v) { New-ItemProperty -LiteralPath $r.Path -Name ([string]$n) -Value ([string]$v) -PropertyType String -Force | Out-Null; $n++ } }
+                }
+            }
+        } catch { Log ("Restore error {0}: {1}" -f $r.Path, $_.Exception.Message) }
+    }
+    # remove policy keys we created and that are now empty
+    foreach ($path in @($bk | ForEach-Object { $_.Path } | Sort-Object -Unique -Descending)) {
+        try {
+            if (-not ([string]$path).StartsWith('HKLM:\SOFTWARE\Policies\', [StringComparison]::OrdinalIgnoreCase)) { continue }
+            if (Test-Path -LiteralPath $path) {
+                $k = Get-Item -LiteralPath $path
+                if ($k.ValueCount -eq 0 -and $k.SubKeyCount -eq 0) { Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue }
+            }
+        } catch {}
+    }
+    return $true
+}
+
+function Ai-Hosts-Remove {
+    try {
+        if (-not (Test-Path -LiteralPath $aiHostsFile)) { return }
+        $lines = @([IO.File]::ReadAllLines($aiHostsFile))
+        $out = New-Object System.Collections.Generic.List[string]
+        $skip = $false; $found = $false
+        foreach ($l in $lines) {
+            if ($l.Trim() -eq $aiHostsBegin) { $skip = $true; $found = $true; continue }
+            if ($l.Trim() -eq $aiHostsEnd) { $skip = $false; continue }
+            if (-not $skip) { $out.Add($l) }
+        }
+        if ($skip) { Log 'hosts: BEGIN marker without END, hosts file left unchanged'; return }
+        if ($found) { [IO.File]::WriteAllLines($aiHostsFile, $out.ToArray(), (New-Object Text.UTF8Encoding($false))) }
+    } catch { Log "hosts remove failed: $($_.Exception.Message)" }
+}
+
+function Ai-Hosts-Add($names) {
+    try {
+        Ai-Hosts-Remove
+        $add = New-Object System.Collections.Generic.List[string]
+        $add.Add($aiHostsBegin)
+        foreach ($h in $names) {
+            foreach ($n in @($h, ('www.' + $h))) { $add.Add('0.0.0.0 ' + $n); $add.Add(':: ' + $n) }
+        }
+        $add.Add($aiHostsEnd)
+        $lines = @([IO.File]::ReadAllLines($aiHostsFile))
+        [IO.File]::WriteAllLines($aiHostsFile, ($lines + $add.ToArray()), (New-Object Text.UTF8Encoding($false)))
+        return $true
+    } catch { Log "hosts write failed: $($_.Exception.Message)"; return $false }
+}
+
+function Ai-Lock-Folder($dirPath) {
+    if (-not (Test-Path -LiteralPath $dirPath)) { New-Item -ItemType Directory -Path $dirPath -Force | Out-Null }
+    # S-1-5-18 SYSTEM, S-1-5-32-544 Administrators: nobody else can read or write
+    icacls $dirPath /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
+}
+
+# ---------- "only allowed pages" via browser policy (-webonly / -weboff) ----------
+# Blocks EVERY page except the domains in AllowPage.xlsx, at the BROWSER level (Chrome/Edge/Brave/Coc Coc/Chromium).
+# Unlike the firewall -allowpage, a listed domain also covers ALL its subdomains, and the allowed pages may still
+# send requests (XHR/fetch) to the listed domains (Firebase, Google Fonts, MongoDB, other APIs). No IP pinning,
+# so it does not break when a cloud service answers from a different IP. Runs as SYSTEM (HKLM policy).
+$pageDir    = Join-Path $env:ProgramData 'KhoaVeyon'
+$pageBackup = Join-Path $pageDir 'pageonly_backup.json'
+$pageRoots  = @('HKLM:\SOFTWARE\Policies\Google\Chrome', 'HKLM:\SOFTWARE\Policies\Microsoft\Edge',
+                'HKLM:\SOFTWARE\Policies\BraveSoftware\Brave', 'HKLM:\SOFTWARE\Policies\CocCoc\CocCoc',
+                'HKLM:\SOFTWARE\Policies\Chromium')
+
+function Page-AllowFromList {
+    $out = New-Object System.Collections.Generic.List[string]
+    foreach ($i in @(Read-ColumnA (Join-Path $list 'AllowPage.xlsx'))) {
+        $d = ((([string]$i).ToLower().Trim()) -replace '^[a-z]+://', '') -replace '[/?#:].*$', ''
+        $d = $d -replace '^www\.', ''
+        if ($d -match '^\d{1,3}(\.\d{1,3}){3}$' -or $d -match '^[a-z0-9-]+(\.[a-z0-9-]+)+$') { if ($out -notcontains $d) { $out.Add($d) } }
+    }
+    return $out.ToArray()
+}
+function Page-ListVals($root, $name) {
+    $k = Join-Path $root $name
+    if (-not (Test-Path -LiteralPath $k)) { return @() }
+    $item = Get-Item -LiteralPath $k
+    return @($item.GetValueNames() | Where-Object { $_ -match '^\d+$' } | Sort-Object { [int]$_ } | ForEach-Object { [string]$item.GetValue($_) })
+}
+function Page-SetListVals($root, $name, $vals) {
+    $k = Join-Path $root $name
+    $vals = @($vals | Where-Object { $_ -ne $null -and $_ -ne '' })
+    if ($vals.Count -eq 0) {
+        if (Test-Path -LiteralPath $k) {
+            foreach ($nm in @((Get-Item -LiteralPath $k).GetValueNames() | Where-Object { $_ -match '^\d+$' })) { Remove-ItemProperty -LiteralPath $k -Name $nm -ErrorAction SilentlyContinue }
+            $kk = Get-Item -LiteralPath $k; if ($kk.ValueCount -eq 0 -and $kk.SubKeyCount -eq 0) { Remove-Item -LiteralPath $k -Force -ErrorAction SilentlyContinue }
+        }
+        return
+    }
+    if (-not (Test-Path -LiteralPath $k)) { New-Item -Path $k -Force | Out-Null }
+    foreach ($nm in @((Get-Item -LiteralPath $k).GetValueNames() | Where-Object { $_ -match '^\d+$' })) { Remove-ItemProperty -LiteralPath $k -Name $nm -ErrorAction SilentlyContinue }
+    $n = 1; foreach ($v in $vals) { New-ItemProperty -LiteralPath $k -Name ([string]$n) -Value ([string]$v) -PropertyType String -Force | Out-Null; $n++ }
+}
+function Page-Start {
+    $allow = Page-AllowFromList
+    if ($allow.Count -eq 0) { Log 'WEBONLY refused: AllowPage.xlsx is empty (would block the whole web).'; return }
+    if (-not (Test-Path -LiteralPath $pageDir)) { New-Item -ItemType Directory -Path $pageDir -Force | Out-Null }
+    $rec = New-Object System.Collections.Generic.List[object]
+    foreach ($root in $pageRoots) {
+        $rootExisted = Test-Path -LiteralPath $root
+        $prevBlock = @(Page-ListVals $root 'URLBlocklist')
+        $prevAllow = @(Page-ListVals $root 'URLAllowlist')
+        $rec.Add([pscustomobject]@{ Root = $root; RootExisted = $rootExisted; Block = $prevBlock; Allow = $prevAllow })
+        $nb = New-Object System.Collections.Generic.List[string]; foreach ($e in $prevBlock) { $nb.Add($e) }; if ($nb -notcontains '*') { $nb.Add('*') }
+        Page-SetListVals $root 'URLBlocklist' $nb.ToArray()
+        $na = New-Object System.Collections.Generic.List[string]; foreach ($e in $prevAllow) { $na.Add($e) }; foreach ($d in $allow) { if ($na -notcontains $d) { $na.Add($d) } }
+        Page-SetListVals $root 'URLAllowlist' $na.ToArray()
+    }
+    [IO.File]::WriteAllText($pageBackup, ($rec | ConvertTo-Json -Depth 5))
+    # Close Chromium browsers so the next launch reads the new policy
+    Get-Process -Name chrome, msedge, brave, browser, chromium -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Log ("WEBONLY ON: {0} allowed domain(s) + their subdomains in browser policy: {1}" -f $allow.Count, ($allow -join ', '))
+}
+function Page-Stop {
+    if (Test-Path -LiteralPath $pageBackup) {
+        $bk = $null
+        try { $bk = Get-Content -LiteralPath $pageBackup -Raw | ConvertFrom-Json } catch { Log 'WEBONLY backup unreadable, doing best-effort cleanup'; $bk = $null }
+        if ($bk) {
+            foreach ($r in @($bk)) {
+                if (-not ([string]$r.Root).StartsWith('HKLM:\SOFTWARE\Policies\', [StringComparison]::OrdinalIgnoreCase)) { continue }
+                Page-SetListVals $r.Root 'URLBlocklist' @($r.Block)
+                Page-SetListVals $r.Root 'URLAllowlist' @($r.Allow)
+                if (-not $r.RootExisted -and (Test-Path -LiteralPath $r.Root)) {
+                    $k = Get-Item -LiteralPath $r.Root; if ($k.ValueCount -eq 0 -and $k.SubKeyCount -eq 0) { Remove-Item -LiteralPath $r.Root -Force -ErrorAction SilentlyContinue }
+                }
+            }
+            Remove-Item -LiteralPath $pageBackup -Force -ErrorAction SilentlyContinue
+            Log 'WEBONLY OFF: browser policy restored.'
+            return
+        }
+    }
+    # No readable backup: just take the "*" we added back out of every blocklist
+    foreach ($root in $pageRoots) { Page-SetListVals $root 'URLBlocklist' @(Page-ListVals $root 'URLBlocklist' | Where-Object { $_ -ne '*' }) }
+    Log 'WEBONLY OFF: removed the block-all rule (no backup to restore from).'
+}
+
 # ---------- modes ----------
 switch ($mode) {
 
@@ -310,6 +990,9 @@ switch ($mode) {
         Apply-Block @()
         Log 'Internet BLOCKED (LAN allowed)'
     }
+
+    'webonly' { Page-Start }
+    'weboff'  { Page-Stop }
 
     'allowall' {
         Remove-Rules
@@ -601,6 +1284,156 @@ while (-not (Test-Path `$stop)) {
         Remove-Item -Path ($pol + '\RestrictRun') -Recurse -Force -ErrorAction SilentlyContinue
         Restart-UserShell
         Log 'Open-block OFF (RestrictRun removed)'
+    }
+
+    'blockai' {
+        # Block ALL AI: (1) AI websites in Chrome/Edge/Brave/Firefox (URL blocklist), (2) AI built into those browsers,
+        # (3) hosts file for any other browser, (4) AI desktop apps are closed. Runs as SYSTEM through the service.
+        try {
+            $already = Test-Path -LiteralPath $aiBackup
+            if ($already) { [void](Ai-Restore) }          # start again from the original settings, so entries removed from the list do not stay behind
+            $global:AiRec = New-Object System.Collections.Generic.List[object]
+            Ai-Lock-Folder $aiDir
+
+            # Options: defaults come from the KV_AI_* env (set at the top of this .bat); an optional
+            # ai_opts.txt in the list folder (written by KhoaVeyon) overrides them. KEY=1/0 per line.
+            $optExt = ($env:KV_AI_EXT -eq '1'); $optDoh = $true; $optOverview = $true
+            $optFile = Join-Path $list 'ai_opts.txt'
+            if (Test-Path -LiteralPath $optFile) {
+                foreach ($ln in @(Get-Content -LiteralPath $optFile -ErrorAction SilentlyContinue)) {
+                    if ($ln -match '^\s*([A-Za-z]+)\s*=\s*([01])\s*$') {
+                        switch ($matches[1].ToUpper()) {
+                            'EXT'      { $optExt = ($matches[2] -eq '1') }
+                            'DOH'      { $optDoh = ($matches[2] -eq '1') }
+                            'OVERVIEW' { $optOverview = ($matches[2] -eq '1') }
+                        }
+                    }
+                }
+            }
+
+            $targets = @(Get-AiTargets)
+            $urls    = @($targets | ForEach-Object { $_.Url })
+            $hostNames = @($targets | Where-Object { -not $_.HasPath } | ForEach-Object { $_.HostName } | Select-Object -Unique)
+            $ffPatterns = @($targets | ForEach-Object {
+                if ($_.HasPath) { '*://*.' + $_.HostName + '/' + (($_.Url -split '/', 2)[1]) + '*' } else { '*://*.' + $_.HostName + '/*' }
+            })
+
+            # --- Chrome ---
+            $cr = 'HKLM:\SOFTWARE\Policies\Google\Chrome'
+            $chromeDw = [ordered]@{
+                GenAiDefaultSettings = 2; GeminiSettings = 1; AIModeSettings = 1; SearchContentSharingSettings = 1
+                LensOverlaySettings = 1; GenAILocalFoundationalModelSettings = 1; HelpMeWriteSettings = 2; HelpMeReadSettings = 2
+                TabOrganizerSettings = 2; CreateThemesSettings = 2; HistorySearchSettings = 2; TabCompareSettings = 2; DevToolsGenAiSettings = 2
+            }
+            foreach ($k in $chromeDw.Keys) { Ai-Set-Dword $cr $k $chromeDw[$k] }
+            Ai-Set-List ($cr + '\URLBlocklist') $urls
+
+            # --- Edge ---
+            $ed = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
+            $edgeDw = [ordered]@{
+                HubsSidebarEnabled = 0; Microsoft365CopilotChatIconEnabled = 0; CopilotPageContext = 0; EdgeEntraCopilotPageContext = 0
+                EdgeCopilotEnabled = 0; ComposeInlineEnabled = 0; GenAILocalFoundationalModelSettings = 1
+            }
+            foreach ($k in $edgeDw.Keys) { Ai-Set-Dword $ed $k $edgeDw[$k] }
+            Ai-Set-List ($ed + '\URLBlocklist') $urls
+
+            # --- Brave (Leo) ---
+            $bv = 'HKLM:\SOFTWARE\Policies\BraveSoftware\Brave'
+            Ai-Set-Dword $bv 'BraveAIChatEnabled' 0
+            Ai-Set-List ($bv + '\URLBlocklist') $urls
+
+            # --- Firefox (AI controls + website filter) ---
+            $ff = 'HKLM:\SOFTWARE\Policies\Mozilla\Firefox'
+            foreach ($k in @('Enabled', 'Chatbot', 'LinkPreviews', 'TabGroups')) { Ai-Set-Dword ($ff + '\GenerativeAI') $k 0 }
+            Ai-Set-Dword ($ff + '\GenerativeAI') 'Locked' 1
+            Ai-Set-List ($ff + '\WebsiteFilter\Block') $ffPatterns
+            foreach ($k in @('Default', 'Translations', 'PDFAltText', 'SmartTabGroups', 'LinkPreviewKeyPoints', 'SidebarChatbot', 'SmartWindow')) {
+                $kp = $ff + '\AIControls\' + $k
+                try {
+                    if (-not (Test-Path -LiteralPath $kp)) { New-Item -Path $kp -Force | Out-Null }
+                    Ai-Remember-Value $kp 'Value'
+                    New-ItemProperty -LiteralPath $kp -Name 'Value' -Value 'blocked' -PropertyType String -Force | Out-Null
+                    Ai-Set-Dword $kp 'Locked' 1
+                } catch { Log ("Firefox AIControls {0}: {1}" -f $k, $_.Exception.Message) }
+            }
+
+            # --- AI Overviews in Google Search: force the default search to the "Web" filter (udm=14), which
+            #     shows classic links with NO AI Overview / AI Mode. Covers omnibox (address-bar) searches on
+            #     Chrome and Edge. NOTE: a manual search typed on google.com itself can still show an overview;
+            #     only an allow-list (chỉ trang cho phép) removes it entirely. ---
+            if ($optOverview) {
+                $udm = 'https://www.google.com/search?q={searchTerms}&udm=14'
+                foreach ($br in @($cr, $ed)) {
+                    Ai-Set-Dword  $br 'DefaultSearchProviderEnabled' 1
+                    Ai-Set-String $br 'DefaultSearchProviderName' 'Google (khong AI Overview)'
+                    Ai-Set-String $br 'DefaultSearchProviderKeyword' 'google.com'
+                    Ai-Set-String $br 'DefaultSearchProviderSearchURL' $udm
+                }
+                # Chrome: also turn off the Search Generative Experience / AI Mode entry points in the omnibox
+                Ai-Set-Dword $cr 'GenAiDefaultSettings' 2
+            }
+
+            # --- DNS-over-HTTPS off, so the hosts-file block for AI sites cannot be bypassed by encrypted DNS ---
+            if ($optDoh) {
+                foreach ($br in @($cr, $ed, $bv)) { Ai-Set-String $br 'DnsOverHttpsMode' 'off' }
+                Ai-Set-Dword ($ff + '\DNSOverHTTPS') 'Enabled' 0
+                Ai-Set-Dword ($ff + '\DNSOverHTTPS') 'Locked' 1
+            }
+
+            # --- Optional: no browser extensions at all (AI helper extensions). Turns OFF every extension,
+            #     not just AI ones, so it is opt-in (KhoaVeyon toggle writes EXT=1 in ai_opts.txt). ---
+            if ($optExt) {
+                foreach ($br in @($cr, $ed, $bv)) { Ai-Set-List ($br + '\ExtensionInstallBlocklist') @('*') }
+            }
+
+            # --- Windows (older Copilot policy, Recall) ---
+            Ai-Set-Dword 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot' 'TurnOffWindowsCopilot' 1
+            Ai-Set-Dword 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI' 'DisableAIDataAnalysis' 1
+
+            # --- Save the backup of what was there before (SYSTEM/Administrators only) ---
+            ConvertTo-Json -InputObject @($global:AiRec.ToArray()) -Depth 5 | Set-Content -LiteralPath $aiBackup -Encoding UTF8
+
+            # --- hosts file ---
+            $hostsOk = $false
+            if ($env:KV_AI_HOSTS -eq '1') { $hostsOk = [bool](Ai-Hosts-Add $hostNames) } else { Ai-Hosts-Remove }
+            & ipconfig /flushdns | Out-Null
+
+            # --- AI desktop apps: close them now (add their install folder to BlockAppList.xlsx to keep them blocked) ---
+            $appNames = @('chatgpt', 'claude', 'copilot', 'perplexity', 'deepseek')
+            $closedApps = @()
+            foreach ($p in @(Get-Process -ErrorAction SilentlyContinue)) {
+                if ($appNames -contains $p.ProcessName.ToLower()) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; $closedApps += $p.ProcessName }
+            }
+
+            # --- Close open browsers the first time, so an AI tab that is already open stops working ---
+            $closedBrowsers = 0
+            if ($env:KV_AI_CLOSE -eq '1' -and -not $already) {
+                $bn = @('chrome', 'msedge', 'firefox', 'brave', 'opera', 'vivaldi')
+                foreach ($p in @(Get-Process -ErrorAction SilentlyContinue)) {
+                    $n = $p.ProcessName.ToLower()
+                    $hit = ($bn -contains $n)
+                    if (-not $hit -and $n -eq 'browser') { try { if ($p.Path -like '*CocCoc*') { $hit = $true } } catch {} }
+                    if ($hit) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; $closedBrowsers++ }
+                }
+            }
+
+            $chk = (Get-ItemProperty -Path $cr -Name GenAiDefaultSettings -ErrorAction SilentlyContinue).GenAiDefaultSettings
+            Log ("AI BLOCKED. {0} entries ({1} hosts, hosts file written={2}); Chrome GenAiDefaultSettings={3}; closed {4} browser process(es), apps: {5}; overview(udm14)={6}, doh_off={7}, block_extensions={8}" -f $urls.Count, $hostNames.Count, $hostsOk, $chk, $closedBrowsers, ($closedApps -join ','), $optOverview, $optDoh, $optExt)
+        } catch {
+            Log ("ERROR in blockai: " + $_.Exception.Message)
+        }
+    }
+
+    'allowai' {
+        try {
+            $restored = Ai-Restore
+            Ai-Hosts-Remove
+            & ipconfig /flushdns | Out-Null
+            if (Test-Path -LiteralPath $aiBackup) { Remove-Item -LiteralPath $aiBackup -Force -ErrorAction SilentlyContinue }
+            Log ("AI ALLOWED again. Settings restored from backup: {0}" -f $restored)
+        } catch {
+            Log ("ERROR in allowai: " + $_.Exception.Message)
+        }
     }
 
     'lockall-start' {

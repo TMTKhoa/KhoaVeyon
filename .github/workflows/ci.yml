@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt pyflakes
+      - run: python -m pyflakes kv KhoaVeyon.py
+      - run: python -m unittest discover tests -v
+
+  windows:
+    # Máy chạy Windows thật: bắt lỗi cú pháp PowerShell/bat và lỗi đường dẫn mà bản thử trên Linux không thấy.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Kiểm tra cú pháp mọi script PowerShell (kể cả phần PowerShell nhúng trong KhoaVeyonServices.bat)
+        shell: pwsh
+        run: ./tests/check_powershell.ps1
+      - name: Chạy kiểm thử Python trên Windows
+        run: python -m unittest discover tests -v

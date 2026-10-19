@@ -15,7 +15,7 @@ python -c "import openpyxl" >nul 2>&1
 if errorlevel 1 goto :download
 where pythonw >nul 2>&1
 if errorlevel 1 goto :download
-start "" pythonw KhoaVeyon.py
+start "" pythonw KhoaVeyon.py %*
 exit /b 0
 
 :download
@@ -37,5 +37,5 @@ if errorlevel 1 (
 )
 
 :portable
-start "" "%RT%\tools\pythonw.exe" KhoaVeyon.py
+start "" "%RT%\tools\pythonw.exe" KhoaVeyon.py %*
 exit /b 0

@@ -1,0 +1,23 @@
+/* KhoaVeyon - Thu nhỏ theo cỡ màn hình, trang Trạng thái máy và Tự động theo tiết */
+
+@media (max-width:1080px){
+  :root{--side-w:76px}
+  .verbox .vtxt,.updbtn span,.brand div,.nav button span.tx,.nav .grp,.status span,.quit span{display:none}
+  .brand{justify-content:center;padding:6px 0 18px}
+  .nav button{justify-content:center}
+  .grid-control{grid-template-columns:1fr}
+  .radiocards{grid-template-columns:1fr}
+  .formgrid{grid-template-columns:1fr}
+}
+.sdot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#cbd5e1;margin-right:6px;vertical-align:middle}
+.sdot.on{background:var(--ok);box-shadow:0 0 0 3px rgba(22,163,74,.18)}.sdot.off{background:#94a3b8}.sdot.wait{background:#facc15}
+.rchip{display:inline-block;background:var(--warn-l);color:#9a3412;border-radius:99px;padding:2px 9px;font-size:12px;font-weight:600;margin:1px 3px 1px 0;white-space:nowrap}
+.rchip.ok{background:var(--ok-l);color:#166534}.rchip.mute{background:#eef1f7;color:var(--muted)}
+.stbl td{padding:9px 10px!important}.stbl tr.offrow td{color:var(--muted)}
+.modeblock{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;background:#fbfcff}
+.modeblock select.xsel{width:auto;max-width:280px}.modeblock .ph{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0}.modeblock .ph b{min-width:78px}
+.cmdchip{display:inline-flex;align-items:center;gap:6px;background:var(--primary-l);color:var(--primary-d);border-radius:99px;padding:4px 6px 4px 12px;font-size:12.5px;font-weight:600}
+.cmdchip.warn{background:var(--warn-l);color:#9a3412}.cmdchip button{border:0;background:rgba(0,0,0,.08);border-radius:50%;width:18px;height:18px;line-height:16px;cursor:pointer;padding:0}
+.autogrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.autogrid label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600}
+.autogrid input,.modeblock select,.modeblock input[type=text],.xsel{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff;font:inherit}

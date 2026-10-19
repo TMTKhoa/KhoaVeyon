@@ -1,0 +1,49 @@
+/* KhoaVeyon - Nhật ký, hộp thoại, thông báo nổi */
+/* ---------- nhật ký ---------- */
+.logdock{position:fixed;left:var(--side-w);right:0;bottom:0;height:var(--log-h);background:#0d1424;color:#d6deef;display:flex;flex-direction:column;box-shadow:0 -10px 30px rgba(10,16,32,.28);z-index:20;border-top:1px solid #1d2a47}
+.logdock.closed{height:46px}
+.loghead{display:flex;align-items:center;gap:12px;padding:0 18px;height:46px;flex-shrink:0;cursor:pointer;user-select:none}
+.loghead b{font-size:14px}
+.loghead .sp{flex:1}
+.loghead button{background:rgba(255,255,255,.1);border:0;color:#cbd5ea;border-radius:8px;padding:5px 12px;cursor:pointer;font-size:12.5px}
+.loghead button:hover{background:rgba(255,255,255,.2)}
+.logbody{flex:1;overflow:auto;padding:4px 18px 12px;font-family:Consolas,"Cascadia Mono",monospace;font-size:13px;line-height:1.55}
+.ln{white-space:pre-wrap;word-break:break-word}
+.ln .t{color:#5f6f93;margin-right:10px}
+.ln.ok{color:#86efac}.ln.err{color:#fca5a5}.ln.head{color:#93c5fd;font-weight:700}.ln.warn{color:#fcd34d}
+
+/* ---------- hộp thoại, thông báo ---------- */
+.modalbg{position:fixed;inset:0;background:rgba(10,16,32,.5);display:grid;place-items:center;z-index:50;animation:fade .15s}
+.modalbox{background:#fff;border-radius:16px;width:min(560px,92vw);max-height:90vh;overflow:auto;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.35);animation:pop .18s}
+.modalbox h3{margin:0 0 12px;font-size:19px}
+.modalbox .body{line-height:1.6;margin-bottom:20px}
+.modalbox .btns{display:flex;justify-content:flex-end;gap:10px}
+@keyframes fade{from{opacity:0}}
+@keyframes pop{from{transform:translateY(10px) scale(.97);opacity:0}}
+#toasts{position:fixed;top:18px;right:18px;display:flex;flex-direction:column;gap:10px;z-index:60}
+.toast{background:#1b2437;color:#fff;border-radius:12px;padding:13px 18px;box-shadow:0 10px 30px rgba(0,0,0,.25);max-width:420px;animation:pop .2s;display:flex;gap:10px;line-height:1.45}
+.toast.ok{background:#15803d}.toast.err{background:#b91c1c}.toast.warn{background:#c2410c}
+.nbadge{margin-left:auto;background:#ef4444;color:#fff;border-radius:99px;font-size:12px;font-weight:700;padding:1px 8px;min-width:20px;text-align:center}
+.nav button.alerting .ic{animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.25}}
+.toast.alert{background:#b91c1c;align-items:flex-start;cursor:pointer;width:420px;padding:12px 14px;border:2px solid #fecaca}
+.toast.alert img{width:132px;height:80px;object-fit:cover;border-radius:8px;background:#000;flex-shrink:0}
+.toast.alert .tt{flex:1;min-width:0}
+.toast.alert b{display:block;font-size:15px;margin-bottom:2px}
+.toast.alert .sm{opacity:.9;font-size:12.5px;word-break:break-word}
+.toast.alert .xx{background:none;border:0;color:#fff;font-size:18px;cursor:pointer;line-height:1;padding:0 2px}
+
+/* màn hình chờ khi thao tác chạy lâu (01-core.js: slowStart/slowShow) */
+#slowbox{position:fixed;inset:0;z-index:55;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,.18);animation:slowin .2s ease}
+#slowbox .slowcard{display:flex;gap:16px;align-items:flex-start;background:var(--card);color:var(--text);border-radius:16px;padding:20px 22px;max-width:min(460px,calc(100vw - 32px));box-shadow:0 18px 50px rgba(15,23,42,.25)}
+#slowbox .slowtx{display:flex;flex-direction:column;gap:6px;line-height:1.45}
+#slowbox .slowtx b{font-size:15.5px}
+#slowbox .slowmore{font-size:13px;color:var(--muted);background:var(--bg);border-radius:10px;padding:8px 10px}
+#slowbox .btn{align-self:flex-start}
+.slowring{flex:none;width:34px;height:34px;border-radius:50%;border:4px solid var(--primary-l);border-top-color:var(--primary);animation:sp .8s linear infinite}
+@keyframes slowin{from{opacity:0}to{opacity:1}}
+.loadview{display:flex;gap:16px;align-items:center;justify-content:center;padding:70px 16px;color:var(--text)}
+.btn.is-loading{position:relative;color:transparent!important;pointer-events:none}
+.btn.is-loading::after{content:"";position:absolute;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;border:2px solid rgba(127,127,127,.35);border-top-color:currentColor;border-top-color:var(--primary);animation:sp .7s linear infinite}
+.btn.primary.is-loading::after,.btn.danger.is-loading::after{border-color:rgba(255,255,255,.45);border-top-color:#fff}
+@media (prefers-reduced-motion:reduce){.slowring,.btn.is-loading::after{animation-duration:2.4s}}

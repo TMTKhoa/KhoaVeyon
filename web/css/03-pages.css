@@ -1,0 +1,69 @@
+/* KhoaVeyon - Trang Điều khiển lớp, Danh sách, Phân phối */
+/* ---------- Điều khiển lớp ---------- */
+.grid-control{display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start}
+.addhost{display:flex;gap:8px;margin-bottom:12px}
+.hosttools{display:flex;align-items:center;gap:14px;margin:6px 0 10px;font-size:13px}
+.hostlist{list-style:none;margin:0;padding:0;max-height:420px;overflow:auto;display:flex;flex-direction:column;gap:6px}
+.hostlist li{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fbfcfe}
+.hostlist li.sel{border-color:var(--primary);background:var(--primary-l)}
+.hostlist label{display:flex;align-items:center;gap:10px;cursor:pointer;flex:1;font-weight:600}
+.hostlist input{width:17px;height:17px;accent-color:var(--primary)}
+.x{background:none;border:0;color:#94a3b8;font-size:20px;line-height:1;cursor:pointer;border-radius:6px;padding:2px 8px}
+.x:hover{background:var(--err-l);color:var(--err)}
+.empty{border:2px dashed var(--line);border-radius:12px;padding:22px;text-align:center;color:var(--muted)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.tile{display:flex;align-items:center;gap:12px;text-align:left;border:1px solid var(--line);background:#f8fafc;border-radius:12px;padding:13px 14px;cursor:pointer;transition:.15s;font-weight:600}
+.tile .ico{font-size:22px;width:34px;height:34px;display:grid;place-items:center;border-radius:10px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08);flex-shrink:0}
+.tile:hover{transform:translateY(-2px);box-shadow:0 8px 18px rgba(15,27,51,.1)}
+.tile.lock{background:var(--warn-l);border-color:#fed7b8}
+.tile.lock:hover{border-color:var(--warn)}
+.tile.free{background:var(--ok-l);border-color:#bfe6cc}
+.tile.free:hover{border-color:var(--ok)}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+
+/* ---------- Danh sách ---------- */
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.toolbar .grow{flex:1;min-width:200px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1px dashed #b8c4dc;background:#fff;border-radius:99px;padding:6px 14px;font-size:13px;cursor:pointer;font-weight:600;color:var(--primary-d)}
+.chip:hover{background:var(--primary-l);border-style:solid}
+.tbl{width:100%;border-collapse:separate;border-spacing:0}
+.tbl th{position:sticky;top:-26px;z-index:2;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);background:#f8fafd;padding:10px 12px;border-bottom:1px solid var(--line)}
+.tbl th:first-child{border-top-left-radius:10px}.tbl th:last-child{border-top-right-radius:10px}
+.tbl td{padding:6px 8px;border-bottom:1px solid #eef1f7;vertical-align:middle}
+.tbl tr:hover td{background:#fafcff}
+.tbl td.num{width:44px;color:#9aa6bd;text-align:center;font-size:13px}
+.tbl td.act{width:150px;white-space:nowrap;text-align:right}
+.cell{border:1px solid transparent!important;background:transparent!important;padding:8px 10px!important}
+.cell:hover{border-color:#d3dae8!important}
+.cell:focus{background:#fff!important}
+.iconbtn{background:none;border:0;border-radius:8px;width:30px;height:30px;cursor:pointer;color:#7a879f;font-size:15px}
+.iconbtn:hover{background:#eaeff8;color:var(--text)}
+.iconbtn.del:hover{background:var(--err-l);color:var(--err)}
+.warnmark{display:inline-block;color:var(--warn);cursor:help;font-size:16px;margin-right:4px}
+.savebar{position:sticky;bottom:-26px;margin-top:18px;background:rgba(255,255,255,.96);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:14px;padding:14px 18px;display:flex;align-items:center;gap:12px;box-shadow:0 -6px 22px rgba(15,27,51,.08);flex-wrap:wrap}
+.savebar .grow{flex:1;min-width:220px}
+.dirty{color:var(--warn);font-weight:700}
+
+/* ---------- Phân phối ---------- */
+.steps{display:flex;flex-direction:column;gap:18px;max-width:980px}
+.stepno{width:28px;height:28px;border-radius:50%;background:var(--primary);color:#fff;display:inline-grid;place-items:center;font-size:14px;font-weight:700}
+.files{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+.file{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:#fbfcfe}
+.file input{width:17px;height:17px;accent-color:var(--primary)}
+.file .nm{flex:1;font-weight:600;word-break:break-all}
+.file .sz{color:var(--muted);font-size:12.5px}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.radiocards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.rc{border:2px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;background:#fff;transition:.15s}
+.rc:hover{border-color:#b8c8ee}
+.rc.on{border-color:var(--primary);background:var(--primary-l)}
+.rc b{display:block;margin-bottom:4px}
+.rc span{color:var(--muted);font-size:13px}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.formgrid .full{grid-column:1/-1}
+
+.hip{font-weight:400;font-size:12px;color:var(--muted,#64748b);margin-left:4px}
+.hostlist .ed,td .ed{border:0;background:none;cursor:pointer;color:var(--muted,#64748b);text-decoration:none;padding:2px 6px;font-size:14px}
+.hostlist .ed:hover,td .ed:hover{color:var(--primary)}
