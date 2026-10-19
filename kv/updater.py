@@ -46,8 +46,34 @@ def _http_get(url, timeout=15, limit=UPDATE_MAX, trusted=False):
     return data
 
 
+def _net_reason(e):
+    """Giải thích lỗi mạng bằng tiếng Việt, tách rõ: mất mạng / DNS / chứng chỉ (antivirus, proxy trường) / quá hạn."""
+    import socket
+    import ssl
+    r = getattr(e, 'reason', e)
+    if isinstance(r, ssl.SSLError) or 'CERTIFICATE' in str(r).upper():
+        return 'chứng chỉ HTTPS bị từ chối (thường do antivirus hoặc proxy/tường lửa của trường chặn kiểm tra SSL): %s' % r
+    if isinstance(r, socket.gaierror):
+        return 'không phân giải được tên github.com (kiểm tra DNS / mạng): %s' % r
+    if isinstance(r, (socket.timeout, TimeoutError)):
+        return 'quá thời gian chờ GitHub (mạng chậm hoặc bị chặn)'
+    return str(r)
+
+
+def _from_branch(repo):
+    """Kho chưa tạo Release/tag: lấy số bản từ kv/paths.py của nhánh mặc định và tải zip của nhánh đó."""
+    raw = _http_get('https://raw.githubusercontent.com/%s/HEAD/kv/paths.py' % repo).decode('utf-8', 'replace')
+    m = re.search(r"VERSION\s*=\s*['\"]([^'\"]+)['\"]", raw)
+    if not m:
+        raise ApiError('Kho %s không có kv/paths.py với dòng VERSION: có đúng kho KhoaVeyon không?' % repo)
+    tag = m.group(1)
+    return {'current': VERSION, 'latest': tag, 'newer': _ver(tag) > _ver(VERSION),
+            'url': 'https://github.com/%s/archive/HEAD.zip' % repo,
+            'notes': 'Kho chưa có Release: so sánh số VERSION trong mã nguồn nhánh chính (HEAD).', 'page': 'https://github.com/%s' % repo}
+
+
 def check_update(repo, api_base='https://api.github.com', trusted=False):
-    """Hỏi GitHub Releases xem có bản mới hơn VERSION không. Không tải gì về."""
+    """Hỏi GitHub xem có bản mới hơn VERSION không (Release mới nhất; không có thì tag; không có nữa thì VERSION trong nhánh chính). Không tải gì về."""
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo or ''):
         raise ApiError('Chưa điền kho GitHub (dạng chủ-sở-hữu/tên-kho) ở trang Cài đặt')
     try:
@@ -56,12 +82,31 @@ def check_update(repo, api_base='https://api.github.com', trusted=False):
         raise
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            raise ApiError('Kho %s chưa có Release nào (hoặc là kho riêng tư). Tạo Release trên GitHub rồi kiểm tra lại.' % repo)
+            # Chưa có Release: thử tag, rồi thử đọc thẳng VERSION trong nhánh chính (kho công khai)
+            try:
+                tags = json.loads(_http_get('%s/repos/%s/tags' % (api_base, repo), trusted=trusted).decode('utf-8'))
+                if tags:
+                    tg = str(tags[0].get('name') or '')
+                    return {'current': VERSION, 'latest': tg, 'newer': _ver(tg) > _ver(VERSION),
+                            'url': 'https://github.com/%s/archive/refs/tags/%s.zip' % (repo, tg) if not trusted else '',
+                            'notes': '', 'page': 'https://github.com/%s/releases/tag/%s' % (repo, tg)}
+            except Exception:  # noqa
+                pass
+            if api_base == 'https://api.github.com':
+                try:
+                    return _from_branch(repo)
+                except urllib.error.HTTPError as e2:
+                    raise ApiError('Không thấy kho %s trên GitHub (mã %s). Kiểm tra tên kho ở trang Cài đặt (mặc định TMTKhoa/KhoaVeyon là kho của tác giả, hãy điền kho CỦA BẠN) và kho phải ở chế độ Public.' % (repo, e2.code))
+                except ApiError:
+                    raise
+                except Exception as e2:  # noqa
+                    raise ApiError('Không kiểm tra được bản mới: %s' % _net_reason(e2))
+            raise ApiError('Kho %s chưa có Release nào (hoặc là kho riêng tư).' % repo)
         if e.code in (403, 429):
-            raise ApiError('GitHub tạm giới hạn số lần hỏi, hãy thử lại sau ít phút.')
+            raise ApiError('GitHub giới hạn số lần hỏi của địa chỉ IP này (60 lần/giờ khi chưa đăng nhập, mạng trường dùng chung một IP nên dễ hết). Thử lại sau ít phút.')
         raise ApiError('GitHub trả lỗi %s khi kiểm tra bản mới' % e.code)
     except Exception as e:  # noqa
-        raise ApiError('Không kiểm tra được bản mới (cần Internet, và kho phải công khai có Release): %s' % e)
+        raise ApiError('Không kiểm tra được bản mới, không phải lỗi kho: %s' % _net_reason(e))
     tag = str(data.get('tag_name') or '')
     url = ''
     for a in data.get('assets') or []:

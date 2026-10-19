@@ -23,7 +23,7 @@ LOCK_KEYS = {'lockall-start', 'lockrun-start', 'lockapp-start', 'blockall', 'all
 FREE_KEYS = {'lockall-stop', 'lockrun-stop', 'lockapp-stop', 'allowall', 'weboff', 'unblockapp', 'unlock', 'allowai'}
 
 STR_KEYS = ['list_dir', 'script_path', 'veyon_cli', 'run_template', 'list_template', 'sync_dir',
-            'dist_target', 'dist_mode', 'dist_cmd', 'dist_action', 'update_repo', 'update_skip', 'watch_repeat', 'watch_max', 'alert_poll', 'alert_group_sec', 'keep_days', 'keep_records_days', 'school_name']
+            'dist_target', 'dist_mode', 'transport', 'agent_port', 'agent_host', 'dist_cmd', 'dist_action', 'update_repo', 'update_skip', 'watch_repeat', 'watch_max', 'alert_poll', 'alert_group_sec', 'keep_days', 'keep_records_days', 'school_name']
 BOOL_KEYS = ['auto_sync', 'auto_push', 'dist_include_lists', 'dist_interactive', 'setup_done', 'auto_lock', 'update_check', 'update_auto', 'shot_before_lock', 'lock_with_ai', 'alert_sound', 'alert_popup', 'watch_autostart', 'reapply_on_boot', 'watch_disclose', 'watch_notify_student', 'ai_block_overviews', 'ai_disable_doh', 'ai_block_ext']
 LIST_KEYS = ['dist_files', 'dist_payload_skip']
 

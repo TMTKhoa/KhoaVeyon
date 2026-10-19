@@ -127,9 +127,15 @@ def main(argv=None):
         ai_opts_write(CFG)
     except OSError:
         pass
+    from .agent import agent_start
+    agent_start()   # cổng cho dịch vụ trên máy học sinh gọi về (kênh Agent)
+    from .setup import refresh_agent_cfg
+    refresh_agent_cfg()   # tự tạo/cập nhật payload\\KhoaVeyonAgent.cfg, không cần bấm nút
     threading.Thread(target=school_loop, daemon=True).start()
     exam_load()
     kq_load()
+    from .khoalink import live_loop
+    threading.Thread(target=live_loop, daemon=True).start()
     threading.Thread(target=auto_loop, daemon=True).start()
     threading.Thread(target=exam_loop, daemon=True).start()
     threading.Thread(target=reapply_loop, daemon=True).start()

@@ -136,7 +136,7 @@ L.COLLECT_MAX_FILE = 100; new(os.path.join(share, "lon.bin"), 500)
 def unc(h, p):
     import re
     return os.path.join(root, h, *[x for x in re.split(r"[\\\\/]+", p[3:]) if x]) if False else os.path.join(root, h, *[x for x in re.split(r"[\\\\/]+", p[3:]) if x])
-L.unc_target = unc
+import kv.remote as RR; RR.unc_target = unc
 dest = tempfile.mkdtemp()
 ok, msg = L.collect_one("PC1", [r"C:\\BaiLam", r"C:\\Users\\{user}\\Documents", r"C:\\KhongCo"], time.time() - 3600, dest, user_fn=lambda h: "LAB\\\\hs01")
 got = sorted(os.path.relpath(os.path.join(d, f), dest).replace(os.sep, "/") for d, _, fs in os.walk(dest) for f in fs)
@@ -230,6 +230,7 @@ print(L.lock_bat("C:\\\\cmd\\\\vcfg", "on", ["usb", "print"]).splitlines()[1])
 import kv.api_core as C, kv.runtime as RT, kv.config as K
 K.save_config = lambda cfg: None
 C.save_config = lambda cfg: None
+import kv.agent as AG; AG.save_config = lambda cfg: None   # refresh_agent_cfg có thể tạo khóa Agent
 C.api_settings({"reapply_on_boot": False, "watch_disclose": False, "keep_days": "7", "keep_records_days": 90})
 print(RT.CFG["reapply_on_boot"], RT.CFG["watch_disclose"], repr(RT.CFG["keep_days"]), repr(RT.CFG["keep_records_days"]))
 ''')
@@ -304,7 +305,7 @@ import os, json, tempfile
 import kv.alerts as A, kv.watch as W
 src = tempfile.mkdtemp(); dest = tempfile.mkdtemp()
 A.tcp_open = lambda *a, **k: True
-A.unc_target = lambda h, d: src
+import kv.remote as RR, ntpath, kv.evidence as EV; RR.unc_target = lambda h, p: src if ntpath.normpath(p) == ntpath.normpath(EV.WATCH_REMOTE_DIR) else os.path.join(src, ntpath.basename(p))
 A.evidence_root = lambda: dest
 def shot(name):
     open(os.path.join(src, name + ".jpg"), "wb").write(b"\\xff\\xd8jpg")
@@ -332,7 +333,7 @@ seen = []
 W.distribute_to_host = lambda h, files, d: None
 W.remote_run = lambda h, cmd, interactive=False, name="": (seen.append(cmd) or (0, "ok"))
 W.watch_hosts_set = lambda h, on: None
-W.unc_target = lambda h, d: __import__("tempfile").mkdtemp()
+import kv.remote as RR; RR.unc_target = lambda h, d: __import__("tempfile").mkdtemp()
 base = {"dist_target": "C:\\\\cmd", "watch_autostart": False}
 W.watch_autostart_remove = lambda h: (True, "")
 W.watch_start_one(dict(base), "PC1"); W.watch_start_one(dict(base, watch_notify_student=False), "PC1")
@@ -348,7 +349,7 @@ root = tempfile.mkdtemp(); src = tempfile.mkdtemp()
 for m in (A, G, C):
     m.evidence_root = lambda: root
 A.tcp_open = lambda *a, **k: True
-A.unc_target = lambda h, d: src
+import kv.remote as RR, ntpath, kv.evidence as EV; RR.unc_target = lambda h, p: src if ntpath.normpath(p) == ntpath.normpath(EV.WATCH_REMOTE_DIR) else os.path.join(src, ntpath.basename(p))
 A.school_class_at = lambda ts: "10A1"
 A.school_student_for = lambda h, c: ("Nguyễn Văn An", 7)
 n = "PC07_20261018-094210_site_youtube.com"
@@ -440,10 +441,11 @@ print("firestore.googleapis.com" in KQ_DOMAINS, any("mongodb" in d for d in KQ_D
 import os, tempfile
 import kv.watch as W, kv.runtime as RT
 d = tempfile.mkdtemp()
-W.unc_target = lambda h, path: d
+import kv.remote as RR
+import ntpath; RR.unc_target = lambda h, path: os.path.join(d, ntpath.basename(path))
 W.vcfg_remote_dir = lambda cfg: "C:\\\\cmd\\\\vcfg"
 calls = []
-W.run_args = lambda a, timeout=60: (calls.append(a) or (0, "ok"))
+RR.run_args = lambda a, timeout=60: (calls.append(a) or (0, "ok"))
 W.tcp_open = lambda *a, **k: True
 RT.CFG["features"] = {}
 ok, msg = W.watch_autostart_install("PC1", "-NoProfile -File x.ps1 -Out C:\\\\Users")
@@ -481,7 +483,7 @@ print([r for r in ("/api/startup", "/api/logon_policy") if r not in POST_ROUTES]
 import kv.paths as P
 print(P.VERSION)
 ''')
-        self.assertEqual(out.splitlines(), ['[]', '3.10.0'])
+        self.assertEqual(out.splitlines(), ['[]', '3.11.0'])
 
 
 if __name__ == '__main__':

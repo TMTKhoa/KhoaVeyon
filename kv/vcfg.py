@@ -2,6 +2,7 @@
 """Cấu hình Veyon: sao lưu, so sánh, đẩy xuống máy học sinh, nhóm máy trong Veyon Master, nâng quyền quản trị."""
 
 import json
+import ntpath
 import os
 import re
 import shutil
@@ -11,7 +12,7 @@ import time
 
 from .config import DEFAULT_CONFIG, save_config
 from .paths import APP_DIR, CONFIG_PATH, ENTRY_SCRIPT, find_veyon_cli
-from .remote import distribute_to_host, remote_run_wait, run_args, unc_target
+from .remote import distribute_to_host, remote_run_wait, rfs_read, rfs_remove, run_args
 from .runtime import ApiError, CFG, CFG_LOCK, clean_hosts, log, pool_run, start_job
 from .setup import is_admin, SETUP_RESULT
 
@@ -117,12 +118,15 @@ def client_script_run(host, cfg, bat_name, bat_text, files=None, timeout=90):
 
 
 def client_fetch(host, cfg, name, dest):
-    src = os.path.join(unc_target(host, vcfg_remote_dir(cfg)), name)
-    if not os.path.isfile(src):
-        return False
-    shutil.copy2(src, dest)
+    src = ntpath.join(vcfg_remote_dir(cfg), name)
     try:
-        os.remove(src)
+        data = rfs_read(host, src)
+    except OSError:
+        return False
+    with open(dest, 'wb') as f:
+        f.write(data)
+    try:
+        rfs_remove(host, src)
     except OSError:
         pass
     return True
@@ -155,7 +159,7 @@ def vcfg_restore_client(cfg, host, path):
                        os.path.join(vcfg_dir(), '%s_truoc-khoi-phuc_%s.json' % (vcfg_safe(host), vcfg_stamp())))
     note = ' (đã sao lưu cấu hình cũ của máy)' if got else ''
     try:
-        os.remove(os.path.join(unc_target(host, t), 'restore.json'))
+        rfs_remove(host, ntpath.join(t, 'restore.json'))
     except OSError:
         pass
     return ok, ('đã khôi phục' + note) if ok else '%s%s' % (msg, note)

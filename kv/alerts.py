@@ -2,6 +2,7 @@
 """Báo động vi phạm ở máy giáo viên: nhận ảnh, gom báo động trùng, ghi lịch sử, tiếng bíp."""
 
 import json
+import ntpath
 import os
 import re
 import shutil
@@ -13,7 +14,7 @@ from .evidence import evidence_root, WATCH_REMOTE_DIR
 from .gallery import evidence_target
 from .network import tcp_open
 from .privacy import privacy_status
-from .remote import unc_target
+from .remote import rfs_read, rfs_reachable, rfs_remove, rfs_scan, rfs_write
 from .runtime import CFG, CFG_LOCK, log
 from .school import school_class_at
 from .school_api import school_brief
@@ -112,58 +113,59 @@ def alert_push(e):
 
 
 def _rm(path):
+    """Xóa file CỤC BỘ (bỏ qua lỗi)."""
     try:
         os.remove(path)
     except OSError:
         pass
 
 
+def _rrm(host, name):
+    """Xóa file trong thư mục ảnh vi phạm trên máy học sinh (bỏ qua lỗi)."""
+    try:
+        rfs_remove(host, ntpath.join(WATCH_REMOTE_DIR, name))
+    except OSError:
+        pass
+
+
 def alert_collect_host(cfg, host):
     """Lấy ảnh vi phạm mới từ máy học sinh về máy giáo viên rồi tạo báo động. Trả về (ok, mô tả, số vi phạm mới)."""
-    if not tcp_open(host, 445, 1.5):
+    if not rfs_reachable(host, tcp_open):
         return False, 'không kết nối được (máy tắt hoặc mạng lỗi)', 0
-    src = unc_target(host, WATCH_REMOTE_DIR)
     try:
-        names = os.listdir(src)
+        ents = rfs_scan(host, WATCH_REMOTE_DIR)
     except FileNotFoundError:
         return True, 'chưa có ảnh', 0
     except OSError as e:
         return False, str(e), 0
+    mt = {e['name']: e['mtime'] for e in ents}
+    sz = {e['name']: e['size'] for e in ents}
+    names = list(mt)
     jobs = []   # (tên file ảnh, siêu dữ liệu, các file nguồn cần xóa)
     lower = {n.lower(): n for n in names}
     for n in sorted(names):
         low = n.lower()
         if low.endswith('.jpg.ok'):  # biên nhận do máy giáo viên ghi (học sinh không xóa được), dọn cái cũ hơn 2 phút
-            try:
-                if time.time() - os.path.getmtime(os.path.join(src, n)) > 120:
-                    _rm(os.path.join(src, n))
-            except OSError:
-                pass
+            if time.time() - mt[n] > 120:
+                _rrm(host, n)
             continue
         if low.endswith('.json'):
             try:
-                with open(os.path.join(src, n), 'r', encoding='utf-8-sig') as f:
-                    m = json.load(f)
+                m = json.loads(rfs_read(host, ntpath.join(WATCH_REMOTE_DIR, n)).decode('utf-8-sig'))
                 if not isinstance(m, dict):
                     raise ValueError
             except (OSError, ValueError):
-                try:  # chưa ghi xong thì lần sau thử lại; hỏng quá 60 giây thì dọn đi
-                    if time.time() - os.path.getmtime(os.path.join(src, n)) > 60:
-                        _rm(os.path.join(src, n))
-                except OSError:
-                    pass
+                if time.time() - mt[n] > 60:  # chưa ghi xong thì lần sau thử lại; hỏng quá 60 giây thì dọn đi
+                    _rrm(host, n)
                 continue
             jpg = str(m.get('file') or '')
             if jpg != os.path.basename(jpg) or not SAFE_JPG.match(jpg):  # tên file lạ (đường dẫn, ký tự đặc biệt): bỏ
-                _rm(os.path.join(src, n))
+                _rrm(host, n)
                 continue
             jobs.append((jpg, m, [n]))
         elif low.endswith('.jpg') and low[:-4] + '.json' not in lower:
             lm = LEGACY_JPG.match(n)  # ảnh do bản giám sát cũ chụp, không có file .json
-            try:
-                old_enough = time.time() - os.path.getmtime(os.path.join(src, n)) > 20
-            except OSError:
-                continue
+            old_enough = time.time() - mt[n] > 20
             if lm and old_enough and SAFE_JPG.match(n):
                 d, t = lm.group('d'), lm.group('t')
                 jobs.append((n, {'pc': lm.group('pc'), 'type': lm.group('kind'), 'name': lm.group('name'),
@@ -172,10 +174,9 @@ def alert_collect_host(cfg, host):
     new = 0
     for jpg, m, extra in jobs[:ALERT_PER_CYCLE]:
         key = (host, jpg)
-        jfile = [os.path.join(src, x) for x in extra]
         if key in ALERT_SEEN:   # đã báo rồi, chỉ dọn file còn sót
-            for x in jfile + [os.path.join(src, jpg)]:
-                _rm(x)
+            for x in extra + [jpg]:
+                _rrm(host, x)
             continue
         kind = m.get('type') if m.get('type') in ('site', 'ai') else 'app'
         name = _clip(m.get('name'), 200)
@@ -189,32 +190,31 @@ def alert_collect_host(cfg, host):
         cls_now = school_class_at(ts)
         stu, seat = school_student_for(host, cls_now)
         img = ''
-        sp = os.path.join(src, jpg)
         try:
-            if os.path.isfile(sp) and os.path.getsize(sp) <= ALERT_MAX_IMG:
+            if jpg in sz and sz[jpg] <= ALERT_MAX_IMG:
                 # data\evidence\<ngày>\<lớp>\<Trường>_<Lớp>_<Học sinh>_<Máy>_<ngày>_<giờ>_<loại>_<trang>.jpg
                 dest, img = evidence_target(cfg, hn_of(cfg, host), date, tm, kind, name, cls_now, stu)
-                shutil.copy2(sp, dest)
+                with open(dest, 'wb') as f:
+                    f.write(rfs_read(host, ntpath.join(WATCH_REMOTE_DIR, jpg)))
         except OSError:
             continue  # chưa chép được, lần sau thử lại
         alert_push({'host': host, 'pc': _clip(m.get('pc'), 64), 'user': _clip(m.get('user'), 64), 'type': kind,
                     'name': name, 'window': _clip(m.get('window'), 300), 'date': date, 'time': tm, 'ts': ts,
                     'file': jpg, 'img': img, 'text': alert_text(kind, name), 'cls': cls_now, 'student': stu, 'seat': seat})
-        for x in jfile + [sp]:
-            _rm(x)
+        for x in extra + [jpg]:
+            _rrm(host, x)
         if cfg.get('watch_notify_student', True):
-            write_receipt(src, jpg)
+            write_receipt(host, jpg)
         new += 1
         log('[%s] VI PHẠM: %s (%s %s)' % (host, alert_text(kind, name), date, tm), 'warn')
     return True, 'ok', new
 
 
-def write_receipt(src, jpg):
+def write_receipt(host, jpg):
     """Biên nhận "máy giáo viên đã nhận ảnh này": file <ảnh>.jpg.ok cạnh chỗ ảnh vừa lấy trên máy học sinh.
     Script giám sát chỉ báo cho học sinh "đã gửi cho giáo viên" khi thấy biên nhận, rồi tự xóa nó."""
     try:
-        with open(os.path.join(src, jpg + '.ok'), 'w', encoding='ascii') as f:
-            f.write(time.strftime('%Y-%m-%d %H:%M:%S'))
+        rfs_write(host, ntpath.join(WATCH_REMOTE_DIR, jpg + '.ok'), time.strftime('%Y-%m-%d %H:%M:%S').encode('ascii'))
     except OSError:
         pass
 

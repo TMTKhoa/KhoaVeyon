@@ -10,7 +10,7 @@ import time
 from .actions import ACTION_BY_KEY
 from .jobs import job_action
 from .paths import CONFIG_PATH, load_script
-from .remote import distribute_to_host, remote_run_wait, unc_target
+from .remote import distribute_to_host, remote_run_wait, rfs_read, rfs_remove
 from .runtime import ApiError, CFG, CFG_LOCK, clean_hosts, log, pool_run, start_job
 from .vcfg import vcfg_remote_dir, vcfg_safe
 
@@ -44,10 +44,8 @@ def shot_one(cfg, host, folder):
         return False, 'không chép được script chụp: %s' % e
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    import ntpath
-    remote_img = os.path.join(unc_target(host, ntpath.dirname(SHOT_REMOTE_FILE)), ntpath.basename(SHOT_REMOTE_FILE))
     try:
-        os.remove(remote_img)
+        rfs_remove(host, SHOT_REMOTE_FILE)
     except OSError:
         pass
     cmd = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File %s -Out %s' % (
@@ -57,8 +55,13 @@ def shot_one(cfg, host, folder):
         return False, msg
     dest = os.path.join(folder, vcfg_safe(host) + '.jpg')
     try:
-        shutil.copy2(remote_img, dest)
-        os.remove(remote_img)
+        data = rfs_read(host, SHOT_REMOTE_FILE)
+        with open(dest, 'wb') as f:
+            f.write(data)
+        try:
+            rfs_remove(host, SHOT_REMOTE_FILE)
+        except OSError:
+            pass
     except OSError as e:
         return False, 'chụp xong nhưng không lấy được ảnh: %s' % e
     return True, 'đã lưu ' + os.path.basename(dest)

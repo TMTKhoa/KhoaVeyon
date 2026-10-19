@@ -59,12 +59,29 @@ echo [5/6] Bat Veyon Service
 sc config VeyonService start= auto >nul 2>&1
 sc start VeyonService >nul 2>&1
 
-echo [6/6] Dich vu KhoaVeyon
+echo [6/6] Agent va dich vu KhoaVeyon
+set "KVAG=%ProgramFiles%\KhoaVeyon"
+if exist "%HERE%KhoaVeyonAgent.cfg" (
+  if not exist "!KVAG!" mkdir "!KVAG!"
+  copy /y "%HERE%KhoaVeyonAgent.cfg" "!KVAG!\agent.cfg" >nul
+  icacls "!KVAG!\agent.cfg" /inheritance:r /grant:r "*S-1-5-18:F" "*S-1-5-32-544:F" >nul 2>&1
+  echo     Da cai khoa Agent: may giao vien dieu khien may nay khong can tai khoan quan tri.
+  echo "%HERE%" | find /i "\KhoaVeyonSetup\" >nul && del /q "%HERE%KhoaVeyonAgent.cfg" >nul 2>&1
+) else (
+  echo     Khong thay KhoaVeyonAgent.cfg canh file nay: may giao vien se dung chia se C$ nhu cu.
+)
+if not exist "C:\cmd\KhoaVeyonServices.bat" if not exist "%HERE%KhoaVeyonServices.bat" if exist "!KVAG!\agent.cfg" (
+  echo     Dang tai KhoaVeyonServices.bat tu may giao vien...
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=@{};Get-Content -LiteralPath ($env:ProgramFiles+'\KhoaVeyon\agent.cfg') | ForEach-Object { $p=$_.Split('=',2); if($p.Length -eq 2){ $c[$p[0].Trim()]=$p[1].Trim() } }; if(-not $c['url'] -or -not $c['sha']){ exit 3 }; $f='C:\cmd\KhoaVeyonServices.bat'; (New-Object Net.WebClient).DownloadFile($c['url']+'/agent/boot/KhoaVeyonServices.bat',$f); $h=(Get-FileHash -LiteralPath $f -Algorithm SHA256).Hash.ToLower(); if($h -ne $c['sha']){ Remove-Item -LiteralPath $f -Force; exit 4 }" >nul 2>&1
+  if errorlevel 1 echo     KHONG tai duoc KhoaVeyonServices.bat: kiem tra may giao vien dang chay KhoaVeyon, tuong lua cho phep cong Agent, hoac chep file nay vao C:\cmd bang tay.
+)
 if exist "%HERE%KhoaVeyonServices.bat" (
   copy /y "%HERE%KhoaVeyonServices.bat" "C:\cmd\" >nul
+)
+if exist "C:\cmd\KhoaVeyonServices.bat" (
   call "C:\cmd\KhoaVeyonServices.bat" -install <nul
 ) else (
-  echo     Khong thay KhoaVeyonServices.bat canh file nay: bo qua, may giao vien se gui sau.
+  echo     Chua co KhoaVeyonServices.bat tren may nay: bo qua, may giao vien se gui sau.
 )
 
 echo.

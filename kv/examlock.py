@@ -7,6 +7,7 @@
 - Thu bài: chép file mới sửa từ các thư mục chỉ định trên máy học sinh (qua \\\\máy\\C$) về máy giáo viên."""
 
 import json
+import ntpath
 import os
 import re
 import shutil
@@ -14,7 +15,7 @@ import tempfile
 import time
 
 from .paths import CONFIG_PATH, load_script
-from .remote import distribute_to_host, logged_on_user, remote_run, unc_target
+from .remote import distribute_to_host, logged_on_user, remote_run, rfs_read, rfs_remove, rfs_scan, rfs_write
 from .runtime import ApiError, CFG, CFG_LOCK, clean_hosts, log, pool_run, split_host_port, start_job
 from .screenshot import _q
 from .vcfg import client_script_run, vcfg_remote_dir
@@ -67,10 +68,7 @@ def clip_one(cfg, host, how):
     hh, _ = split_host_port(host)
     if how == 'off':
         try:
-            d = unc_target(hh, rdir)
-            os.makedirs(d, exist_ok=True)
-            with open(os.path.join(d, CLIP_STOP), 'w') as f:
-                f.write('stop')
+            rfs_write(hh, ntpath.join(rdir, CLIP_STOP), b'stop')
         except OSError as e:
             return False, 'không gỡ được chặn sao chép-dán: %s' % e
         return True, 'đã gỡ chặn sao chép-dán'
@@ -82,7 +80,7 @@ def clip_one(cfg, host, how):
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     try:
-        os.remove(os.path.join(unc_target(hh, rdir), CLIP_STOP))
+        rfs_remove(hh, ntpath.join(rdir, CLIP_STOP))
     except OSError:
         pass
     cmd = 'powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File %s' % _q(rdir + '\\' + CLIP_PS1_NAME)
@@ -124,6 +122,21 @@ def _safe(name):
     return re.sub(r'[^\w.\-]+', '_', name, flags=re.UNICODE).strip('_') or 'x'
 
 
+def _walk_remote(host, winroot, rel=''):
+    """Đi qua thư mục trên máy học sinh: trả về [(đường dẫn tương đối, kích thước, mtime)]. Thư mục gốc không có thì FileNotFoundError."""
+    out = []
+    for e in rfs_scan(host, ntpath.join(winroot, rel) if rel else winroot):
+        r = ntpath.join(rel, e['name']) if rel else e['name']
+        if e['dir']:
+            try:
+                out.extend(_walk_remote(host, winroot, r))
+            except OSError:
+                pass
+        else:
+            out.append((r, e['size'], e['mtime']))
+    return out
+
+
 def collect_one(host, paths, since, dest_root, user_fn=logged_on_user):
     """Chép file có thời gian sửa >= since từ các thư mục chỉ định về dest_root/<máy>/. Trả về (ok, mô tả)."""
     hh, _ = split_host_port(host)
@@ -138,34 +151,28 @@ def collect_one(host, paths, since, dest_root, user_fn=logged_on_user):
             continue
         p = raw.replace('{user}', user)
         try:
-            root = unc_target(hh, p)
-        except ValueError:
-            missing.append(raw)
-            continue
-        if not os.path.isdir(root):
+            files = _walk_remote(hh, p)
+        except (ValueError, OSError):
             missing.append(raw)
             continue
         tag = _safe(p)
-        for dp, _dirs, files in os.walk(root):
-            for fn in files:
-                if fn.startswith('~$') or fn.lower().endswith(('.tmp', '.lnk')):
-                    continue
-                src = os.path.join(dp, fn)
-                try:
-                    st = os.stat(src)
-                except OSError:
-                    continue
-                if st.st_mtime < since or st.st_size > COLLECT_MAX_FILE or copied >= COLLECT_MAX_FILES or total + st.st_size > COLLECT_MAX_TOTAL:
-                    skipped += 1
-                    continue
-                dst = os.path.join(dest_root, _safe(host), tag, os.path.relpath(src, root))
-                try:
-                    os.makedirs(os.path.dirname(dst), exist_ok=True)
-                    shutil.copy2(src, dst)
-                    copied += 1
-                    total += st.st_size
-                except OSError:
-                    skipped += 1
+        for rel, size, mtime in files:
+            fn = ntpath.basename(rel)
+            if fn.startswith('~$') or fn.lower().endswith(('.tmp', '.lnk')):
+                continue
+            if mtime < since or size > COLLECT_MAX_FILE or copied >= COLLECT_MAX_FILES or total + size > COLLECT_MAX_TOTAL:
+                skipped += 1
+                continue
+            dst = os.path.join(dest_root, _safe(host), tag, rel.replace('\\', os.sep))
+            try:
+                data = rfs_read(hh, ntpath.join(p, rel))
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                with open(dst, 'wb') as f:
+                    f.write(data)
+                copied += 1
+                total += size
+            except OSError:
+                skipped += 1
     note = ('; không thấy thư mục: ' + ', '.join(missing)) if missing else ''
     if skipped:
         note += '; bỏ qua %d file (cũ hơn giờ thi, quá lớn hoặc vượt giới hạn)' % skipped

@@ -237,6 +237,24 @@ Thao tác nào quá 0,7 giây chưa xong (quét mạng, hỏi Veyon, kết nối
 
 **Chưa kiểm chứng trên Windows và Veyon thật:** tên khóa `websiteUrls` của Veyon Open website (đã có phương án dự phòng `explorer.exe`), việc trang KhoaQuiz tải đủ khi bật "chỉ trang cho phép" (lệnh này chặn theo IP, trang dùng CDN có thể thiếu: hãy thử trên một máy trước giờ thi). Logic, giao diện và luồng gọi KhoaQuiz đã thử bằng KhoaQuiz giả lập (kiểm thử `tests/test_khoalink.py` và thử giao diện bằng trình duyệt).
 
+## Bản 3.11.0: kênh Agent, không cần tài khoản quản trị trùng tên
+
+Trước đây máy giáo viên chép file qua `\\máy\C$` và chạy lệnh bằng `schtasks /S`, nên phải đăng nhập bằng tài khoản quản trị **trùng tên và mật khẩu** với máy học sinh (lỗi `WinError 5 Access is denied` khi không trùng). Bản này thêm **kênh Agent**:
+
+- Dịch vụ `KhoaVeyonAutoLog` trên máy học sinh (SYSTEM) nay có thêm "Agent": nó **tự gọi ra** máy giáo viên (HTTP, cổng mặc định **8767**), nhận việc (chạy lệnh, chép/đọc/xóa/liệt kê file) rồi gửi kết quả về. Máy học sinh không phải mở cổng nào.
+- Chép file, chạy lệnh (SYSTEM hoặc trong phiên học sinh), lấy ảnh vi phạm, trạng thái AI, thu bài, chụp màn hình, cấu hình Veyon, giám sát, "tự áp khi đăng nhập"... đều chạy qua Agent khi máy đã kết nối. Máy chưa cài Agent vẫn dùng cách cũ (C$ + Task Scheduler). Cài đặt ở trang **Cài đặt**, mục "Kết nối tới máy học sinh": Tự động (mặc định) / Chỉ Agent / Chỉ C$.
+- "Tự áp hạn chế khi đăng nhập" không còn dùng Task Scheduler: dịch vụ chạy các dòng trong `vcfg\kvlogon.txt` mỗi lần học sinh đăng nhập.
+
+**Cài Agent (một lần cho mỗi máy học sinh):**
+
+1. Bấm **Thiết lập máy giáo viên** (Windows hỏi quyền quản trị một lần để mở cổng Agent trên tường lửa máy giáo viên; Windows Defender có thể hỏi cho phép python.exe, chọn Cho phép).
+2. Chạy `Setup-MayHocSinh.bat` từ thư mục `payload` trên mỗi máy học sinh (USB/thư mục chia sẻ), **hoặc** bấm **Gửi Setup-MayHocSinh.bat qua Veyon** (mỗi máy hiện UAC một lần, người ở máy bấm Yes). Bộ cài chép `KhoaVeyonAgent.cfg` vào `%ProgramFiles%\KhoaVeyon\agent.cfg` (chỉ SYSTEM/Admin đọc được); nếu máy chưa có `KhoaVeyonServices.bat` thì tự tải từ máy giáo viên và kiểm tra mã SHA-256 trước khi chạy `-install`.
+3. Máy nào xong sẽ hiện trong bảng "Kênh Agent" ở trang Thiết lập ban đầu. Từ đó trở đi các bản cập nhật dịch vụ gửi qua Agent, **không cần UAC nữa**.
+
+**Bảo mật.** Mọi gói tin Agent ký HMAC-SHA256 bằng khóa bí mật chung (chống giả mạo, phát lại, lệch giờ quá 15 phút); khóa không đi qua mạng. Việc gửi file kiểm tra thêm SHA-256. `KhoaVeyonAgent.cfg` chứa khóa nên **không** được gửi hàng loạt xuống `C:\cmd` (tự loại khỏi danh sách phân phối) và không nên chép cho học sinh. Khi gửi qua Veyon, file này nằm trong `%TEMP%\KhoaVeyonSetup` của máy học sinh trong lúc chờ bấm Yes ở hộp thoại UAC: nếu lo ngại, dùng USB hoặc đưa bộ cài tận tay thay cho cách gửi qua Veyon. Nghi khóa bị lộ thì bấm **Đổi khóa Agent** rồi cài lại. Địa chỉ máy giáo viên được ghi vào cấu hình Agent, nên đặt IP cố định (DHCP reservation) hoặc điền tên máy ở ô "Địa chỉ máy giáo viên".
+
+**Giới hạn:** máy giáo viên phải đang chạy KhoaVeyon thì Agent mới nhận việc; mỗi file gửi qua Agent tối đa 25 MB; chạy `-install` qua Agent khởi động lại chính dịch vụ nên chương trình chờ dịch vụ kết nối lại thay vì đọc kết quả lệnh. Mã Agent chạy kiểm thử bằng mono: `python -m unittest tests.test_agent`.
+
 ## Bản 3.9.0: tự chạy khi mở máy
 
 **1. KhoaVeyon tự chạy khi giáo viên đăng nhập Windows.** Cài đặt → thẻ *Tự chạy khi mở máy* → bật công tắc. Chương trình đặt file `KhoaVeyon.vbs` vào thư mục Startup của bạn (`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`), file này chạy `Chay-KhoaVeyon.bat --background`: chạy ẩn, không mở cửa sổ. Nhờ vậy hẹn giờ theo thời khóa biểu, giám sát, tự áp lại hạn chế hoạt động từ đầu buổi. Muốn xem giao diện thì chạy `Chay-KhoaVeyon.bat` như mọi khi (nó mở lại cửa sổ của bản đang chạy nền). Bản chạy nền không tự thoát sau 3 phút như bình thường, chỉ dừng khi bấm *Thoát*. Tắt công tắc là xóa file. Không cần quyền quản trị. Nếu thư mục chương trình đổi chỗ, tắt rồi bật lại công tắc.

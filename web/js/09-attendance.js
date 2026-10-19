@@ -41,7 +41,7 @@ function viewAttendance() {
   if (a.silent) info.push(`<div class="note warn">Không máy nào trả lời (lúc ${esc(a.checked_at)}), nên chưa dồn chỗ theo máy tắt. Hãy bật máy học sinh và kiểm tra tên máy ở sơ đồ, rồi bấm <b>Kiểm tra máy và dồn chỗ</b>.</div>`);
   if ((a.offline || []).length) info.push(`<div class="muted" style="font-size:12.5px">Máy đang tắt hoặc không kết nối được (kiểm tra lúc ${esc(a.checked_at)}): ${a.offline.join(', ')}</div>`);
   return `<section class="card"><div class="toolbar" style="margin-bottom:10px"><b>Điểm danh hôm nay</b><span class="muted">${esc(a.date.split('-').reverse().join('/'))} · lớp ${esc(a.cls)} · vắng ${ab.size}/${names.length}</span><span class="grow"></span>
-      <button class="btn" data-act="attpresent">Cả lớp có mặt</button><button class="btn" data-act="attrecheck" title="Kiểm tra máy nào đang bật rồi dồn chỗ lại">Kiểm tra máy và dồn chỗ</button><button class="btn" data-kq="compare" data-cls="${esc(a.cls)}" title="So điểm danh và chỗ ngồi với bài làm KhoaQuiz hôm nay">🔎 Đối chiếu KhoaQuiz</button></div>
+      <button class="btn" data-act="attpresent">Cả lớp có mặt</button><button class="btn" data-act="attrecheck" title="Kiểm tra máy nào đang bật rồi dồn chỗ lại">Kiểm tra máy và dồn chỗ</button><button class="btn" data-kq="compare" data-cls="${esc(a.cls)}" title="So điểm danh và chỗ ngồi với bài làm KhoaQuiz hôm nay">🔎 Đối chiếu KhoaQuiz</button><button class="btn" data-kq="live" data-cls="${esc(a.cls)}" title="Danh sách học sinh đã vào phòng chơi KhoaQuiz, ngồi máy nào; bắt đầu chơi thì em chưa vào bị đánh vắng">🎮 Trò chơi KhoaQuiz</button></div>
     <div class="achips">${names.map(n => `<span class="achip ${ab.has(n) ? 'ab' : ''}" data-act="attoggle" data-name="${esc(n)}" title="${ab.has(n) ? 'Đang vắng, bấm để đánh dấu có mặt' : 'Bấm để đánh dấu vắng'}">${esc(n)}</span>`).join('') || '<span class="muted">Chưa có danh sách học sinh</span>'}</div>
     <div class="stack" style="gap:8px;margin-top:10px">${info.join('')}</div>
     <div class="row" style="gap:22px;margin-top:10px;flex-wrap:wrap">
@@ -79,7 +79,8 @@ async function schoolUpload(kind, file) {
 
 async function schoolSet(body) {
   try { S.school = await api('/api/school_set', body); } catch (err) { toast(err.message, 'err'); }
-  await refreshBrief(); render();
+  await refreshBrief(); try { await loadSchool(); } catch (e) { /* bỏ qua */ }
+  render();
 }
 
 async function refreshBrief() {

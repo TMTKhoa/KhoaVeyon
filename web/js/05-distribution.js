@@ -19,7 +19,7 @@ function viewDist() {
       <div class="row"><button class="btn primary sm" data-act="upload">＋ Thêm file</button><input type="file" id="fileInput" multiple class="hidden"><button class="btn sm" data-act="addextra">Thêm theo đường dẫn</button><button class="btn ghost sm" data-act="openpayload">Mở thư mục payload</button></div>
       <div style="margin-top:16px"><label class="field">Thư mục đích trên máy học sinh</label>
         <input type="text" data-cfg="dist_target" value="${esc(c.dist_target)}" style="max-width:360px">
-        <div class="hint" style="margin-top:6px">Chép qua chia sẻ quản trị (\\\\máy\\C$), nên tài khoản đang đăng nhập trên máy này phải là quản trị viên trên máy học sinh.</div></div>
+        <div class="hint" style="margin-top:6px">Máy học sinh đã cài Agent thì chép thẳng qua Agent (không cần tài khoản quản trị). Máy chưa cài Agent thì chép qua chia sẻ quản trị (\\\\máy\\C$), khi đó tài khoản đang đăng nhập trên máy này phải là quản trị viên trên máy học sinh.</div></div>
     </section>
     <section class="card">
       <h3><span class="stepno">2</span>Chọn cách chạy sau khi chép</h3>

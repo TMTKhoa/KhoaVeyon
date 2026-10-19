@@ -1,0 +1,30 @@
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using System.Threading;
+using System.IO;
+using System.Net;
+using System.Diagnostics;
+using System.Text;
+
+// Test stub of the service class: KvAgent only needs these members (the real ones call Win32 APIs).
+public static class KvAutoLogService
+{
+    public static string ScriptPath { get { return "/tmp/x/KhoaVeyonServices.bat"; } }
+    public static void AgentLog(string m) { Console.Error.WriteLine("LOG " + m); }
+    public static List<object> ActiveSessionsInfo(out string user) { user = "hs01"; return new List<object> { 1 }; }
+    public static int FirstActiveSession() { return 1; }
+    public static bool RunInSession(int sid, string cmd, int waitMs, out int rc, out string err) { rc = 0; err = null; return true; }
+}
+
+public static class Harness
+{
+    public static void Main(string[] a)
+    {
+        FieldInfo f = typeof(KvAgent).GetField("CfgFile", BindingFlags.NonPublic | BindingFlags.Static);
+        f.SetValue(null, a[0]);
+        KvAgent.Start();
+        Thread.Sleep(int.Parse(a[1]) * 1000);
+        KvAgent.Stop();
+    }
+}

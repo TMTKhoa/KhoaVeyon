@@ -76,6 +76,7 @@ document.addEventListener('click', async e => {
     case 'setuppayload': setupStep('payload', false); break;
     case 'diagnose': setupStep('diagnose', true); break;
     case 'pushsetup': setupStep('push', true); break;
+    case 'renewagent': if (await modal({title: 'Đổi khóa Agent?', ok: 'Đổi khóa', html: 'Mọi máy học sinh đang dùng khóa cũ sẽ <b>mất kết nối Agent</b> cho tới khi chạy lại Setup-MayHocSinh.bat (hoặc gửi qua Veyon) để nhận khóa mới. Chỉ đổi khi nghi khóa bị lộ.'})) { try { S.agent = await api('/api/agent', {action: 'renew'}); toast('Đã đổi khóa Agent. Cài lại Agent trên các máy học sinh.', 'warn'); render(true); } catch (e) { toast(e.message, 'err'); } } break;
     case 'veyonkit': if (await modal({title: 'Gửi Setup-MayHocSinh.bat qua Veyon?', ok: 'Gửi', html: 'Veyon sẽ mở bộ cài trên máy học sinh. Mỗi máy hiện hộp thoại UAC: cần có người bấm <b>Yes</b> (tài khoản thường thì nhập mật khẩu quản trị). Máy phải đang có người đăng nhập Windows.'})) setupStep('veyonkit', true); break;
     case 'lockcmd': if (await modal({title: 'Khóa thư mục C:\\cmd?', ok: 'Khóa', html: 'Học sinh sẽ chỉ đọc và chạy được file trong C:\\cmd, không sửa hay xóa được. Giáo viên vẫn cập nhật qua KhoaVeyon. Máy học sinh phải dùng tài khoản người dùng thường.'})) setupStep('lock', true); break;
     case 'unlockcmd': setupStep('unlock', true); break;
@@ -235,6 +236,8 @@ document.addEventListener('click', async e => {
     case 'announce': await seatAnnounce(false); break;
     case 'announceclear': await seatAnnounce(true); break;
     case 'seatauto': await seatAuto(); break;
+    case 'seatflipv': await seatSave({flipv: !curLay().flipv}); break;
+    case 'seatfliph': await seatSave({fliph: !curLay().fliph}); break;
     case 'seatclear': await seatSave({seats: {}}); break;
     case 'seatall': await seatSave({}, true); toast('Đã áp dụng kiểu phòng này cho tất cả các lớp', 'ok'); break;
     case 'schoolclear': await schoolSet({action: 'clear'}); break;

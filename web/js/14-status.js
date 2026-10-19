@@ -25,7 +25,7 @@ function statusRows() {
     const r = byHost.get(h) || {checked: false};
     const wait = !r.checked;
     const dot = wait ? '<span class="sdot wait"></span>Đang kiểm tra' : r.online ? `<span class="sdot on"></span>Đang bật <span class="muted">· ${esc(ago(r.since))}</span>` : `<span class="sdot off"></span>Tắt <span class="muted">· ${esc(ago(r.since))}</span>`;
-    const ai = !r.online ? '' : r.ai === 'locked' ? '<span class="rchip ok">Đã khóa</span>' : r.ai === 'half' ? '<span class="rchip">Khóa dở</span>' : r.ai === 'open' ? '<span class="rchip mute">Chưa khóa</span>' : r.ai === 'unknown' ? '<span class="rchip mute" title="Không đọc được C$ hoặc không đủ quyền">Không rõ</span>' : '<span class="muted">…</span>';
+    const ai = !r.online ? '' : r.ai === 'locked' ? '<span class="rchip ok">Đã khóa</span>' : r.ai === 'half' ? '<span class="rchip">Khóa dở</span>' : r.ai === 'open' ? '<span class="rchip mute">Chưa khóa</span>' : r.ai === 'unknown' ? '<span class="rchip mute" title="Không đọc được máy (chưa cài Agent, không vào được C$ hoặc không đủ quyền)">Không rõ</span>' : '<span class="muted">…</span>';
     const rs = (r.restrict || []).map(x => `<span class="rchip">${esc(x)}</span>`).join('') || (r.online ? '<span class="muted">Không</span>' : '');
     const mac = r.mac ? esc(r.mac) : '<span class="muted">chưa có</span>';
     return `<tr class="${r.online ? '' : 'offrow'}"><td><input type="checkbox" data-host="${i}" ${S.sel.has(h) ? 'checked' : ''}></td>

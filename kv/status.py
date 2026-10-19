@@ -10,6 +10,7 @@ from .ai import ai_state_one
 from .health import exam_snapshot, health_of, health_probe
 from .applied import applied_list
 from .network import mac_known, mac_learn, tcp_probe
+from .agent import agent_online
 from .remote import logged_on_user
 from .runtime import CFG, CFG_LOCK, log, split_host_port
 
@@ -30,12 +31,13 @@ def status_quick(host):
     f_smb = PROBE_POOL.submit(tcp_probe, hh, 445, 0.8)  # hai cổng dò cùng lúc: máy tắt chỉ mất 0,8s thay vì 1,6s
     veyon = tcp_probe(hh, pp, 0.8)
     smb = f_smb.result()
-    online = bool(veyon or smb)
+    agent = agent_online(hh)
+    online = bool(veyon or smb or agent)
     now = time.time()
     with STATUS_LOCK:
         old = STATUS.get(host) or {}
         e = dict(old)
-        e.update({'host': host, 'online': online, 'veyon': bool(veyon), 'smb': bool(smb), 'checked': now})
+        e.update({'host': host, 'online': online, 'veyon': bool(veyon), 'smb': bool(smb or agent), 'agent': agent, 'checked': now})
         if old.get('online') != online:
             e['since'] = now
             if 'online' in old:
@@ -123,7 +125,7 @@ def api_status(q):
         level, probs = health_of({'online': bool(e.get('online')), 'veyon': bool(e.get('veyon')), 'smb': bool(e.get('smb')), 'svc': e.get('svc', '?'),
                                   'watch_alive': e.get('watch_alive'), 'watching': watching_now, 'ai': e.get('ai', '')} if e.get('checked') else {}, exam)
         rows.append({'health': level if e.get('checked') else 'wait', 'problems': probs, 'svc': e.get('svc', ''), 'watch_alive': e.get('watch_alive'), 'host': h, 'checked': bool(e.get('checked')), 'online': bool(e.get('online')), 'veyon': bool(e.get('veyon')),
-                     'smb': bool(e.get('smb')), 'user': e.get('user', ''), 'ai': e.get('ai', ''), 'since': e.get('since', 0),
+                     'smb': bool(e.get('smb')), 'agent': bool(e.get('agent')), 'user': e.get('user', ''), 'ai': e.get('ai', ''), 'since': e.get('since', 0),
                      'age': int(now - e['checked']) if e.get('checked') else -1,
                      'watching': hh in watching or h in watching, 'restrict': applied_list(h), 'mac': mac_known(h)})
     return {'hosts': rows, 'ts': now, 'online': sum(1 for r in rows if r['online']), 'total': len(rows),

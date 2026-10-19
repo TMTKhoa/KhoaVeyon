@@ -18,7 +18,7 @@ import time
 from .paths import find_veyon_cli
 from .remote import run_args, unc_target
 from .runtime import CFG, CFG_LOCK, log, PAYLOAD_DIR, pool_run
-from .setup import ensure_payload, STUDENT_SETUP_BAT
+from .setup import ensure_payload, STUDENT_SETUP_BAT, write_agent_cfg
 
 START_APP_UID = 'da9ca56a-b2ad-4fff-8f8a-929b2927b442'  # Veyon: "Start application" (StartApp)
 MAX_CMDLINE = 30000  # giới hạn dòng lệnh Windows là 32767 ký tự
@@ -33,6 +33,12 @@ def kit_files():
     out = []
     with open(os.path.join(PAYLOAD_DIR, STUDENT_SETUP_BAT), 'rb') as f:
         out.append((STUDENT_SETUP_BAT, f.read()))
+    from .agent import AGENT_CFG_NAME
+    with CFG_LOCK:
+        cfg = json.loads(json.dumps(CFG))
+    write_agent_cfg(cfg)   # địa chỉ máy giáo viên có thể đã đổi từ lần trước: tạo lại cho đúng
+    with open(os.path.join(PAYLOAD_DIR, AGENT_CFG_NAME), 'rb') as f:
+        out.append((AGENT_CFG_NAME, f.read()))
     for n in sorted(os.listdir(PAYLOAD_DIR)):
         if n.lower().endswith('_public.pem'):
             with open(os.path.join(PAYLOAD_DIR, n), 'rb') as f:
@@ -56,6 +62,9 @@ def build_kit_command(files):
 
 
 def _share_ok(host, target):
+    from .agent import agent_online
+    if agent_online(host):
+        return True
     try:
         unc = unc_target(host, target)
         return os.path.isdir(unc) or os.path.isdir(os.path.dirname(unc.rstrip('\\')))

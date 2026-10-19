@@ -34,7 +34,7 @@ foreach ($f in Get-ChildItem -Path (Join-Path $root 'payload') -Filter *.bat -Er
             $cs  = Join-Path ([IO.Path]::GetTempPath()) 'kv_autolog_check.cs'
             $exe = Join-Path ([IO.Path]::GetTempPath()) 'kv_autolog_check.exe'
             Set-Content -LiteralPath $cs -Value $m.Groups[1].Value -Encoding UTF8
-            $o = & $csc /nologo /target:winexe /r:System.ServiceProcess.dll "/out:$exe" $cs 2>&1
+            $o = & $csc /nologo /target:winexe /r:System.ServiceProcess.dll /r:System.Web.Extensions.dll "/out:$exe" $cs 2>&1
             if ($LASTEXITCODE -ne 0) { $o | ForEach-Object { Write-Host "LỖI C# $_" }; $bad++ } else { Write-Host "OK   $($f.Name) (C# dịch vụ AutoLog biên dịch được)" }
             Remove-Item -LiteralPath $cs, $exe -Force -ErrorAction SilentlyContinue
         } elseif (-not $m.Success) { Write-Host "LỖI $($f.Name): không tìm thấy mã C# của dịch vụ AutoLog"; $bad++ }

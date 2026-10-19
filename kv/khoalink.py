@@ -244,6 +244,190 @@ def api_kq_compare(q):
             'note': '' if items else 'KhoaQuiz chưa có bài làm nào của lớp %s trong ngày %s' % (cls, date)}
 
 
+# ---------------------------------------------------------------- trò chơi KhoaQuiz đang diễn ra (phòng chờ, bắt đầu)
+LIVE_STATE = {}     # {'pin', 'phase', 'auto': {tên: lớp}}: nhớ lần hỏi trước để biết lúc giáo viên bấm bắt đầu
+LIVE_LOCK = threading.RLock()
+LIVE_POLL = 6
+
+
+def live_rows(roster, att, live, seat_no_of):
+    """Thuần dữ liệu. live: kết quả link/live (players: [{name, m, online}]). Trả về (rows, extras).
+    Mỗi dòng: học sinh trong danh sách lớp, đã vào phòng chưa, máy đang ngồi, có đúng chỗ của em không."""
+    players = {}
+    for p in live.get('players') or []:
+        k = nk(p.get('name'))
+        if k and (k not in players or p.get('m')):
+            players[k] = p
+    seats = att.get('seats') or {}
+    base = att.get('base_seats') or {}
+    seat_of = {nk(v): int(k) for k, v in seats.items() if str(k).isdigit()}
+    own_of = {nk(v): int(k) for k, v in base.items() if str(k).isdigit()}
+    absent = {nk(n) for n in att.get('absent') or []}
+    rows = []
+    for name in roster:
+        k = nk(name)
+        q = players.get(k)
+        r = {'name': name, 'seat': seat_of.get(k, 0), 'own': own_of.get(k, 0), 'kv_absent': k in absent, 'joined': bool(q),
+             'online': (q or {}).get('online', True) if q else False, 'm': (q or {}).get('m', ''), 'm_seat': 0, 'flags': []}
+        if not q and not r['kv_absent']:
+            r['flags'].append({'code': 'not_joined', 'text': 'chưa vào phòng chơi, đang được tính có mặt'})
+        if q and r['kv_absent']:
+            r['flags'].append({'code': 'joined_but_absent', 'text': 'đã vào phòng chơi nhưng đang bị đánh vắng'})
+        if q and r['m']:
+            no = seat_no_of(r['m'])
+            r['m_seat'] = no or 0
+            owner = seats.get(str(no), '') if no else ''
+            if owner and nk(owner) != k:
+                r['flags'].append({'code': 'other_machine', 'text': 'đang ngồi máy %d (%s), là chỗ của %s' % (no, r['m'], owner)})
+            elif no and r['seat'] and no != r['seat'] and not owner:
+                r['flags'].append({'code': 'moved', 'text': 'đang ngồi máy %d thay vì máy %d' % (no, r['seat'])})
+        rows.append(r)
+    known = {nk(n) for n in roster}
+    extras = [dict(v) for kk, v in players.items() if kk not in known]
+    return rows, extras
+
+
+def _live_class(live, cls_arg=''):
+    from .school import _cls_norm, SCHOOL, SCHOOL_LOCK
+    with SCHOOL_LOCK:
+        for c in (cls_arg, live.get('cls')):
+            c = _cls_norm(c) if c else ''
+            if c and c in SCHOOL['classes']:
+                return c
+    return ''
+
+
+def _live_machine_seat(host_or_name, lay):
+    from .seating import school_seat_no
+    return school_seat_no(split_host_port(host_or_name)[0], lay)
+
+
+def api_kq_live(q):
+    from .school import LAYOUT_DEFAULT, SCHOOL, SCHOOL_LOCK
+    from .seating import att_state
+    live = kq_get('live')
+    if not live.get('active'):
+        return {'active': False, 'auto': bool(SCHOOL.get('kq_game_absent', True))}
+    cls = _live_class(live, str(q.get('cls') or ''))
+    out = {'active': True, 'phase': live.get('phase'), 'pin': live.get('pin'), 'title': live.get('title') or '', 'cls': cls,
+           'live_cls': live.get('cls') or '', 'age': live.get('ageSec', 0), 'joined_total': len(live.get('players') or []),
+           'auto': bool(SCHOOL.get('kq_game_absent', True)), 'rows': [], 'extras': [], 'counts': {}}
+    if not cls:
+        out['note'] = 'Lớp "%s" của phòng chơi không có trong danh sách lớp KhoaVeyon' % (live.get('cls') or '(không ghi lớp)')
+        return out
+    with SCHOOL_LOCK:
+        roster = list(SCHOOL['classes'][cls])
+        lay = dict(LAYOUT_DEFAULT, **(SCHOOL['layouts'].get(cls) or {}))
+    att = att_state(cls)
+    att['base_seats'] = lay.get('seats') or {}
+    rows, extras = live_rows(roster, att, live, lambda h: _live_machine_seat(h, lay))
+    out['rows'], out['extras'] = rows, extras
+    out['counts'] = {c: sum(1 for r in rows if any(f['code'] == c for f in r['flags'])) for c in ('not_joined', 'joined_but_absent', 'other_machine', 'moved')}
+    out['joined'] = sum(1 for r in rows if r['joined'])
+    out['total'] = len(rows)
+    return out
+
+
+def live_apply(live, cls, state, set_attendance):
+    """Thuần logic của bước tự động (dễ kiểm thử). state: LIVE_STATE. Trả về danh sách thao tác đã làm [(act, [tên])].
+    - Lúc phòng chuyển từ "chờ" sang "đã bắt đầu": đánh vắng em chưa vào phòng.
+    - Sau đó em nào bị đánh vắng tự động mà vào muộn thì đánh dấu có mặt lại."""
+    pin, phase = live.get('pin') or '', live.get('phase') or ''
+    prev_pin, prev_phase = state.get('pin'), state.get('phase')
+    joined = {nk(p.get('name')) for p in live.get('players') or []}
+    done = []
+    if pin != prev_pin:
+        state['auto'] = {}
+    if prev_pin == pin and prev_phase == 'lobby' and phase != 'lobby' and cls:
+        from .school import SCHOOL, SCHOOL_LOCK
+        with SCHOOL_LOCK:
+            roster = list(SCHOOL['classes'].get(cls, []))
+        absent_now = {nk(n) for n in (SCHOOL['attendance'].get('%s|%s' % (datetime.date.today().strftime('%Y-%m-%d'), cls)) or {}).get('absent', [])}
+        miss = [n for n in roster if nk(n) not in joined and nk(n) not in absent_now]
+        if miss and joined:
+            set_attendance(cls, 'absent_many', miss)
+            state.setdefault('auto', {}).update({n: cls for n in miss})
+            done.append(('absent', miss))
+    elif phase != 'lobby' and prev_pin == pin:
+        back = [n for n in list((state.get('auto') or {}).keys()) if nk(n) in joined]
+        if back:
+            for n in back:
+                set_attendance(cls, 'toggle', [n])
+                state['auto'].pop(n, None)
+            done.append(('present', back))
+    state['pin'], state['phase'] = pin, phase
+    return done
+
+
+def _set_attendance(cls, act, names):
+    from .attendance import api_school_attendance_set
+    if act == 'absent_many':
+        api_school_attendance_set({'cls': cls, 'action': 'absent_many', 'names': names})
+    else:
+        for n in names:
+            api_school_attendance_set({'cls': cls, 'action': 'toggle', 'name': n})
+
+
+def live_tick():
+    from .school import SCHOOL
+    with KQ_LOCK:
+        if not KQ['code']:
+            return
+    live = kq_get('live')
+    if not live.get('active'):
+        with LIVE_LOCK:
+            LIVE_STATE.clear()
+        return
+    cls = _live_class(live)
+    with LIVE_LOCK:
+        if not SCHOOL.get('kq_game_absent', True):
+            LIVE_STATE.update({'pin': live.get('pin'), 'phase': live.get('phase'), 'auto': {}})
+            return
+        before = live.get('phase')
+        done = live_apply(live, cls, LIVE_STATE, _set_attendance)
+    for act, names in done:
+        if act == 'absent':
+            log('Trò chơi KhoaQuiz (lớp %s) đã bắt đầu: đánh vắng %d em chưa vào phòng: %s' % (cls, len(names), ', '.join(names)), 'head')
+        else:
+            log('Trò chơi KhoaQuiz (lớp %s): %s vào muộn nên đánh dấu có mặt lại' % (cls, ', '.join(names)), 'ok')
+    if not cls and before != 'lobby' and not LIVE_STATE.get('warned') == live.get('pin'):
+        LIVE_STATE['warned'] = live.get('pin')
+        log('Trò chơi KhoaQuiz: lớp "%s" không có trong danh sách lớp nên không tự đánh vắng được' % (live.get('cls') or ''), 'warn')
+
+
+def live_loop():
+    while True:
+        try:
+            live_tick()
+        except Exception:  # noqa: lỗi mạng, chưa liên kết...: bỏ qua, hỏi lại lần sau
+            pass
+        time.sleep(LIVE_POLL)
+
+
+def api_kq_live_set(b):
+    from .school import SCHOOL, school_save
+    SCHOOL['kq_game_absent'] = bool(b.get('auto'))
+    school_save()
+    with LIVE_LOCK:
+        LIVE_STATE.clear()
+    return {'ok': True, 'auto': SCHOOL['kq_game_absent']}
+
+
+def api_kq_live_open(b):
+    """Mở trang vào chơi (đã gõ sẵn mã PIN và gắn số máy ?m=) trên các máy học sinh."""
+    from .runtime import clean_hosts, start_job
+    live = kq_get('live')
+    if not live.get('active') or live.get('phase') != 'lobby' or not live.get('pin'):
+        raise ApiError('Chưa có phòng chơi nào đang chờ học sinh vào (hãy tạo phòng trong KhoaQuiz trước)')
+    hosts = clean_hosts(b.get('hosts'))
+    if not hosts:
+        raise ApiError('Chưa có máy nào để mở')
+    with KQ_LOCK:
+        base = KQ['url'].rstrip('/')
+    start_job(job_kq_open, hosts, '%s/?pin=%s' % (base, live['pin']))
+    return {'ok': True, 'pin': live['pin']}
+
+
 # ---------------------------------------------------------------- bài kiểm tra KhoaQuiz trong Chế độ thi
 def api_kq_exams(_q=None):
     return {'items': kq_get('exams').get('items') or []}

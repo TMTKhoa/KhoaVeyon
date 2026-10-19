@@ -23,6 +23,13 @@ function viewSettings() {
       ${S.startup && S.startup.supported ? `<label class="switch"><input type="checkbox" data-startup="1" ${S.startup.on ? 'checked' : ''}><span class="tr"></span><span>Tự chạy KhoaVeyon (nền, không mở cửa sổ) khi tôi đăng nhập Windows</span></label>
         <p class="hint" style="margin-bottom:0">Để hẹn giờ theo thời khóa biểu, giám sát và tự áp lại hạn chế hoạt động ngay từ đầu buổi mà không cần nhớ mở chương trình. Mở cửa sổ bằng Chay-KhoaVeyon.bat như thường. Chương trình đã chạy nền sẽ không tự thoát, bấm Thoát trong chương trình để dừng. Tắt công tắc để gỡ.</p>` : '<p class="sub" style="margin:0">Tính năng này chỉ có trên Windows.</p>'}
     </section>
+    <section class="card"><h3>Kết nối tới máy học sinh</h3>
+      <p class="sub">Cách chép file và chạy lệnh trên máy học sinh: <b>Tự động</b> dùng kênh Agent khi máy đã kết nối, không thì dùng chia sẻ C$ + Task Scheduler như cũ.</p>
+      <div class="formgrid">
+        <div><label class="field">Cách kết nối</label><select data-set="transport">${[['auto', 'Tự động (khuyên dùng)'], ['agent', 'Chỉ Agent'], ['smb', 'Chỉ C$ và Task Scheduler (cách cũ)']].map(o => `<option value="${o[0]}" ${c.transport === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></div>
+        ${f('agent_port', 'Cổng Agent trên máy giáo viên', 'Mặc định 8767. Đổi cổng thì phải cài lại Agent trên máy học sinh.')}
+        ${f('agent_host', 'Địa chỉ máy giáo viên (tùy chọn)', 'Để trống = tự lấy IP mạng LAN. Điền khi máy có nhiều card mạng, hoặc dùng tên máy nếu IP hay đổi.')}
+      </div></section>
     ${appLockCard()}
     ${kqSettingsCard()}
     <section class="card"><h3>Cập nhật phần mềm</h3>

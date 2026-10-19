@@ -65,6 +65,37 @@ def seed_default_lists(cfg):
     return made
 
 
+def write_agent_cfg(cfg):
+    """Ghi payload\\KhoaVeyonAgent.cfg (địa chỉ máy giáo viên + khóa Agent + SHA-256 của KhoaVeyonServices.bat) cho Setup-MayHocSinh.bat.
+    File này chứa khóa bí mật nên KHÔNG được gửi hàng loạt xuống C:\\cmd (xem _kit_only / resolve_dist_files)."""
+    import hashlib
+    from .agent import agent_config_text, AGENT_CFG_NAME
+    os.makedirs(PAYLOAD_DIR, exist_ok=True)
+    name = os.path.basename((cfg.get('script_path') or '').replace('\\', '/')) or 'KhoaVeyonServices.bat'
+    sp = os.path.join(PAYLOAD_DIR, name)
+    sha = ''
+    if os.path.isfile(sp):
+        with open(sp, 'rb') as f:
+            sha = hashlib.sha256(f.read()).hexdigest()
+    with open(os.path.join(PAYLOAD_DIR, AGENT_CFG_NAME), 'w', encoding='ascii', newline='') as f:
+        f.write(agent_config_text(sha))
+    return AGENT_CFG_NAME
+
+
+def refresh_agent_cfg():
+    """Giữ payload\\KhoaVeyonAgent.cfg luôn khớp với địa chỉ, cổng, khóa và bản KhoaVeyonServices.bat hiện tại.
+    Gọi khi khởi động và mỗi khi đổi cài đặt / khóa Agent, nên không cần bấm nút nào. Lỗi thì bỏ qua."""
+    try:
+        from .runtime import CFG, CFG_LOCK
+        import json as _j
+        with CFG_LOCK:
+            cfg = _j.loads(_j.dumps(CFG))
+        write_agent_cfg(cfg)
+        return True
+    except Exception:  # noqa
+        return False
+
+
 def ensure_payload(cfg):
     """Tạo Setup-MayHocSinh.bat trong payload và chép KhoaVeyonServices.bat vào payload nếu tìm thấy. Trả về (đã tạo, thiếu)."""
     os.makedirs(PAYLOAD_DIR, exist_ok=True)
@@ -78,6 +109,7 @@ def ensure_payload(cfg):
         if src:
             shutil.copy2(src, dst)
             got.append(name)
+    write_agent_cfg(cfg)
     return got, ([] if os.path.isfile(dst) else [name])
 
 
@@ -240,10 +272,21 @@ def _apply_programs_via_import(cli, items):
     return True, 'đã thử export/import'
 
 
+def _apply_with_firewall(cfg):
+    """Chạy bằng quyền quản trị: mở cổng Agent trên tường lửa máy giáo viên rồi áp các mục Veyon."""
+    from .agent import agent_firewall_rule
+    try:
+        fw_ok, fw_msg = agent_firewall_rule()
+    except Exception as e:  # noqa
+        fw_ok, fw_msg = False, str(e)
+    ok, msg = apply_veyon_items(cfg)
+    return ok, '%s | Agent: %s' % (msg, fw_msg)
+
+
 def elevated_apply_veyon_items(cfg):
     """Gọi apply_veyon_items với quyền quản trị: nếu chưa là admin thì bật hộp thoại UAC chạy lại chương trình ở chế độ riêng."""
     if is_admin():
-        return apply_veyon_items(cfg)
+        return _apply_with_firewall(cfg)
     try:
         os.remove(SETUP_RESULT())
     except OSError:

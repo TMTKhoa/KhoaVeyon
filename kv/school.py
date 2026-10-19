@@ -20,7 +20,7 @@ SCHOOL_DAYS = ['THỨ HAI', 'THỨ BA', 'THỨ TƯ', 'THỨ NĂM', 'THỨ SÁU',
 SCHOOL_DAY_SHORT = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
 SCHOOL = {'classes': {}, 'layouts': {}, 'slots': [], 'from': '', 'auto': True, 'override': None, 'manual': '',
           'classes_file': '', 'classes_at': '', 'timetable_file': '', 'timetable_at': '', 'teacher': '', 'subject': '',
-          'attendance': {}, 'attend_notify': True, 'auto_announce': False, 'automation': None}
+          'attendance': {}, 'attend_notify': True, 'auto_announce': False, 'kq_game_absent': True, 'automation': None}
 
 
 def school_path():
@@ -258,7 +258,7 @@ def school_class_at(ts):
     return (c or {}).get('cls', '')
 
 
-LAYOUT_DEFAULT = {'cols': 4, 'per': 10, 'from': 'teacher', 'first': 'left', 'pattern': '', 'seats': {}, 'broken': [], 'gv': 'center', 'door': 'back'}
+LAYOUT_DEFAULT = {'cols': 4, 'per': 10, 'from': 'teacher', 'first': 'left', 'pattern': '', 'seats': {}, 'broken': [], 'gv': 'center', 'door': 'back', 'flipv': False, 'fliph': False}
 
 
 def layout_clean(b, old_seats=None, old_broken=None):
@@ -286,4 +286,4 @@ def layout_clean(b, old_seats=None, old_broken=None):
     for k in bk:
         clean.pop(str(k), None)  # máy hỏng thì không có người ngồi
     return {'cols': cols, 'per': per, 'from': frm, 'first': first, 'pattern': pat, 'seats': clean,
-            'broken': bk, 'gv': gv, 'door': door}
+            'broken': bk, 'gv': gv, 'door': door, 'flipv': b.get('flipv') is True, 'fliph': b.get('fliph') is True}

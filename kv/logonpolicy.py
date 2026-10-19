@@ -8,17 +8,19 @@ quản trị: khóa Task Manager, chặn mở app ngoài danh sách, tắt tiế
 Lưu ý: nút Mở khóa giữa buổi chỉ có tác dụng đến lần đăng nhập tiếp theo, vì lúc đó chính sách này áp lại. Muốn bỏ hẳn
 thì gỡ chính sách (nút Gỡ)."""
 
+import ntpath
 import os
 import shutil
 import tempfile
 
-from .remote import distribute_to_host, run_args
+from .remote import distribute_to_host, remote_task_delete, rfs_exists, rfs_remove, rfs_write, run_args, use_agent
 from .runtime import ApiError, CFG, clean_hosts, log, pool_run, start_job
 from .vcfg import vcfg_remote_dir
 
 
 LOGON_TASK = 'KhoaVeyonLogon'
 LOGON_BAT = 'KhoaVeyonLogon.bat'
+LOGON_LIST = 'kvlogon.txt'   # vcfg\kvlogon.txt: dịch vụ KhoaVeyonAutoLog chạy mỗi dòng trong phiên học sinh khi đăng nhập (thay Task Scheduler)
 LOGON_MODES = {   # tham số của KhoaVeyonServices.bat -> nhãn trên giao diện
     'lockdown': 'Khóa Task Manager, Control Panel, Registry',
     'lockrun-start': 'Chặn mở app ngoài danh sách',
@@ -66,6 +68,10 @@ def logon_install(host, cfg, modes):
         with open(bp, 'w', encoding='utf-8', newline='') as f:
             f.write(logon_bat_text(script, modes))
         distribute_to_host(host, [bp], rdir)
+        if use_agent(host):   # dịch vụ KhoaVeyonAutoLog chạy file này mỗi lần học sinh đăng nhập, không cần Task Scheduler
+            rfs_write(host, ntpath.join(rdir, LOGON_LIST), ('cmd.exe /c "%s"\r\n' % bat_remote).encode('utf-8'))
+            remote_task_delete(host, LOGON_TASK)   # gỡ tác vụ cũ của bản trước nếu còn
+            return True, 'đã cài, áp %d lệnh mỗi lần học sinh đăng nhập (qua dịch vụ KhoaVeyon)' % len(modes)
         xp = os.path.join(tmp, 'task.xml')
         with open(xp, 'w', encoding='utf-16', newline='') as f:   # schtasks cần UTF-16
             f.write(logon_task_xml(bat_remote))
@@ -80,6 +86,15 @@ def logon_install(host, cfg, modes):
 
 
 def logon_remove(host, cfg):
+    if use_agent(host):
+        try:
+            rfs_remove(host, ntpath.join(vcfg_remote_dir(cfg), LOGON_LIST))
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            return False, str(e)[:200]
+        remote_task_delete(host, LOGON_TASK)
+        return True, 'đã gỡ'
     rc, out = run_args(['schtasks', '/Delete', '/S', host, '/TN', LOGON_TASK, '/F'])
     if rc == 0:
         return True, 'đã gỡ'
@@ -90,6 +105,11 @@ def logon_remove(host, cfg):
 
 
 def logon_check(host, cfg):
+    if use_agent(host):
+        try:
+            return True, 'đang cài' if rfs_exists(host, ntpath.join(vcfg_remote_dir(cfg), LOGON_LIST)) else 'chưa cài'
+        except OSError as e:
+            return False, str(e)[:200]
     rc, _ = run_args(['schtasks', '/Query', '/S', host, '/TN', LOGON_TASK])
     return True, 'đang cài' if rc == 0 else 'chưa cài'
 

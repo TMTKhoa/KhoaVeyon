@@ -12,10 +12,10 @@ from .excel_lists import LISTS
 from .jobs import job_dist
 from .network import diagnose_host
 from .paths import CONFIG_PATH, load_script
-from .remote import distribute_to_host, remote_run_wait
+from .remote import distribute_to_host, remote_install, remote_run_wait
 from .runtime import CFG, CFG_LOCK, list_path, log, PAYLOAD_DIR, pool_run
 from .setup import (
-    apply_veyon_items, elevated_apply_veyon_items, ensure_payload, seed_default_lists, SETUP_RESULT,
+    _apply_with_firewall as _apply_with_firewall_, apply_veyon_items, elevated_apply_veyon_items, ensure_payload, seed_default_lists, SETUP_RESULT,
     STUDENT_SETUP_BAT,
 )
 
@@ -27,7 +27,7 @@ CMDLOCK_BAT = load_script('cmdlock.bat')
 def _kit_only(name):
     """File chỉ dành cho bộ cài ban đầu (bộ cài Veyon, khóa public): không gửi hàng loạt xuống C:\\cmd."""
     n = name.lower()
-    return n.endswith('.pem') or (n.endswith('.exe') and 'veyon' in n)
+    return n == 'khoaveyonagent.cfg' or n.endswith('.pem') or (n.endswith('.exe') and 'veyon' in n)
 
 
 def kit_copy_key():
@@ -102,7 +102,7 @@ def job_setup_diagnose(hosts, push):
 
             def inst(h):
                 # <nul để lệnh pause trong script không treo khi chạy nền bằng SYSTEM
-                ok, msg = remote_run_wait(h, 'cmd.exe /c %s -install <nul' % cfg['script_path'])
+                ok, msg = remote_install(h, cfg['script_path'])
                 return ok, 'đã cài dịch vụ' if ok else '-install lỗi: ' + msg
             pool_run(inst, todo, 'Cài dịch vụ trên máy học sinh')
         elif todo:
@@ -150,7 +150,7 @@ def job_setup_all(hosts):
 def run_apply_mode():
     """Chế độ phụ (chạy bằng quyền quản trị): ghi mục Veyon rồi lưu kết quả cho tiến trình chính đọc."""
     try:
-        ok, msg = apply_veyon_items(CFG)
+        ok, msg = _apply_with_firewall_(CFG)
     except Exception as e:  # noqa
         ok, msg = False, 'Lỗi: %s' % e
     with open(SETUP_RESULT(), 'w', encoding='utf-8') as f:

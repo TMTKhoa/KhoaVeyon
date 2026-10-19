@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """Khóa công cụ AI trên máy học sinh: lệnh khóa kèm chụp ảnh và đọc trạng thái."""
 
+import ntpath
 import os
 
 from .jobs import job_action
 from .network import tcp_open
-from .remote import unc_target
+from .remote import rfs_exists, rfs_read, rfs_reachable
 from .runtime import ApiError, clean_hosts, log, pool_run, split_host_port, start_job
 from .screenshot import job_shot_then_action
 
@@ -52,20 +53,13 @@ def ai_classify(has_backup, hosts_n):
 
 def ai_state_one(host):
     hh, _ = split_host_port(host)
-    if not tcp_open(hh, 445, 1.5):
-        return False, 'không kết nối được chia sẻ C$ (máy tắt hoặc chưa mở chia sẻ file)'
+    if not rfs_reachable(hh, tcp_open):
+        return False, 'không kết nối được máy (máy tắt, chưa cài Agent và chưa mở chia sẻ C$)'
     try:
-        backup = os.path.join(unc_target(hh, AI_STATE_DIR), 'ai_backup.json')
-        hosts_path = os.path.join(unc_target(hh, AI_HOSTS_DIR), 'hosts')
-        try:
-            os.stat(backup)
-            has_backup = True
-        except FileNotFoundError:
-            has_backup = False
-        with open(hosts_path, 'r', encoding='utf-8', errors='replace') as f:
-            n = ai_hosts_count(f.read())
+        has_backup = rfs_exists(hh, ntpath.join(AI_STATE_DIR, 'ai_backup.json'))
+        n = ai_hosts_count(rfs_read(hh, ntpath.join(AI_HOSTS_DIR, 'hosts')).decode('utf-8', errors='replace'))
     except PermissionError:
-        return False, 'không đủ quyền đọc, hãy đăng nhập máy này bằng tài khoản quản trị của máy học sinh'
+        return False, 'không đủ quyền đọc, hãy cài Agent (Setup-MayHocSinh.bat) hoặc đăng nhập máy này bằng tài khoản quản trị của máy học sinh'
     except OSError as e:
         return False, 'không đọc được trạng thái: %s' % e
     return ai_classify(has_backup, n)

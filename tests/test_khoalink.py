@@ -90,6 +90,57 @@ print([x["name"] for x in extras])
             "Phạm Dũng False ['offline', 'suggest_absent']",
             "['Người Lạ']"])
 
+    def test_live_rows_machine_and_absent(self):
+        out = self.run_code('''
+import kv.khoalink as K
+roster = ["Nguyễn An", "Trần Bình", "Lê Chi", "Phạm Dũng"]
+att = {"seats": {"1": "Nguyễn An", "2": "Trần Bình", "3": "Lê Chi", "4": "Phạm Dũng"}, "absent": ["Lê Chi"], "base_seats": {}}
+live = {"players": [{"name": "nguyễn  an", "m": "MAY2"}, {"name": "Lê Chi", "m": "MAY3"}, {"name": "Khách", "m": "MAY9"}, {"name": "Phạm Dũng", "m": "MAY1", "online": False}]}
+rows, extras = K.live_rows(roster, att, live, lambda h: int(h.replace("MAY", "")))
+for r in rows: print(r["name"], r["joined"], r["m_seat"], [f["code"] for f in r["flags"]])
+print([x["name"] for x in extras])
+''')
+        self.assertEqual(out.splitlines(), [
+            "Nguyễn An True 2 ['other_machine']",
+            "Trần Bình False 0 ['not_joined']",
+            "Lê Chi True 3 ['joined_but_absent']",
+            "Phạm Dũng True 1 ['other_machine']",
+            "['Khách']"])
+
+    def test_live_start_marks_absent_and_moves_broken_machine_student(self):
+        out = self.run_code('''
+import datetime
+import kv.school as SC, kv.attendance as ATT, kv.khoalink as K
+ATT.start_job = lambda *a, **k: None
+SC.SCHOOL["classes"]["10A1"] = ["An", "Bình", "Chi", "Dũng", "Em"]
+# 5 máy một dãy; máy 2 hỏng nên Bình chưa có chỗ; Dũng ngồi máy 4
+SC.SCHOOL["layouts"]["10A1"] = dict(SC.LAYOUT_DEFAULT, cols=1, per=5, seats={"1": "An", "3": "Chi", "4": "Dũng", "5": "Em"}, broken=[2])
+SC.school_save = lambda: None
+state = {}
+def live(phase, names):
+    return {"active": True, "pin": "123456", "phase": phase, "cls": "10A1", "players": [{"name": n} for n in names]}
+who = ["An", "Bình", "Chi", "Em"]            # Dũng chưa vào phòng
+print(K.live_apply(live("lobby", who), "10A1", state, K._set_attendance))
+print(SC.SCHOOL["attendance"])
+print(K.live_apply(live("question", who), "10A1", state, K._set_attendance))
+st = ATT.att_state("10A1")
+print(st["absent"], st["moves"], st["seats"])
+# Dũng vào muộn: đánh dấu có mặt lại
+print(K.live_apply(live("question", who + ["Dũng"]), "10A1", state, K._set_attendance))
+print(ATT.att_state("10A1")["absent"])
+# lần hỏi đầu tiên đã ở giữa trò chơi (KhoaVeyon mở sau): không tự đánh vắng
+s2 = {}
+print(K.live_apply(live("question", ["An"]), "10A1", s2, K._set_attendance))
+''')
+        lines = out.splitlines()
+        self.assertEqual(lines[0], "[]")
+        self.assertEqual(lines[1], "{}")
+        self.assertEqual(lines[2], "[('absent', ['Dũng'])]")
+        self.assertIn("['Dũng'] {'Bình': 4}", lines[3])
+        self.assertEqual(lines[4], "[('present', ['Dũng'])]")
+        self.assertEqual(lines[5], "[]")
+        self.assertEqual(lines[6], "[]")
+
     def test_open_url_fallback_and_allowpage(self):
         out = self.run_code('''
 import json, os, tempfile

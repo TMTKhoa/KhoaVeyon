@@ -55,6 +55,12 @@ def api_settings(b):
                     raise ApiError('Kho GitHub phải có dạng chủ-sở-hữu/tên-kho, ví dụ khoa/KhoaVeyon')
                 if k == 'dist_mode' and v not in ('none', 'schtasks', 'veyon'):
                     raise ApiError('Cách chạy không hợp lệ')
+                if k == 'transport' and v not in ('auto', 'agent', 'smb'):
+                    raise ApiError('Cách kết nối máy học sinh không hợp lệ')
+                if k == 'agent_port' and not (v.isdigit() and 1024 <= int(v) <= 65535):
+                    raise ApiError('Cổng Agent phải là số từ 1024 đến 65535')
+                if k == 'agent_host' and v and not re.fullmatch(r'[A-Za-z0-9_.-]+', v):
+                    raise ApiError('Địa chỉ máy giáo viên chỉ gồm chữ, số, dấu chấm')
                 if k == 'dist_action' and v not in ACTION_BY_KEY:
                     raise ApiError('Mục Veyon không hợp lệ')
                 if k == 'school_name':
@@ -76,6 +82,8 @@ def api_settings(b):
         CFG.clear()
         CFG.update(new)
         save_config(CFG)
+    from .setup import refresh_agent_cfg
+    refresh_agent_cfg()   # đổi địa chỉ/cổng Agent hoặc script thì cấu hình gửi máy học sinh cập nhật theo
     return {'ok': True}
 
 
@@ -87,6 +95,8 @@ def resolve_dist_files(b):
             if os.path.exists(p):
                 files.append(p)
     for name in b.get('payload') or []:
+        if os.path.basename(str(name)).lower() == 'khoaveyonagent.cfg':   # chứa khóa bí mật: không gửi xuống C:\\cmd (học sinh đọc được)
+            continue
         p = os.path.join(PAYLOAD_DIR, os.path.basename(str(name)))
         files.append(p)
     for p in b.get('extra') or []:

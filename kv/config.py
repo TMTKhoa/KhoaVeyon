@@ -22,6 +22,10 @@ DEFAULT_CONFIG = {
     'dist_files': [],
     'dist_include_lists': True,
     'dist_target': r'C:\cmd',
+    'transport': 'auto',      # auto | agent | smb: cách chép file / chạy lệnh trên máy học sinh (xem kv/agent.py)
+    'agent_token': '',        # khóa bí mật chung với dịch vụ trên máy học sinh (tự tạo)
+    'agent_port': '8767',     # cổng máy giáo viên mở cho dịch vụ trên máy học sinh gọi về
+    'agent_host': '',         # để trống = tự lấy IP LAN của máy giáo viên; điền nếu máy có nhiều card mạng
     'dist_mode': 'schtasks',   # none | schtasks | veyon
     'dist_cmd': r'cmd.exe /c C:\cmd\KhoaVeyonServices.bat -lockall-start',
     'dist_action': 'lockall-start',

@@ -26,7 +26,7 @@ function kqSettingsCard() {
 }
 
 function kqFlagHtml(r) {
-  const color = {suggest_absent: 'warn', did_but_absent: 'warn', other_machine: 'err', moved: '', offline: ''};
+  const color = {suggest_absent: 'warn', did_but_absent: 'warn', not_joined: 'warn', joined_but_absent: 'warn', other_machine: 'err', moved: '', offline: ''};
   return r.flags.map(f => `<div class="note ${color[f.code] || ''}" style="margin:2px 0;padding:4px 8px;font-size:12.5px">${esc(f.text)}</div>`).join('');
 }
 
@@ -47,6 +47,37 @@ async function kqCompare(cls) {
     if (!sure) return;
     if (S.seatCls !== d.cls) S.seatCls = d.cls;
     await attAct({action: 'absent_many', names: sug.map(r => r.name)});
+  }
+}
+
+/* Trò chơi KhoaQuiz đang diễn ra: ai đã vào phòng, ngồi máy nào có đúng chỗ không; bắt đầu chơi thì em chưa vào bị đánh vắng */
+async function kqLive(cls) {
+  for (let again = true; again;) {
+    again = false;
+    let d;
+    try { d = await api('/api/kq_live?cls=' + encodeURIComponent(cls || S.seatCls || '')); } catch (e) { toast(e.message, 'err'); return; }
+    if (!d.active) {
+      await modal({title: 'Trò chơi KhoaQuiz', ok: 'Đóng', noCancel: true, html: '<p style="margin-top:0">Chưa có phòng chơi nào đang mở. Trong KhoaQuiz, hãy tạo phòng chơi (bộ câu hỏi → Chơi); phòng sẽ hiện ở đây trong vài giây.</p><p class="hint" style="margin-bottom:0">Cần liên kết KhoaQuiz (Cấu hình Veyon → Liên kết KhoaQuiz) và KhoaQuiz bản có link/live.</p>'});
+      return;
+    }
+    const st = {lobby: 'đang chờ học sinh vào', question: 'đang chơi', result: 'đang chơi (xem kết quả câu)', end: 'đã kết thúc'}[d.phase] || d.phase;
+    const c = d.counts || {};
+    const rows = (d.rows || []).map(r => `<tr><td><b>${esc(r.name)}</b></td><td>${r.seat || '—'}</td><td>${r.joined ? '✔ đã vào' + (r.online ? '' : ' <span class="muted">(mất kết nối)</span>') : '<span class="muted">chưa vào</span>'}</td><td>${r.m_seat ? 'máy ' + r.m_seat : (r.m ? esc(r.m) : '—')}</td><td>${r.kv_absent ? 'vắng' : 'có mặt'}</td><td>${kqFlagHtml(r)}</td></tr>`).join('');
+    const extra = (d.extras || []).length ? `<div class="note warn" style="margin-top:8px">Đã vào phòng nhưng không có trong danh sách lớp: <b>${d.extras.map(x => esc(x.name) + (x.m ? ' (máy ' + esc(x.m) + ')' : '')).join(', ')}</b></div>` : '';
+    const html = `<p style="margin-top:0">Phòng <b>${esc(d.pin)}</b>${d.title ? ' · ' + esc(d.title) : ''} · ${esc(st)}${d.cls ? ' · lớp <b>' + esc(d.cls) + '</b> ' + d.joined + '/' + d.total + ' em đã vào' : ''}${c.not_joined ? ' · chưa vào ' + c.not_joined : ''}${c.other_machine ? ' · sai máy ' + c.other_machine : ''}</p>
+      ${d.note ? `<div class="note warn">${esc(d.note)}</div>` : `<div style="max-height:46vh;overflow:auto"><table class="tbl"><thead><tr><th>Học sinh</th><th>Máy (chỗ)</th><th>Phòng chơi</th><th>Đang ngồi</th><th>KhoaVeyon</th><th>Ghi chú</th></tr></thead><tbody>${rows}</tbody></table></div>`}${extra}
+      <label class="switch" style="margin-top:12px"><input type="checkbox" id="kqAuto" ${d.auto ? 'checked' : ''}><span class="tr"></span><span>Khi giáo viên bấm bắt đầu trò chơi: tự đánh vắng em chưa vào phòng, em có máy hỏng hoặc máy tắt được dồn sang máy trống gần nhất</span></label>
+      <p class="hint" style="margin-bottom:0">Em vào muộn sau khi bắt đầu thì tự được đánh dấu có mặt lại. Cột “Đang ngồi” chỉ có khi em vào phòng bằng trang do nút <b>Mở trang vào chơi trên các máy</b> mở (đã gắn số máy); chỉ để đối chiếu, học sinh có thể tự sửa.</p>`;
+    const v = await modal({title: 'Trò chơi KhoaQuiz', html, ok: 'Làm mới', cancel: 'Đóng', third: d.phase === 'lobby' ? {label: 'Mở trang vào chơi trên các máy', value: 'open'} : null,
+      collect: root => ({auto: root.querySelector('#kqAuto').checked})});
+    if (v === null) return;
+    if (v === 'open') {
+      const t = targets();
+      try { const r = await api('/api/kq_live_open', {hosts: t.hosts}); toast('Đang mở trang vào phòng ' + r.pin + ' trên ' + t.hosts.length + ' máy, xem kết quả ở Nhật ký', 'ok'); } catch (e) { toast(e.message, 'err'); }
+      again = true; continue;
+    }
+    if (v.auto !== d.auto) { try { await api('/api/kq_live_set', {auto: v.auto}); toast(v.auto ? 'Đã bật tự đánh vắng khi bắt đầu trò chơi' : 'Đã tắt tự đánh vắng', 'ok'); } catch (e) { toast(e.message, 'err'); } }
+    again = true;
   }
 }
 
@@ -107,6 +138,7 @@ document.addEventListener('click', async e => {
       if (!await modal({title: 'Hủy liên kết KhoaQuiz trên máy này?', ok: 'Hủy liên kết', html: 'Mã bị xóa khỏi máy này. Muốn thu hồi hẳn (mã đã lộ), vào KhoaQuiz → Cài đặt → Liên kết → KhoaVeyon → Hủy liên kết.'})) return;
       S.kq = await api('/api/kq_unlink', {}); render();
     } else if (a === 'compare') await kqCompare(el.dataset.cls);
+    else if (a === 'live') await kqLive(el.dataset.cls);
     else if (a === 'pickexam') await kqPickExam();
     else if (a === 'rosters') await kqRosters();
     else if (a === 'ktexport') await ktExport();

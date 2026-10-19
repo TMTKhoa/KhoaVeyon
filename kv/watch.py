@@ -2,6 +2,7 @@
 """Giám sát vi phạm trên máy học sinh: script KhoaVeyonWatch, bật, tắt, tự chạy khi đăng nhập, lấy ảnh."""
 
 import json
+import ntpath
 import os
 import shutil
 import tempfile
@@ -12,7 +13,7 @@ from .announce import seat_notice_one
 from .evidence import evidence_root, watch_num, WATCH_REMOTE_DIR
 from .network import tcp_open
 from .paths import load_script
-from .remote import distribute_to_host, remote_run, run_args, unc_target
+from .remote import distribute_to_host, remote_run, remote_task_delete, rfs_read, rfs_reachable, rfs_remove, rfs_write
 from .runtime import ApiError, CFG, CFG_LOCK, clean_hosts, log, pool_run, start_job
 from .screenshot import _q
 from .vcfg import vcfg_remote_dir, vcfg_safe
@@ -35,10 +36,8 @@ def watch_start_one(cfg, host):
         return False, 'không chép được script giám sát: %s' % e
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    ev = unc_target(host, WATCH_REMOTE_DIR)
     try:
-        os.makedirs(ev, exist_ok=True)
-        os.remove(os.path.join(ev, 'stop.flag'))
+        rfs_remove(host, ntpath.join(WATCH_REMOTE_DIR, 'stop.flag'))
     except OSError:
         pass
     ps_args = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File %s -ListDir %s -Out %s -RepeatSec %d -MaxShots %d -NotifyStudent %d' % (
@@ -62,8 +61,8 @@ WATCH_LOGON_TASK = 'KhoaVeyonWatchLogon'
 GUARD_FILE = 'kvguard.txt'   # vcfg\kvguard.txt: mỗi dòng là một lệnh dịch vụ KhoaVeyonAutoLog giữ chạy trong phiên học sinh
 
 
-def guard_unc(cfg, host):
-    return os.path.join(unc_target(host, vcfg_remote_dir(cfg)), GUARD_FILE)
+def guard_path(cfg):
+    return ntpath.join(vcfg_remote_dir(cfg), GUARD_FILE)
 
 
 def watch_autostart_install(host, ps_args):
@@ -74,13 +73,10 @@ def watch_autostart_install(host, ps_args):
         cfg = json.loads(json.dumps(CFG))
     line = 'powershell.exe ' + ps_args
     try:
-        gp = guard_unc(cfg, host)
-        os.makedirs(os.path.dirname(gp), exist_ok=True)
-        with open(gp, 'w', encoding='utf-8', newline='') as f:  # chỉ một guard: ghi đè
-            f.write(line + '\r\n')
+        rfs_write(host, guard_path(cfg), (line + '\r\n').encode('utf-8'))   # chỉ một guard: ghi đè
     except OSError as e:
         return False, 'không ghi được %s: %s' % (GUARD_FILE, e)
-    run_args(['schtasks', '/Delete', '/S', host, '/TN', WATCH_LOGON_TASK, '/F'])  # dọn tác vụ cũ, bỏ qua lỗi
+    remote_task_delete(host, WATCH_LOGON_TASK)  # dọn tác vụ cũ, bỏ qua lỗi
     return True, ''
 
 
@@ -89,24 +85,22 @@ def watch_autostart_remove(host):
         cfg = json.loads(json.dumps(CFG))
     ok = True
     try:
-        gp = guard_unc(cfg, host)
-        if os.path.exists(gp):
-            os.remove(gp)
+        try:
+            rfs_remove(host, guard_path(cfg))
+        except FileNotFoundError:
+            pass
     except OSError as e:
-        if tcp_open(host, 445, 1.5):   # máy bật mà vẫn không xóa được: báo lỗi
+        if rfs_reachable(host, tcp_open):   # máy bật mà vẫn không xóa được: báo lỗi
             return False, 'không xóa được %s: %s' % (GUARD_FILE, e)
         ok = False
-    run_args(['schtasks', '/Delete', '/S', host, '/TN', WATCH_LOGON_TASK, '/F'])  # dọn tác vụ cũ nếu còn
+    remote_task_delete(host, WATCH_LOGON_TASK)  # dọn tác vụ cũ nếu còn
     if ok:
         return True, ''
     return False, 'máy đang tắt nên chưa gỡ được tự-chạy-lại; bấm Tắt giám sát lại khi máy bật'
 
 
 def watch_stop_one(cfg, host):
-    ev = unc_target(host, WATCH_REMOTE_DIR)
-    os.makedirs(ev, exist_ok=True)
-    with open(os.path.join(ev, 'stop.flag'), 'w') as f:
-        f.write('stop')
+    rfs_write(host, ntpath.join(WATCH_REMOTE_DIR, 'stop.flag'), b'stop')
     try:
         alert_collect_host(cfg, host)  # nhận nốt ảnh còn lại
     except Exception:  # noqa
@@ -122,11 +116,11 @@ def watch_fetch_one(cfg, host):
     ok, msg, n = alert_collect_host(cfg, host)
     if not ok:
         return False, msg
-    src = unc_target(host, WATCH_REMOTE_DIR)
     dest = os.path.join(evidence_root(), vcfg_safe(host))
     try:  # nhật ký chạy của script giám sát, để xem khi cần tìm lỗi
         os.makedirs(dest, exist_ok=True)
-        shutil.copy2(os.path.join(src, 'watch.log'), os.path.join(dest, 'watch.log'))
+        with open(os.path.join(dest, 'watch.log'), 'wb') as f:
+            f.write(rfs_read(host, ntpath.join(WATCH_REMOTE_DIR, 'watch.log')))
     except OSError:
         pass
     return True, 'đã lấy %d ảnh vi phạm mới về %s' % (n, dest) if n else 'chưa có ảnh vi phạm mới'

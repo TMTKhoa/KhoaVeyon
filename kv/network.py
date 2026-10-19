@@ -114,35 +114,61 @@ def scan_veyon_hosts(prefix=None, timeout=0.5):
 
 
 def diagnose_host(cfg, host):
-    """Kiểm tra từng điều kiện để KhoaVeyon dùng được với máy này. Trả về (danh sách (nhãn, đạt, gợi ý), ghi chú)."""
+    """Kiểm tra từng điều kiện để KhoaVeyon dùng được với máy này. Trả về danh sách (nhãn, đạt, gợi ý).
+    Thứ tự cố định (setup_jobs đọc theo chỉ số): 0 Veyon, 1 chép file, 2 chạy lệnh, 3 đã có script, 4 dịch vụ đúng bản, 5 Agent."""
+    from .agent import agent_online
     checks = []
     veyon_ok = tcp_open(host, VEYON_PORT, 2)
     checks.append(('Veyon Service (cổng %d)' % VEYON_PORT, veyon_ok, 'Cài/bật Veyon Service trên máy học sinh, kiểm tra tường lửa'))
-    try:
-        unc = unc_target(host, cfg['dist_target'])
-        share_ok = os.path.isdir(unc) or os.path.isdir(os.path.dirname(unc.rstrip('\\')))
-    except Exception:  # noqa
-        unc, share_ok = '', False
-    checks.append(('Chia sẻ C$ (chép file)', share_ok,
-                   'Chạy %s trên máy học sinh (quyền quản trị) và đăng nhập máy này bằng tài khoản quản trị của máy đó' % STUDENT_SETUP_BAT))
-    rc, _ = run_args(['schtasks', '/Query', '/S', host, '/FO', 'LIST'], timeout=25)
-    checks.append(('Task Scheduler từ xa (chạy lệnh)', rc == 0, 'Cần bật nhóm tường lửa "Remote Scheduled Tasks Management" (có trong %s)' % STUDENT_SETUP_BAT))
+    agent_ok = agent_online(host)
     sname = os.path.basename((cfg.get('script_path') or '').replace('\\', '/'))
-    remote_script = os.path.join(unc, sname) if unc else ''
-    has = bool(remote_script) and os.path.isfile(remote_script)
-    checks.append(('Đã có %s trên máy' % sname, has, 'Bấm "Kiểm tra và gửi file xuống máy" để chép'))
-    rc, _ = run_args(['sc', '\\\\' + host, 'query', 'KhoaVeyonService_blockai'], timeout=20)
-    svc_ok = rc == 0
-    # Dịch vụ coi là "đạt" chỉ khi đã cài VÀ bản .bat trên máy giống hệt bản trong payload.
-    # Nhờ vậy khi cập nhật script (thêm dịch vụ mới) thì máy cũ sẽ được chép file mới rồi chạy lại -install.
-    if svc_ok and has:
-        local_script = os.path.join(PAYLOAD_DIR, sname)
-        if os.path.isfile(local_script):
+    spath = (cfg.get('script_path') or '').strip()
+    unc = ''
+    share_ok = False
+    if agent_ok:
+        share_ok = True
+    else:
+        try:
+            unc = unc_target(host, cfg['dist_target'])
+            share_ok = os.path.isdir(unc) or os.path.isdir(os.path.dirname(unc.rstrip('\\')))
+        except Exception:  # noqa
+            unc, share_ok = '', False
+    checks.append(('Chép file xuống máy (Agent hoặc C$)', share_ok,
+                   'Chạy %s trên máy học sinh một lần (quyền quản trị) để cài Agent: sau đó máy giáo viên không cần tài khoản quản trị của máy học sinh' % STUDENT_SETUP_BAT))
+    if agent_ok:
+        run_ok = True
+    else:
+        rc, _ = run_args(['schtasks', '/Query', '/S', host, '/FO', 'LIST'], timeout=25)
+        run_ok = rc == 0
+    checks.append(('Chạy lệnh từ xa (Agent hoặc Task Scheduler)', run_ok, 'Cài Agent bằng %s (khuyên dùng), hoặc bật nhóm tường lửa "Remote Scheduled Tasks Management"' % STUDENT_SETUP_BAT))
+    local_script = os.path.join(PAYLOAD_DIR, sname)
+    has, same = False, False
+    if agent_ok:
+        from .remote import rfs_sha
+        try:
+            rs = rfs_sha(host, spath)
+            has = True
+            ls = _file_sha(local_script)
+            same = ls is not None and rs == ls
+        except OSError:
+            pass
+    else:
+        remote_script = os.path.join(unc, sname) if unc else ''
+        has = bool(remote_script) and os.path.isfile(remote_script)
+        if has and os.path.isfile(local_script):
             rs, ls = _file_sha(remote_script), _file_sha(local_script)
-            if rs is None or ls is None or rs != ls:
-                svc_ok = False
+            same = rs is not None and ls is not None and rs == ls
+    checks.append(('Đã có %s trên máy' % sname, has, 'Bấm "Kiểm tra và gửi file xuống máy" để chép'))
+    if agent_ok:
+        svc_ok = has and same   # Agent đang chạy tức là -install đã chạy; chỉ cần đúng bản
+    else:
+        rc, _ = run_args(['sc', '\\\\' + host, 'query', 'KhoaVeyonService_blockai'], timeout=20)
+        # Dịch vụ coi là "đạt" chỉ khi đã cài VÀ bản .bat trên máy giống hệt bản trong payload.
+        svc_ok = rc == 0 and has and (same or not os.path.isfile(local_script))
     checks.append(('Đã cài dịch vụ, đúng bản mới nhất', svc_ok,
-                   'Sẽ tự chép bản mới và chạy lại -install (cần chia sẻ và Task Scheduler từ xa)'))
+                   'Sẽ tự chép bản mới và chạy lại -install'))
+    checks.append(('Agent đã kết nối về máy giáo viên', agent_ok,
+                   'Cài Agent: chạy %s trên máy học sinh (hoặc bấm "Gửi Setup qua Veyon"). Máy giáo viên cần cho phép cổng Agent qua tường lửa' % STUDENT_SETUP_BAT))
     return checks
 
 

@@ -4,7 +4,10 @@ REM ============================================================
 REM  KhoaVeyonServices.bat  -  for Veyon clients (keep in C:\cmd)
 REM
 REM  -install      one-time setup per PC (needs admin password once)
-REM                (also installs service KhoaVeyonAutoLog: activity log at every logon)
+REM                (also installs service KhoaVeyonAutoLog: activity log at every logon AND the
+REM                 Agent channel: the teacher PC controls this PC through that service, no
+REM                 Windows admin account / C$ share / remote Task Scheduler needed. Settings are in
+REM                 %ProgramFiles%\KhoaVeyon\agent.cfg, written by Setup-MayHocSinh.bat)
 REM  -uninstall    remove services, rules and app blocks
 REM  -killapp      force close all open apps
 REM  -blockall     block all internet (LAN stays on)
@@ -185,6 +188,7 @@ sc stop KhoaVeyonAutoLog >nul 2>&1
 powershell -NoProfile -Command "try { (Get-Service KhoaVeyonAutoLog -ErrorAction Stop).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20)) } catch {}"
 sc delete KhoaVeyonAutoLog >nul 2>&1
 if exist "%ProgramFiles%\KhoaVeyon\KhoaVeyonAutoLog.exe" del /f /q "%ProgramFiles%\KhoaVeyon\KhoaVeyonAutoLog.exe" >nul 2>&1
+if exist "%ProgramFiles%\KhoaVeyon\agent.cfg" del /f /q "%ProgramFiles%\KhoaVeyon\agent.cfg" >nul 2>&1
 rd "%ProgramFiles%\KhoaVeyon" >nul 2>&1
 REM Old versions used a scheduled task with the same name: remove it too if it is still there
 schtasks /delete /tn "KhoaVeyonAutoLog" /f >nul 2>&1
@@ -235,6 +239,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Runtime.InteropServices;
 using System.ServiceProcess;
 using System.Text;
@@ -276,10 +281,13 @@ public class KvAutoLogService : ServiceBase
         ThreadPool.QueueUserWorkItem(delegate { LaunchForActiveSessions(); });
         // Keep the guard processes (violation monitor) alive, checking every 30 seconds.
         GuardTimer = new System.Threading.Timer(delegate { try { EnsureGuards(); } catch { } }, null, 15000, 30000);
+        // Agent channel: the teacher PC controls this PC through this service (no Windows admin account / C$ needed).
+        try { KvAgent.Start(); } catch (Exception e) { Log("agent: cannot start (" + e.Message + ")"); }
     }
 
     protected override void OnStop()
     {
+        KvAgent.Stop();
         if (GuardTimer != null) { GuardTimer.Dispose(); GuardTimer = null; }
     }
 
@@ -362,7 +370,7 @@ public class KvAutoLogService : ServiceBase
         for (int attempt = 1; attempt <= 12; attempt++)
         {
             string err; int pid = Launch(sessionId, cmdExe, activity, out err);
-            if (pid > 0) { Log("session " + sessionId + ": started -activitylog-start"); return; }
+            if (pid > 0) { Log("session " + sessionId + ": started -activitylog-start"); RunLogonList(sessionId); return; }
             if (attempt == 12) Log("session " + sessionId + ": could not start activity log (" + err + ")");
             Thread.Sleep(5000);
         }
@@ -479,11 +487,98 @@ public class KvAutoLogService : ServiceBase
         return res;
     }
 
+    // ---------- helpers used by KvAgent ----------
+    internal static string ScriptPath { get { return Script; } }
+    internal static void AgentLog(string m) { Log(m); }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern uint WaitForSingleObject(IntPtr h, uint ms);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool GetExitCodeProcess(IntPtr h, out uint code);
+    [DllImport("wtsapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    static extern bool WTSQuerySessionInformation(IntPtr server, int sessionId, int infoClass, out IntPtr buffer, out int bytes);
+
+    internal static int FirstActiveSession()
+    {
+        var l = ActiveSessions();
+        return l.Count > 0 ? l[0] : -1;
+    }
+
+    // Active student sessions and the name of the user logged on in the first one.
+    internal static System.Collections.Generic.List<object> ActiveSessionsInfo(out string user)
+    {
+        user = "";
+        var res = new System.Collections.Generic.List<object>();
+        foreach (int sid in ActiveSessions())
+        {
+            res.Add(sid);
+            if (user.Length == 0)
+            {
+                IntPtr buf; int n;
+                if (WTSQuerySessionInformation(IntPtr.Zero, sid, 5, out buf, out n))   // WTSUserName
+                {
+                    try { user = Marshal.PtrToStringUni(buf) ?? ""; } finally { WTSFreeMemory(buf); }
+                }
+            }
+        }
+        return res;
+    }
+
+    // Run a command line in a student session (as that student); optionally wait for it.
+    internal static bool RunInSession(int sessionId, string cmdLine, int waitMs, out int rc, out string err)
+    {
+        rc = 0; err = null;
+        IntPtr hProc;
+        int pid = LaunchH(sessionId, null, cmdLine, out err, out hProc);
+        if (pid <= 0) return false;
+        try
+        {
+            if (waitMs > 0 && hProc != IntPtr.Zero)
+            {
+                uint w = WaitForSingleObject(hProc, (uint)waitMs);
+                if (w != 0) { rc = -1; return true; }   // still running after the timeout
+                uint code; if (GetExitCodeProcess(hProc, out code)) rc = unchecked((int)code);
+            }
+            return true;
+        }
+        finally { if (hProc != IntPtr.Zero) CloseHandle(hProc); }
+    }
+
+    // vcfg\kvlogon.txt: one command line per line, started once in the student session at every logon
+    // (replaces the "KhoaVeyonLogon" scheduled task).
+    static void RunLogonList(int sessionId)
+    {
+        try
+        {
+            string dir = Path.GetDirectoryName(Script);
+            if (string.IsNullOrEmpty(dir)) return;
+            string f = Path.Combine(dir, "vcfg", "kvlogon.txt");
+            if (!File.Exists(f)) return;
+            foreach (string raw in File.ReadAllLines(f))
+            {
+                string l = (raw ?? "").Trim();
+                if (l.Length == 0) continue;
+                string err; int pid = Launch(sessionId, null, l, out err);
+                if (pid <= 0) Log("session " + sessionId + ": logon command failed (" + err + ")");
+            }
+        }
+        catch { }
+    }
+
     // Launch a command line in the given session, hidden, as that student. app may be null (exe taken from cmdLine).
     // Returns the new process id (>0) on success, or -1 with err set.
     static int Launch(int sessionId, string app, string cmdLine, out string err)
     {
-        err = null;
+        IntPtr h;
+        int pid = LaunchH(sessionId, app, cmdLine, out err, out h);
+        if (h != IntPtr.Zero) CloseHandle(h);
+        return pid;
+    }
+
+    // Same as Launch but keeps the process handle (caller must CloseHandle it) so the caller can wait for the exit code.
+    static int LaunchH(int sessionId, string app, string cmdLine, out string err, out IntPtr hProc)
+    {
+        err = null; hProc = IntPtr.Zero;
         IntPtr token, env = IntPtr.Zero;
         if (!WTSQueryUserToken(sessionId, out token)) { err = "no user token, error " + Marshal.GetLastWin32Error(); return -1; }
         try
@@ -502,7 +597,7 @@ public class KvAutoLogService : ServiceBase
             if (!CreateProcessAsUser(token, app, cmd, IntPtr.Zero, IntPtr.Zero, false, flags, env, cwd, ref si, out pi))
             { err = "CreateProcessAsUser error " + Marshal.GetLastWin32Error(); return -1; }
             int newPid = pi.dwProcessId;
-            CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread); hProc = pi.hProcess;
             return newPid;
         }
         finally
@@ -533,6 +628,415 @@ public class KvAutoLogService : ServiceBase
         ServiceBase.Run(new KvAutoLogService());
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// KvAgent: lets the teacher PC control this PC WITHOUT a Windows admin account, the C$ share or
+// remote Task Scheduler. This service calls OUT to the teacher PC (HTTP long-poll), receives jobs
+// (run a command, write / read / list / delete a file) and posts the results back.
+// Every message is signed with HMAC-SHA256 using the secret in %ProgramFiles%\KhoaVeyon\agent.cfg
+// (admin-only folder, students cannot read it). The secret itself never goes over the network.
+// ---------------------------------------------------------------------------------------------
+public static class KvAgent
+{
+    const int Version = 1;
+    static volatile bool stop;
+    static Thread worker;
+    static string token = "";
+    static readonly List<string> urls = new List<string>();
+    static readonly HashSet<string> seen = new HashSet<string>();
+    static readonly object SeenGate = new object();
+    static readonly DateTime Boot = DateTime.UtcNow;
+    static bool lastOk = true;
+    static DateTime lastLog = DateTime.MinValue;
+
+    // %ProgramFiles%\KhoaVeyon\agent.cfg: "url=http://teacher-pc:8767" and "token=..." lines (written by Setup-MayHocSinh.bat).
+    static string CfgFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "KhoaVeyon", "agent.cfg");
+
+    public static void Start()
+    {
+        stop = false;
+        worker = new Thread(Loop);
+        worker.IsBackground = true;
+        worker.Start();
+    }
+
+    public static void Stop() { stop = true; }
+
+    static System.Web.Script.Serialization.JavaScriptSerializer Js()
+    {
+        var js = new System.Web.Script.Serialization.JavaScriptSerializer();
+        js.MaxJsonLength = int.MaxValue;
+        return js;
+    }
+
+    static void LoadCfg()
+    {
+        var u = new List<string>();
+        string t = "";
+        try
+        {
+            foreach (string raw in File.ReadAllLines(CfgFile))
+            {
+                string l = (raw ?? "").Trim();
+                int eq = l.IndexOf('=');
+                if (eq <= 0) continue;
+                string k = l.Substring(0, eq).Trim().ToLowerInvariant(), v = l.Substring(eq + 1).Trim();
+                if (k == "url" && v.Length > 0) u.Add(v.TrimEnd('/'));
+                else if (k == "token") t = v;
+            }
+        }
+        catch { }
+        lock (urls) { urls.Clear(); urls.AddRange(u); }
+        token = t;
+    }
+
+    static string Hex(byte[] b)
+    {
+        var sb = new StringBuilder(b.Length * 2);
+        foreach (byte x in b) sb.Append(x.ToString("x2"));
+        return sb.ToString();
+    }
+
+    static string Sign(byte[] data)
+    {
+        using (var h = new System.Security.Cryptography.HMACSHA256(Encoding.ASCII.GetBytes(token)))
+            return Hex(h.ComputeHash(data));
+    }
+
+    static string Sha256(byte[] data)
+    {
+        using (var h = System.Security.Cryptography.SHA256.Create()) return Hex(h.ComputeHash(data));
+    }
+
+    static bool SameSig(string a, string b)
+    {
+        if (a == null || b == null || a.Length != b.Length) return false;
+        int d = 0;
+        for (int i = 0; i < a.Length; i++) d |= a[i] ^ b[i];
+        return d == 0;
+    }
+
+    static double Now() { return (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds; }
+
+    // POST a signed JSON body; returns the parsed, signature-checked reply.
+    static Dictionary<string, object> Post(string baseUrl, string path, Dictionary<string, object> body, int timeoutMs)
+    {
+        byte[] data = Encoding.UTF8.GetBytes(Js().Serialize(body));
+        var req = (HttpWebRequest)WebRequest.Create(baseUrl + path);
+        req.Method = "POST";
+        req.ContentType = "application/json";
+        req.Timeout = timeoutMs;
+        req.ReadWriteTimeout = timeoutMs;
+        req.Proxy = null;
+        req.KeepAlive = false;
+        req.ServicePoint.Expect100Continue = false;
+        req.Headers.Add("X-KV-Sig", Sign(data));
+        req.ContentLength = data.Length;
+        using (Stream s = req.GetRequestStream()) s.Write(data, 0, data.Length);
+        using (var resp = (HttpWebResponse)req.GetResponse())
+        {
+            byte[] buf;
+            using (Stream rs = resp.GetResponseStream())
+            using (var ms = new MemoryStream())
+            {
+                rs.CopyTo(ms);
+                buf = ms.ToArray();
+            }
+            if (!SameSig(resp.Headers["X-KV-Sig"], Sign(buf))) throw new Exception("bad reply signature");
+            return Js().DeserializeObject(Encoding.UTF8.GetString(buf)) as Dictionary<string, object>;
+        }
+    }
+
+    static string NewNonce()
+    {
+        var b = new byte[12];
+        using (var r = System.Security.Cryptography.RandomNumberGenerator.Create()) r.GetBytes(b);
+        return Hex(b);
+    }
+
+    static void Loop()
+    {
+        int bad = 0;
+        while (!stop)
+        {
+            DateTime t0 = DateTime.UtcNow;
+            try
+            {
+                LoadCfg();
+                List<string> list;
+                lock (urls) { list = new List<string>(urls); }
+                if (token.Length < 16 || list.Count == 0) { Thread.Sleep(15000); continue; }
+
+                Dictionary<string, object> reply = null;
+                string nonce = NewNonce();
+                Exception last = null;
+                foreach (string u in list)
+                {
+                    try
+                    {
+                        var body = PollBody(nonce);
+                        reply = Post(u, "/agent/poll", body, 40000);
+                        if (reply != null) break;
+                    }
+                    catch (Exception e) { last = e; nonce = NewNonce(); }
+                }
+                if (reply == null) throw (last ?? new Exception("no reply"));
+                if (Convert.ToString(reply["nonce"]) != nonce) throw new Exception("nonce mismatch");
+                double ts = Convert.ToDouble(reply["ts"]);
+                if (Math.Abs(Now() - ts) > 900) throw new Exception("clock skew");
+                bad = 0;
+                if (!lastOk) { KvAutoLogService.AgentLog("agent: connected again"); lastOk = true; }
+                object[] jobs = AsArray(reply.ContainsKey("jobs") ? reply["jobs"] : null);
+                foreach (object o in jobs)
+                {
+                    var job = o as Dictionary<string, object>;
+                    if (job == null) continue;
+                    string id = Convert.ToString(job["id"]);
+                    lock (SeenGate)
+                    {
+                        if (seen.Contains(id)) continue;   // replayed job: ignore
+                        if (seen.Count > 2000) seen.Clear();
+                        seen.Add(id);
+                    }
+                    var j = job;
+                    ThreadPool.QueueUserWorkItem(delegate { Handle(j); });
+                }
+            }
+            catch (Exception e)
+            {
+                bad++;
+                if (lastOk || (DateTime.Now - lastLog).TotalMinutes > 30)
+                {
+                    KvAutoLogService.AgentLog("agent: cannot reach the teacher PC (" + e.Message + ")");
+                    lastLog = DateTime.Now;
+                }
+                lastOk = false;
+                Thread.Sleep(Math.Min(30000, 3000 + bad * 2000));
+                continue;
+            }
+            if ((DateTime.UtcNow - t0).TotalMilliseconds < 800) Thread.Sleep(800);
+        }
+    }
+
+    static object[] AsArray(object o)
+    {
+        if (o == null) return new object[0];
+        var arr = o as object[];
+        if (arr != null) return arr;
+        var al = o as System.Collections.ArrayList;
+        if (al != null) return al.ToArray();
+        return new object[0];
+    }
+
+    static Dictionary<string, object> PollBody(string nonce)
+    {
+        var d = new Dictionary<string, object>();
+        d["host"] = Environment.MachineName;
+        string user; var sessions = KvAutoLogService.ActiveSessionsInfo(out user);
+        d["user"] = user;
+        d["sessions"] = sessions;
+        d["ver"] = Version;
+        d["boot"] = (Boot - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
+        d["nonce"] = nonce;
+        d["ts"] = Now();
+        return d;
+    }
+
+    static void Reply(string id, Dictionary<string, object> res)
+    {
+        res["id"] = id;
+        res["nonce"] = NewNonce();
+        res["ts"] = Now();
+        List<string> list;
+        lock (urls) { list = new List<string>(urls); }
+        foreach (string u in list)
+        {
+            try { Post(u, "/agent/result", res, 60000); return; }
+            catch { }
+        }
+    }
+
+    static string Tail(string s, int max)
+    {
+        if (s == null) return "";
+        return s.Length <= max ? s : s.Substring(s.Length - max);
+    }
+
+    static string Str(Dictionary<string, object> j, string k)
+    {
+        object v;
+        return j.TryGetValue(k, out v) && v != null ? Convert.ToString(v) : "";
+    }
+
+    static bool Flag(Dictionary<string, object> j, string k)
+    {
+        object v;
+        if (!j.TryGetValue(k, out v) || v == null) return false;
+        if (v is bool) return (bool)v;
+        return Convert.ToString(v).ToLowerInvariant() == "true";
+    }
+
+    static double Epoch(DateTime utc) { return (utc - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds; }
+
+    static void Handle(Dictionary<string, object> job)
+    {
+        string id = Str(job, "id");
+        var res = new Dictionary<string, object>();
+        try
+        {
+            string op = Str(job, "op");
+            string path = Str(job, "path");
+            if (op != "exec")
+            {
+                if (path.Length < 3 || path.Length > 400 || !Path.IsPathRooted(path) || path.StartsWith(@"\\")) throw new Exception("invalid path");
+            }
+            switch (op)
+            {
+                case "exec": DoExec(job, res); break;
+                case "put":
+                    {
+                        byte[] data = Convert.FromBase64String(Str(job, "b64"));
+                        string want = Str(job, "sha");
+                        if (want.Length > 0 && Sha256(data) != want.ToLowerInvariant()) throw new Exception("hash mismatch");
+                        string dir = Path.GetDirectoryName(path);
+                        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                        string tmp = path + ".kvtmp";
+                        File.WriteAllBytes(tmp, data);
+                        if (File.Exists(path)) File.Delete(path);
+                        File.Move(tmp, path);
+                        res["ok"] = true;
+                        break;
+                    }
+                case "get":
+                    {
+                        if (!File.Exists(path)) { res["ok"] = true; res["exists"] = false; break; }
+                        var fi = new FileInfo(path);
+                        if (fi.Length > 25 * 1024 * 1024) throw new Exception("file too large");
+                        byte[] data;
+                        using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                        using (var ms = new MemoryStream()) { fs.CopyTo(ms); data = ms.ToArray(); }
+                        res["ok"] = true; res["exists"] = true;
+                        res["b64"] = Convert.ToBase64String(data);
+                        res["sha"] = Sha256(data);
+                        break;
+                    }
+                case "ls":
+                    {
+                        if (!Directory.Exists(path)) { res["ok"] = true; res["exists"] = false; break; }
+                        var entries = new List<object>();
+                        var di = new DirectoryInfo(path);
+                        foreach (var d in di.GetDirectories())
+                        {
+                            var e = new Dictionary<string, object>();
+                            e["n"] = d.Name; e["s"] = 0; e["m"] = Epoch(d.LastWriteTimeUtc); e["d"] = true;
+                            entries.Add(e);
+                        }
+                        foreach (var f in di.GetFiles())
+                        {
+                            var e = new Dictionary<string, object>();
+                            e["n"] = f.Name; e["s"] = f.Length; e["m"] = Epoch(f.LastWriteTimeUtc); e["d"] = false;
+                            entries.Add(e);
+                            if (entries.Count >= 5000) break;
+                        }
+                        res["ok"] = true; res["exists"] = true; res["entries"] = entries;
+                        break;
+                    }
+                case "stat":
+                    {
+                        res["ok"] = true;
+                        if (File.Exists(path))
+                        {
+                            var fi = new FileInfo(path);
+                            res["exists"] = true; res["size"] = fi.Length; res["mtime"] = Epoch(fi.LastWriteTimeUtc);
+                            if (Flag(job, "sha"))
+                            {
+                                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                                using (var h = System.Security.Cryptography.SHA256.Create()) res["sha"] = Hex(h.ComputeHash(fs));
+                            }
+                        }
+                        else if (Directory.Exists(path)) { res["exists"] = true; res["size"] = 0; res["mtime"] = Epoch(Directory.GetLastWriteTimeUtc(path)); }
+                        else res["exists"] = false;
+                        break;
+                    }
+                case "rm":
+                    {
+                        if (File.Exists(path)) { File.SetAttributes(path, FileAttributes.Normal); File.Delete(path); res["ok"] = true; }
+                        else if (Directory.Exists(path)) { Directory.Delete(path, true); res["ok"] = true; }
+                        else { res["ok"] = true; res["exists"] = false; }
+                        break;
+                    }
+                default: throw new Exception("unknown op " + op);
+            }
+        }
+        catch (Exception e)
+        {
+            res["ok"] = false;
+            res["out"] = e.Message;
+        }
+        Reply(id, res);
+    }
+
+    static void DoExec(Dictionary<string, object> job, Dictionary<string, object> res)
+    {
+        string cmd = Str(job, "cmd");
+        if (cmd.Length == 0 || cmd.Length > 8000) throw new Exception("invalid command");
+        bool wait = Flag(job, "wait");
+        int timeout = 60;
+        try { timeout = Math.Max(1, Math.Min(900, Convert.ToInt32(job["timeout"]))); } catch { }
+        string cwd = Path.GetDirectoryName(KvAutoLogService.ScriptPath);
+        if (string.IsNullOrEmpty(cwd) || !Directory.Exists(cwd)) cwd = Environment.SystemDirectory;
+
+        if (Str(job, "session") == "user")
+        {
+            int sid = KvAutoLogService.FirstActiveSession();
+            if (sid < 0) throw new Exception("Chưa có ai đăng nhập Windows trên máy này");
+            int rc; string err;
+            if (!KvAutoLogService.RunInSession(sid, cmd, wait ? timeout * 1000 : 0, out rc, out err)) throw new Exception(err);
+            res["ok"] = true; res["rc"] = rc;
+            return;
+        }
+
+        var psi = new ProcessStartInfo();
+        psi.FileName = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+        psi.Arguments = "/s /c \"" + cmd + "\"";
+        psi.UseShellExecute = false;
+        psi.CreateNoWindow = true;
+        psi.WorkingDirectory = cwd;
+        if (!wait)
+        {
+            Process.Start(psi);
+            res["ok"] = true; res["rc"] = 0;
+            return;
+        }
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError = true;
+        psi.RedirectStandardInput = true;
+        var sb = new StringBuilder();
+        using (var p = new Process())
+        {
+            p.StartInfo = psi;
+            DataReceivedEventHandler h = delegate (object s, DataReceivedEventArgs a)
+            {
+                if (a.Data != null) lock (sb) { if (sb.Length < 20000) sb.AppendLine(a.Data); }
+            };
+            p.OutputDataReceived += h;
+            p.ErrorDataReceived += h;
+            p.Start();
+            p.StandardInput.Close();   // like "<nul": scripts that call pause do not hang
+            p.BeginOutputReadLine();
+            p.BeginErrorReadLine();
+            if (!p.WaitForExit(timeout * 1000))
+            {
+                try { p.Kill(); } catch { }
+                res["ok"] = true; res["rc"] = -1; res["out"] = "timeout";
+                return;
+            }
+            p.WaitForExit();
+            res["ok"] = true; res["rc"] = p.ExitCode;
+            lock (sb) { res["out"] = Tail(sb.ToString(), 1500); }
+        }
+    }
+}
 '@
 
 # 1. Remove the scheduled task left by older versions, so logging is not started twice.
@@ -554,7 +1058,7 @@ $csFile = Join-Path $env:TEMP 'KhoaVeyonAutoLog.cs'
 $newExe = Join-Path $env:TEMP 'KhoaVeyonAutoLog.new.exe'
 Set-Content -LiteralPath $csFile -Value $csSource -Encoding UTF8
 Remove-Item -LiteralPath $newExe -Force -ErrorAction SilentlyContinue
-$cscOut = & $csc /nologo /target:winexe /optimize+ /r:System.ServiceProcess.dll "/out:$newExe" $csFile 2>&1
+$cscOut = & $csc /nologo /target:winexe /optimize+ /r:System.ServiceProcess.dll /r:System.Web.Extensions.dll "/out:$newExe" $csFile 2>&1
 Remove-Item -LiteralPath $csFile -Force -ErrorAction SilentlyContinue
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $newExe)) {
     Write-Host 'AutoLog service: compile failed'; $cscOut | ForEach-Object { Write-Host "  $_" }

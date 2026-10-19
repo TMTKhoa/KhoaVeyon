@@ -3,13 +3,14 @@
 
 import hashlib
 import json
+import ntpath
 import os
 import time
 
 from .evidence import WATCH_REMOTE_DIR
 from .exam import EXAM, EXAM_LOCK
 from .jobs import job_action
-from .remote import distribute_to_host, remote_run_wait, unc_target
+from .remote import distribute_to_host, remote_install, rfs_mtime, rfs_sha
 from .runtime import ApiError, CFG, CFG_LOCK, clean_hosts, log, PAYLOAD_DIR, pool_run, split_host_port, start_job
 from .watch import job_watch
 
@@ -32,22 +33,20 @@ def payload_script_path():
 
 
 def health_probe(host):
-    """Đọc từ xa qua \\\\máy\\C$: giám sát còn chạy không (alive.txt), bản KhoaVeyonServices.bat so với bản trong payload."""
+    """Đọc từ xa (Agent hoặc \\\\máy\\C$): giám sát còn chạy không (alive.txt), bản KhoaVeyonServices.bat so với bản trong payload."""
     hh, _ = split_host_port(host)
     out = {'watch_alive': None, 'svc': '?'}
     try:
         with CFG_LOCK:
             sp = CFG.get('script_path') or r'C:\cmd\KhoaVeyonServices.bat'
-        d, name = sp.rsplit('\\', 1)[0], os.path.basename(sp.replace('\\', '/'))
-        remote = os.path.join(unc_target(hh, d), name)
         local, _n = payload_script_path()
-        if not os.path.isfile(remote):
-            out['svc'] = 'none'
-        elif os.path.isfile(local):
-            out['svc'] = 'ok' if _sha(remote) == _sha(local) else 'old'
-        alive = os.path.join(unc_target(hh, WATCH_REMOTE_DIR), 'alive.txt')
         try:
-            out['watch_alive'] = time.time() - os.path.getmtime(alive) <= ALIVE_MAX_AGE
+            remote_sha = rfs_sha(hh, sp)
+            out['svc'] = ('ok' if remote_sha == _sha(local) else 'old') if os.path.isfile(local) else '?'
+        except FileNotFoundError:
+            out['svc'] = 'none'
+        try:
+            out['watch_alive'] = time.time() - rfs_mtime(hh, ntpath.join(WATCH_REMOTE_DIR, 'alive.txt')) <= ALIVE_MAX_AGE
         except OSError:
             out['watch_alive'] = False
     except (OSError, ValueError):
@@ -64,7 +63,7 @@ def health_of(r, exam=None):
     if not r.get('veyon'):
         probs.append({'text': 'Veyon Service chưa chạy hoặc chưa cài', 'fix': '', 'sev': 'red'})
     if not r.get('smb'):
-        probs.append({'text': 'Chưa mở chia sẻ C$ (chạy Setup-MayHocSinh.bat một lần)', 'fix': '', 'sev': 'red'})
+        probs.append({'text': 'Chưa cài Agent / chưa mở chia sẻ C$ (chạy Setup-MayHocSinh.bat một lần)', 'fix': '', 'sev': 'red'})
     elif r.get('svc') == 'none':
         probs.append({'text': 'Chưa cài dịch vụ KhoaVeyon', 'fix': 'svc', 'sev': 'red'})
     elif r.get('svc') == 'old':
@@ -100,7 +99,7 @@ def job_fix_service(hosts):
             distribute_to_host(h, [src], cfg['dist_target'])
         except Exception as e:  # noqa
             return False, 'không chép được %s: %s' % (name, e)
-        ok, msg = remote_run_wait(h, 'cmd.exe /c %s -install <nul' % cfg['script_path'])
+        ok, msg = remote_install(h, cfg['script_path'])
         return ok, 'đã cài lại dịch vụ' if ok else '-install lỗi: ' + msg
     pool_run(one, hosts, 'Cài lại dịch vụ KhoaVeyon')
 
