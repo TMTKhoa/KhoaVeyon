@@ -96,7 +96,22 @@ _NAME_TRIED = {}   # IP -> thời điểm thử dò tên gần nhất (không d�
 _NAME_BUSY = threading.Lock()
 
 
+def _purge_bad_names():
+    """Xóa các tên tự dò sai đã lưu từ bản cũ (ví dụ “192” cắt ra từ IP) để máy được dò tên lại."""
+    from .network import valid_pcname
+    with CFG_LOCK:
+        auto = CFG.get('host_auto_names') or {}
+        bad = [k for k, v in auto.items() if not valid_pcname(v)]
+        for k in bad:
+            auto.pop(k, None)
+            _NAME_TRIED.pop(k, None)
+        if bad:
+            save_config(CFG)
+    return len(bad)
+
+
 def _names_resolve_missing():
+    _purge_bad_names()
     if not _NAME_BUSY.acquire(blocking=False):
         return
     try:

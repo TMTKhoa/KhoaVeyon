@@ -3,7 +3,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 // Tên hiển thị của máy (giáo viên tự đặt); chưa đặt thì dùng IP hoặc tên gốc
-const hn = h => { const c = (S.st && S.st.cfg) || {}; return (c.host_names || {})[h] || (c.host_auto_names || {})[h] || h; };
+const hn = h => { const c = (S.st && S.st.cfg) || {}; return (c.host_names || {})[h] || (/^\d+$/.test((c.host_auto_names || {})[h] || '') ? '' : (c.host_auto_names || {})[h]) || h; };
 async function refreshHostNames() {
   try {
     const r = await api('/api/hostnames');

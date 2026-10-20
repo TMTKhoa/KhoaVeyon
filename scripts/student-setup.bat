@@ -85,15 +85,21 @@ if exist "C:\cmd\KhoaVeyonServices.bat" (
   ping -n 6 127.0.0.1 >nul
   taskkill /f /im KhoaVeyonAutoLog.exe >nul 2>&1
   del /f /q "%ProgramFiles%\KhoaVeyon\KhoaVeyonAutoLog.exe" >nul 2>&1
-  call "C:\cmd\KhoaVeyonServices.bat" -install <nul
+  call "C:\cmd\KhoaVeyonServices.bat" -install <nul > "%TEMP%\kvinstall.txt" 2>&1
+  type "%TEMP%\kvinstall.txt"
+  echo ===== %DATE% %TIME% %COMPUTERNAME% -install ===== >> "C:\cmd\KhoaVeyonSetup.log"
+  type "%TEMP%\kvinstall.txt" >> "C:\cmd\KhoaVeyonSetup.log"
 ) else (
   echo     Chua co KhoaVeyonServices.bat tren may nay: bo qua, may giao vien se gui sau.
 )
 
 echo.
+echo [KIEM TRA] Ket qua tung buoc (cung duoc ghi vao C:\cmd\KhoaVeyonSetup.log)
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$o=@(); function P($ok,$t){ if($ok){'  [OK]  '+$t}else{'  [LOI] '+$t} }; $cli=Join-Path $env:ProgramFiles 'Veyon\veyon-cli.exe'; $o+=P (Test-Path $cli) 'Veyon da cai'; $s=Get-Service VeyonService -ErrorAction SilentlyContinue; $o+=P ($s -and $s.Status -eq 'Running') ('VeyonService: '+$(if($s){$s.Status}else{'chua co'})); $s=Get-Service KhoaVeyonAutoLog -ErrorAction SilentlyContinue; $o+=P ($s -and $s.Status -eq 'Running') ('Dich vu Agent KhoaVeyonAutoLog: '+$(if($s){$s.Status}else{'CHUA CAI'})); $o+=P (Test-Path 'C:\cmd\KhoaVeyonServices.bat') 'C:\cmd\KhoaVeyonServices.bat'; $o+=P (Test-Path ($env:ProgramFiles+'\KhoaVeyon\agent.cfg')) 'agent.cfg (khoa Agent)'; $o+=P (Test-Path ($env:ProgramFiles+'\KhoaVeyon\KhoaVeyonAutoLog.exe')) 'KhoaVeyonAutoLog.exe'; $csc=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'; $o+=P (Test-Path $csc) '.NET Framework 4 (csc.exe) de bien dich dich vu'; try{ $c=@{}; Get-Content ($env:ProgramFiles+'\KhoaVeyon\agent.cfg') | ForEach-Object { $p=$_.Split('=',2); if($p.Length -eq 2){$c[$p[0].Trim()]=$p[1].Trim()} }; $u=[uri]$c['url']; $t=New-Object Net.Sockets.TcpClient; $a=$t.BeginConnect($u.Host,$u.Port,$null,$null); $ok=$a.AsyncWaitHandle.WaitOne(3000) -and $t.Connected; $o+=P $ok ('Ket noi toi may giao vien '+$u.Host+':'+$u.Port+' (cong Agent, can mo tuong lua may giao vien)') }catch{ $o+=P $false 'Khong doc duoc agent.cfg hoac khong ket noi duoc may giao vien' }; $o; (Get-Date -Format s)+' '+$env:COMPUTERNAME | Add-Content 'C:\cmd\KhoaVeyonSetup.log'; $o | Add-Content 'C:\cmd\KhoaVeyonSetup.log'"
+echo.
 if defined FAIL (
   echo CON THIEU: Veyon chua duoc cai. Chep bo cai Veyon vao cung thu muc voi file nay roi chay lai.
 ) else (
-  echo Xong. May hoc sinh san sang nhan file va lenh tu KhoaVeyon.
+  echo Xong cac buoc cai. Neu o tren con dong [LOI], chup anh man hinh nay hoac gui file C:\cmd\KhoaVeyonSetup.log de tim nguyen nhan.
 )
 pause

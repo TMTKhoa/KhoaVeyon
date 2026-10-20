@@ -14,6 +14,7 @@ học sinh không đọc được). Khóa không bao giờ đi qua mạng. Học
 import base64
 import hashlib
 import hmac
+import re
 import http.server
 import json
 import os
@@ -70,12 +71,37 @@ def sign(data, token=None):
     return hmac.new((token or agent_token()).encode('ascii'), data, hashlib.sha256).hexdigest()
 
 
+def _ip_near_students():
+    """Máy giáo viên có nhiều card mạng (Wi-Fi, LAN, VPN, máy ảo) thì “đường ra mặc định” có thể là card không nằm cùng mạng với máy học sinh,
+    khi đó máy học sinh gọi nhầm IP và Agent không bao giờ kết nối. Chọn IP của máy này nằm cùng dải /24 với nhiều máy học sinh nhất."""
+    try:
+        from .network import local_ips
+        with CFG_LOCK:
+            hosts = [str(h).split(':')[0] for h in (CFG.get('hosts') or [])]
+        count = {}
+        for h in hosts:
+            if re.match(r'^\d{1,3}(\.\d{1,3}){3}$', h):
+                pre = h.rsplit('.', 1)[0]
+                count[pre] = count.get(pre, 0) + 1
+        best, bestn = '', 0
+        for ip in sorted(local_ips()):
+            n = count.get(ip.rsplit('.', 1)[0], 0)
+            if n > bestn:
+                best, bestn = ip, n
+        return best
+    except Exception:  # noqa
+        return ''
+
+
 def lan_ip():
     """IP LAN của máy giáo viên (cái mà máy học sinh gọi tới)."""
     with CFG_LOCK:
         forced = str(CFG.get('agent_host') or '').strip()
     if forced:
         return forced
+    near = _ip_near_students()
+    if near:
+        return near
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(('10.255.255.255', 1))

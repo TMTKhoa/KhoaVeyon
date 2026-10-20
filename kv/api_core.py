@@ -284,6 +284,11 @@ def api_setup_scan(_b=None):
         save_config(CFG)
         hosts = list(CFG['hosts'])
         auto = dict(CFG.get('host_auto_names') or {})
+    try:
+        from .setup import refresh_agent_cfg
+        refresh_agent_cfg()   # IP máy giáo viên trong agent.cfg khớp dải mạng của các máy vừa quét
+    except Exception:  # noqa
+        pass
     log('Quét mạng: thấy %d máy chạy Veyon (%d máy có tên PC), thêm mới %d' % (len(found), len(names), added), 'ok' if found else 'warn')
     return {'found': found, 'added': added, 'hosts': hosts, 'auto': auto}
 

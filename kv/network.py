@@ -184,6 +184,12 @@ def _file_sha(path):
 MAC_BAD = {'000000000000', 'FFFFFFFFFFFF'}
 
 
+def valid_pcname(n):
+    """Tên PC hợp lệ: không rỗng, không phải toàn số (vd. “192” cắt ra từ chuỗi IP) và không phải dạng IP."""
+    n = str(n or '').strip()
+    return bool(n) and not n.isdigit() and not re.match(r'^\d{1,3}([-.]\d{1,3}){1,3}$', n)
+
+
 def _nbstat_name(ip, timeout=1.5):
     """Hỏi tên NetBIOS của máy bằng gói UDP 137 (NBSTAT), chạy được trên mọi hệ điều hành, không cần lệnh nbtstat."""
     q = b'\x4b\x42\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00' + b'\x20' + b'CK' + b'AA' * 15 + b'\x00' + b'\x00\x21\x00\x01'
@@ -212,7 +218,7 @@ def pc_name_lookup(ip, timeout=2.5):
     try:
         from .agent import agent_info
         i = agent_info(ip)
-        if i and i.get('name'):
+        if i and valid_pcname(i.get('name')):
             return str(i['name']).upper()
     except Exception:  # noqa
         pass
@@ -220,8 +226,9 @@ def pc_name_lookup(ip, timeout=2.5):
 
     def dns():
         try:
-            n = socket.gethostbyaddr(ip)[0].split('.')[0]
-            box.append(n.upper() if n and not re.match(r'^\d{1,3}(-\d{1,3}){3}$', n) else '')
+            full = socket.gethostbyaddr(ip)[0].strip()
+            n = '' if re.match(r'^\d{1,3}(\.\d{1,3}){3}$', full) else full.split('.')[0]   # DNS trả về chính IP thì coi như không có tên
+            box.append(n.upper() if valid_pcname(n) else '')
         except Exception:  # noqa
             box.append('')
     t = threading.Thread(target=dns, daemon=True)
@@ -230,13 +237,13 @@ def pc_name_lookup(ip, timeout=2.5):
     if box and box[0]:
         return box[0]
     n = _nbstat_name(ip)
-    if n:
+    if valid_pcname(n):
         return n
     if os.name == 'nt':
         rc, out = run_args(['nbtstat', '-A', ip], timeout=6)
         for line in (out or '').splitlines():
             m = re.match(r'^\s*(\S+)\s+<00>\s+UNIQUE', line)
-            if m:
+            if m and valid_pcname(m.group(1)):
                 return m.group(1).upper()
     return ''
 
