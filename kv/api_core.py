@@ -268,19 +268,24 @@ def api_setup_run(b):
 
 
 def api_setup_scan(_b=None):
-    names, err = scan_veyon_hosts()
+    found, names, err = scan_veyon_hosts()
     if err:
         raise ApiError(err)
     added = 0
     with CFG_LOCK:
-        for n in names:
-            if n not in CFG['hosts']:
-                CFG['hosts'].append(n)
+        for ip in found:
+            # máy đã có trong danh sách bằng tên PC (cùng tên dò được) thì không thêm trùng bằng IP
+            have_name = names.get(ip) and any(str(h).strip().upper() == names[ip] for h in CFG['hosts'])
+            if ip not in CFG['hosts'] and not have_name:
+                CFG['hosts'].append(ip)
                 added += 1
+            if names.get(ip):
+                CFG.setdefault('host_auto_names', {})[ip] = names[ip]   # giao diện hiện tên PC thay cho IP
         save_config(CFG)
         hosts = list(CFG['hosts'])
-    log('Quét mạng: thấy %d máy chạy Veyon, thêm mới %d' % (len(names), added), 'ok' if names else 'warn')
-    return {'found': names, 'added': added, 'hosts': hosts}
+        auto = dict(CFG.get('host_auto_names') or {})
+    log('Quét mạng: thấy %d máy chạy Veyon (%d máy có tên PC), thêm mới %d' % (len(found), len(names), added), 'ok' if found else 'warn')
+    return {'found': found, 'added': added, 'hosts': hosts, 'auto': auto}
 
 
 def api_setup_done(b):

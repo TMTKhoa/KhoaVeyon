@@ -89,7 +89,7 @@ def scan_veyon_hosts(prefix=None, timeout=0.5):
     mine = local_ips()
     if prefix is None:
         if not mine:
-            return [], 'Không xác định được địa chỉ mạng của máy này'
+            return [], {}, 'Không xác định được địa chỉ mạng của máy này'
         prefix = sorted(mine)[0].rsplit('.', 1)[0]
     found = []
 
@@ -100,17 +100,14 @@ def scan_veyon_hosts(prefix=None, timeout=0.5):
         for ip in ex.map(probe, range(1, 255)):
             if ip:
                 found.append(ip)
-    names = []
-    for ip in found:
-        name = ip
-        try:
-            n = socket.gethostbyaddr(ip)[0].split('.')[0]
-            if n and socket.gethostbyname(n) == ip:
-                name = n.upper()
-        except Exception:  # noqa
-            pass
-        names.append(name)
-    return names, ''
+    # Trả về IP (kết nối luôn đúng); tên PC dò được trả riêng để hiển thị thay cho IP
+    names = {}
+    if found:
+        with ThreadPoolExecutor(max_workers=32) as ex:
+            for ip, n in zip(found, ex.map(lambda i: pc_name_lookup(i, 2.0), found)):
+                if n:
+                    names[ip] = n
+    return found, names, ''
 
 
 def diagnose_host(cfg, host):
@@ -187,8 +184,38 @@ def _file_sha(path):
 MAC_BAD = {'000000000000', 'FFFFFFFFFFFF'}
 
 
+def _nbstat_name(ip, timeout=1.5):
+    """Hỏi tên NetBIOS của máy bằng gói UDP 137 (NBSTAT), chạy được trên mọi hệ điều hành, không cần lệnh nbtstat."""
+    q = b'\x4b\x42\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00' + b'\x20' + b'CK' + b'AA' * 15 + b'\x00' + b'\x00\x21\x00\x01'
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.settimeout(timeout)
+            s.sendto(q, (ip, 137))
+            d, _a = s.recvfrom(1024)
+        i = 12 + 34 + 10
+        n = d[i]
+        i += 1
+        first = ''
+        for _ in range(n):
+            nm, suf, fl = d[i:i + 15], d[i + 15], (d[i + 16] << 8) | d[i + 17]
+            i += 18
+            if suf == 0 and not fl & 0x8000:   # tên máy (UNIQUE), không phải tên nhóm làm việc
+                first = nm.decode('cp1258', 'ignore').strip().upper()
+                break
+        return first
+    except Exception:  # noqa
+        return ''
+
+
 def pc_name_lookup(ip, timeout=2.5):
-    """Dò tên PC từ IP: DNS ngược trước, không được thì hỏi NetBIOS (nbtstat, chỉ Windows). Không dò được thì trả ''."""
+    """Dò tên PC từ IP: Agent (nếu máy đã kết nối), DNS ngược, NetBIOS (gói NBSTAT rồi nbtstat). Không dò được thì trả ''."""
+    try:
+        from .agent import agent_info
+        i = agent_info(ip)
+        if i and i.get('name'):
+            return str(i['name']).upper()
+    except Exception:  # noqa
+        pass
     box = []
 
     def dns():
@@ -202,6 +229,9 @@ def pc_name_lookup(ip, timeout=2.5):
     t.join(timeout)
     if box and box[0]:
         return box[0]
+    n = _nbstat_name(ip)
+    if n:
+        return n
     if os.name == 'nt':
         rc, out = run_args(['nbtstat', '-A', ip], timeout=6)
         for line in (out or '').splitlines():

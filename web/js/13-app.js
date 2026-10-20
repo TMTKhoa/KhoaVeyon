@@ -188,6 +188,12 @@ document.addEventListener('click', async e => {
     case 'applyupd': applyUpdate(); break;
     case 'notesupd': modal({title: 'Thay đổi ' + S.st.update.latest, noCancel: true, ok: 'Đóng', html: '<div style="white-space:pre-wrap">' + esc(S.st.update.notes || 'Không có ghi chú.') + '</div>'}); break;
     case 'run': runAction(el.dataset.key); break;
+    case 'sorthosts': {   // sắp xếp theo tên hiển thị (số trong tên xếp đúng thứ tự: PC2 trước PC10), bấm lần nữa để đảo chiều
+      S.hostSort = S.hostSort === 1 ? -1 : 1;
+      const col = new Intl.Collator('vi', {numeric: true, sensitivity: 'base'});
+      S.hosts.sort((a, b) => S.hostSort * col.compare(hn(a), hn(b)));
+      saveHosts(); render(); break;
+    }
     case 'selall': S.hosts.forEach(h => S.sel.add(h)); render(); break;
     case 'selnone': S.sel.clear(); render(); break;
     case 'rmhost': S.sel.delete(S.hosts[i]); S.hosts.splice(i, 1); saveHosts(); render(); break;
@@ -225,8 +231,8 @@ document.addEventListener('click', async e => {
     case 'save': saveList(kind, false); break;
     case 'saveapply': saveList(kind, true); break;
     case 'mode': await saveCfg({dist_mode: el.dataset.v}); render(); break;
-    case 'upload': $('#fileInput').click(); break;
-    case 'schoolimport': $('#schoolFile_' + el.dataset.kind).click(); break;
+    case 'upload': pickFile('', true, async files => { await uploadFiles(files); }); break;
+    case 'schoolimport': { const kind = el.dataset.kind; pickFile(kind === 'classes' ? '.xlsx,.xlsm,.json' : '.xlsx,.xlsm', false, async files => { await schoolUpload(kind, files[0]); }); break; }
     case 'schoolset': await schoolSet({action: 'set', cls: el.dataset.cls}); break;
     case 'seatpick': await seatPick(+el.dataset.n); break;
     case 'layopen': S.layOpen = !S.layOpen; render(); break;
@@ -286,6 +292,17 @@ document.addEventListener('submit', e => {
     render(); const x = $('#hostInput'); if (x) x.focus();
   }
 });
+
+/* Hộp chọn file tạo riêng, gắn vào body: trang tự vẽ lại (vi phạm mới, trạng thái máy...) nên ô <input type=file> nằm trong trang có thể bị xóa
+   giữa lúc đang chọn file, khi đó chọn xong mà không có gì xảy ra. */
+function pickFile(accept, multiple, cb) {
+  const i = document.createElement('input');
+  i.type = 'file'; i.accept = accept || ''; i.multiple = !!multiple; i.style.display = 'none';
+  document.body.appendChild(i);
+  i.addEventListener('change', async () => { try { if (i.files && i.files.length) await cb(i.files); } catch (err) { toast(err.message || String(err), 'err'); } finally { i.remove(); } });
+  i.addEventListener('cancel', () => i.remove());
+  i.click();
+}
 
 document.addEventListener('input', e => {
   const t = e.target;

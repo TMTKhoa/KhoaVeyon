@@ -88,6 +88,7 @@ async function scanHosts() {
   try {
     const r = await api('/api/setup_scan', {});
     S.hosts = r.hosts.slice(); r.found.forEach(h => S.sel.add(h));
+    if (r.auto) S.st.cfg.host_auto_names = r.auto;
     S.st.cfg.hosts = S.hosts.slice();
     toast(r.found.length ? `Thấy ${r.found.length} máy chạy Veyon, thêm mới ${r.added}` : 'Không thấy máy nào mở cổng Veyon (11100). Kiểm tra Veyon Service và tường lửa trên máy học sinh.', r.found.length ? 'ok' : 'warn');
     await refreshSetup();

@@ -11,7 +11,7 @@ function viewControl() {
     <section class="card">
       <h3>Máy học sinh <span class="badge">${S.hosts.length}</span></h3>
       <form class="addhost" data-form="addhost"><input type="text" id="hostInput" placeholder="Tên máy hoặc IP, ví dụ PC01" autocomplete="off"><button class="btn primary">Thêm</button></form>
-      <div class="hosttools"><button class="link" data-act="selall">Chọn tất cả</button><button class="link" data-act="selnone">Bỏ chọn</button><span class="muted">Đã chọn ${S.hosts.filter(h => S.sel.has(h)).length}/${S.hosts.length}</span></div>
+      <div class="hosttools"><button class="link" data-act="selall">Chọn tất cả</button><button class="link" data-act="selnone">Bỏ chọn</button><button class="link" data-act="sorthosts" title="Sắp xếp danh sách máy theo tên (bấm lần nữa để đảo chiều)">⇅ Sắp xếp${S.hostSort ? (S.hostSort > 0 ? ' A→Z' : ' Z→A') : ''}</button><span class="muted">Đã chọn ${S.hosts.filter(h => S.sel.has(h)).length}/${S.hosts.length}</span></div>
       ${S.hosts.length ? `<ul class="hostlist">${hostItems}</ul>` : `<div class="empty">Chưa có máy nào.<br>Nhập tên máy hoặc IP ở trên, có thể dán nhiều máy cách nhau bằng dấu phẩy hoặc dấu cách.</div>`}
       <p class="hint" style="margin-bottom:0">Không chọn máy nào nghĩa là áp dụng cho tất cả máy trong danh sách.</p>
     </section>

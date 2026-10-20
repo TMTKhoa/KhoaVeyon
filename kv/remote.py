@@ -103,23 +103,34 @@ def action_via_agent(cfg, host):
     return agent_online(split_host_port(host)[0])
 
 
+# Lệnh làm việc TRONG phiên của học sinh (HKCU, đóng ứng dụng, tắt tiếng, kiosk...): phải chạy bằng phiên học sinh, chạy bằng SYSTEM thì "xong" nhưng không thấy gì
+SERVICE_MODES = ('blockall', 'allowpage', 'allowall', 'webonly', 'weboff', 'blockapp', 'unblockapp', 'blockai', 'allowai')
+
+
 def run_action(cfg, host, key, feature=None, timeout=30):
-    """Chạy một lệnh điều khiển lớp trên 1 máy. Ưu tiên Agent: gửi thẳng `cmd.exe /c <script> <tham số>` cho dịch vụ trên máy
-    học sinh (SYSTEM), giống việc Veyon “Run program” nhưng không cần mục nào trong Veyon Master. Agent chưa kết nối hoặc lỗi
+    """Chạy một lệnh điều khiển lớp trên 1 máy. Ưu tiên Agent: gửi `cmd.exe /c <script> <tham số>` cho dịch vụ trên máy học sinh,
+    chạy TRONG PHIÊN của học sinh đang đăng nhập (đúng như Veyon “Run program”), không cần mục nào trong Veyon Master.
+    Nhóm lệnh do dịch vụ SYSTEM làm (chặn mạng, chặn AI...) mà chưa ai đăng nhập thì chạy bằng SYSTEM. Agent chưa kết nối hoặc lỗi
     kết nối (chế độ tự động) thì dùng mục Veyon như cũ. Trả về (rc, mô tả) như run_shell."""
     from .actions import ACTION_BY_KEY
     a = ACTION_BY_KEY[key]
     if action_via_agent(cfg, host):
-        try:
-            res = agent_call(split_host_port(host)[0], {'op': 'exec', 'cmd': client_command(cfg, a[2]), 'session': 'system',
-                                                      'wait': True, 'timeout': int(timeout)}, timeout=int(timeout) + 20)
-            if res.get('ok'):
-                rc = int(res.get('rc', 0) or 0)
-                return rc, ('xong (qua Agent)' if rc == 0 else (res.get('out') or '')[-300:].strip() or 'mã lỗi %s' % rc)
-            err = (res.get('out') or 'Agent báo lỗi')[:300]
-        except AgentError as e:
-            err = str(e)
-        if str(cfg.get('action_via') or 'auto') == 'agent':
+        sysmode = a[2].lstrip('-') in SERVICE_MODES
+        err = ''
+        for session in (('user', 'system') if sysmode else ('user',)):
+            try:
+                res = agent_call(split_host_port(host)[0], {'op': 'exec', 'cmd': client_command(cfg, a[2]), 'session': session,
+                                                          'wait': True, 'timeout': int(timeout)}, timeout=int(timeout) + 20)
+                if res.get('ok'):
+                    rc = int(res.get('rc', 0) or 0)
+                    return rc, ('xong (qua Agent, %s)' % ('phiên học sinh' if session == 'user' else 'SYSTEM') if rc == 0
+                                else (res.get('out') or '')[-300:].strip() or 'mã lỗi %s' % rc)
+                err = (res.get('out') or 'Agent báo lỗi')[:300]
+            except AgentError as e:
+                err = str(e)
+                if 'đăng nhập' not in err:   # lỗi kết nối: không thử lại bằng SYSTEM
+                    break
+        if str(cfg.get('action_via') or 'auto') == 'agent' or 'đăng nhập' in err:
             return 1, 'Agent: ' + err
     f = feature or cfg.get('features', {}).get(key) or a[3]
     return run_shell(veyon_command(cfg, host, f), timeout=timeout)

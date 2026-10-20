@@ -24,7 +24,21 @@ class ActionVia(unittest.TestCase):
         rc, out = remote.run_action(self.cfg, '192.168.2.5', 'blockai')
         self.assertEqual(rc, 0)
         self.assertIn('-blockai', self.calls[0][1]['cmd'])
-        self.assertEqual(self.calls[0][1]['session'], 'system')
+        self.assertEqual(self.calls[0][1]['session'], 'user')   # chạy trong phiên học sinh như Veyon Run program
+
+    def test_service_mode_falls_back_to_system_when_nobody_logged_in(self):
+        sess = []
+        def fake(host, job, timeout=60):
+            sess.append(job['session'])
+            if job['session'] == 'user':
+                raise remote.AgentError('Chưa có ai đăng nhập Windows trên máy này')
+            return {'ok': True, 'rc': 0}
+        remote.agent_call = fake
+        self.assertEqual(remote.run_action(self.cfg, 'h', 'blockai')[0], 0)
+        self.assertEqual(sess, ['user', 'system'])
+        sess.clear()
+        rc, out = remote.run_action(self.cfg, 'h', 'killapp')   # lệnh trong phiên học sinh: không có ai đăng nhập thì báo lỗi
+        self.assertNotEqual(rc, 0); self.assertEqual(sess, ['user'])
 
     def test_auto_falls_back_to_veyon_when_agent_errors(self):
         def boom(host, job, timeout=60):
