@@ -33,6 +33,7 @@ function viewSchool() {
       <p class="hint" style="margin-bottom:0">Tên lớp hiện tại hiện ở góc trên bên phải và được ghi vào từng vi phạm (lọc được ở trang Vi phạm). Lịch đổi đột xuất thì bấm tên một lớp ở dưới để đặt làm lớp hiện tại${sc.auto === false ? '' : ' (có hiệu lực 45 phút rồi tự quay lại theo lịch)'}.</p>
     </section>
     <section class="card"><div class="toolbar" style="margin-bottom:10px"><b>Nhập dữ liệu</b><span class="grow"></span></div>
+      ${S.schoolErr ? `<div class="note warn" style="margin-bottom:10px">⚠ ${esc(S.schoolErr)}</div>` : ''}
       <div class="row" style="gap:12px;flex-wrap:wrap">
         <button class="btn primary" data-act="schoolimport" data-kind="classes">📥 Nhập danh sách lớp</button>${info(sc.classes_file, sc.classes_at)}
         <input type="file" id="schoolFile_classes" data-schoolfile="classes" accept=".xlsx,.xlsm,.json" class="hidden">
@@ -40,7 +41,7 @@ function viewSchool() {
       </div>
       <div class="row" style="gap:12px;flex-wrap:wrap;margin-top:10px">
         <button class="btn primary" data-act="schoolimport" data-kind="timetable">📥 Nhập thời khóa biểu</button>${info(sc.timetable_file, sc.timetable_at)}
-        <input type="file" id="schoolFile_timetable" data-schoolfile="timetable" accept=".xlsx,.xlsm" class="hidden">
+        <input type="file" id="schoolFile_timetable" data-schoolfile="timetable" accept=".xlsx,.xlsm,.xls" class="hidden">
       </div>
       <p class="hint" style="margin-bottom:0">Danh sách lớp: file điểm danh của trường (mỗi lớp một sheet, tên lớp ở ô E2, họ tên ở cột C), thay toàn bộ danh sách; hoặc file <b>.json</b> xuất từ KhoaTool (Thống kê → Xuất cho KhoaVeyon) hay nút <b>Lấy từ KhoaQuiz</b>, chỉ cập nhật các lớp có trong đó. Thời khóa biểu: bảng tiết × thứ, ô ghi tên lớp. File chỉ được đọc để lấy dữ liệu, không gửi xuống máy học sinh. Nhập lại bất cứ lúc nào để cập nhật.</p>
       ${(sc.unknown || []).length ? `<div class="note warn" style="margin-top:10px">Lớp có trong thời khóa biểu nhưng không có trong danh sách lớp: <b>${sc.unknown.map(esc).join(', ')}</b></div>` : ''}

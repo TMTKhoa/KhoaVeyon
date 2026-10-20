@@ -151,52 +151,124 @@ def parse_classes_json(path):
     return out
 
 
+def _fold(v):
+    """Chữ hoa, bỏ dấu tiếng Việt và khoảng trắng thừa: 'Thứ  Hai' -> 'THU HAI'."""
+    import unicodedata
+    t = str(v or '').replace('Đ', 'D').replace('đ', 'd')
+    t = ''.join(c for c in unicodedata.normalize('NFD', t) if unicodedata.category(c) != 'Mn')
+    return re.sub(r'\s+', ' ', t).strip().upper()
+
+
+_DAY_WORDS = {'HAI': 0, '2': 0, 'BA': 1, '3': 1, 'TU': 2, '4': 2, 'NAM': 3, '5': 3, 'SAU': 4, '6': 4, 'BAY': 5, '7': 5}
+
+
+def _day_of(v):
+    """Ô tiêu đề cột -> số thứ (0 = thứ hai) hoặc None. Nhận: THỨ HAI, Thu 2, T2, THỨ 2 (19/10), Monday, CN, Chủ nhật..."""
+    t = _fold(v)
+    if not t:
+        return None
+    if re.match(r'^(CHU NHAT|CN|SUNDAY|SUN)\b', t):
+        return 6
+    m = re.match(r'^(?:THU|T)\s*(HAI|BA|TU|NAM|SAU|BAY|[2-7])\b', t)
+    if m:
+        return _DAY_WORDS[m.group(1)]
+    for k, en in enumerate(('MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY')):
+        if t.startswith(en[:3]) and (len(t) == 3 or t.startswith(en)):
+            return k
+    return None
+
+
+# Giờ tiết mặc định khi file thời khóa biểu chỉ ghi số tiết, không ghi giờ (sáng 7:00, chiều 13:30, mỗi tiết 45 phút)
+DEFAULT_BELLS = {1: ('07:00', '07:45'), 2: ('07:50', '08:35'), 3: ('08:55', '09:40'), 4: ('09:45', '10:30'), 5: ('10:35', '11:20'),
+                 6: ('13:30', '14:15'), 7: ('14:20', '15:05'), 8: ('15:25', '16:10'), 9: ('16:15', '17:00'), 10: ('17:05', '17:50')}
+
+
+def _times_in_row(cells):
+    """Các giờ có trong một dãy ô, kể cả khi hai giờ nằm chung một ô ('7:00 - 7:45', '07h00-07h45')."""
+    out = []
+    for v in cells:
+        t = '' if isinstance(v, str) else _hhmm(v)
+        if t:
+            out.append(t)
+            continue
+        out += ['%02d:%02d' % (int(a), int(b)) for a, b in re.findall(r'(\d{1,2})\s*[:hH]\s*(\d{2})', str(v or '')) if int(a) < 24 and int(b) < 60]
+    return out
+
+
+def _period_of(cells):
+    for v in cells:
+        m = re.match(r'^\s*(?:TIET|T)?\s*(\d{1,2})\s*$', _fold(v))
+        if m and 1 <= int(m.group(1)) <= 10:
+            return int(m.group(1))
+    return 0
+
+
+def _cls_from_cell(v):
+    """Ô tiết học -> tên lớp. 'Lớp 10A1 (P.201)' -> '10A1'; ô trống hoặc chỉ ghi '-' -> ''."""
+    raw = str(v or '').strip()
+    if not raw or raw in ('-', '--', '/', 'x', 'X'):
+        return ''
+    m = re.search(r'(?<![0-9A-Za-zÀ-ỹ])(\d{1,2}\s?[A-Za-zĐđ]{1,3}\s?\d{0,2}(?:\.\d{1,2})?)(?![0-9A-Za-zÀ-ỹ])', raw)
+    return _cls_norm(m.group(1)) if m else _cls_norm(raw)
+
+
 def parse_timetable_xlsx(path):
-    """Thời khóa biểu dạng lưới: hàng tiêu đề có THỨ HAI...THỨ SÁU, các hàng dưới có giờ bắt đầu, giờ kết thúc và tên lớp."""
+    """Thời khóa biểu dạng lưới: hàng tiêu đề có các thứ (THỨ HAI, Thu 2, T2...), bên trái là giờ (hai cột giờ bắt đầu/kết thúc,
+    hoặc một ô '7:00 - 7:45', hoặc số tiết), các ô còn lại là tên lớp. Xét mọi sheet, lấy sheet có tiêu đề các thứ."""
     from openpyxl import load_workbook  # nạp muộn: openpyxl khá nặng, chỉ cần khi đọc/ghi Excel
     wb = load_workbook(path, read_only=False, data_only=True)
     try:
-        ws = wb.worksheets[0]
-        grid = [list(r) for r in ws.iter_rows(values_only=True)]
+        sheets = [(ws.title, [list(r) for r in ws.iter_rows(values_only=True)]) for ws in wb.worksheets]
     finally:
         wb.close()
-    hdr = cols = None
-    for i, r in enumerate(grid):
-        found = {}
-        for j, v in enumerate(r):
-            s = re.sub(r'\s+', ' ', str(v or '')).strip().upper()
-            if s in SCHOOL_DAYS:
-                found[j] = SCHOOL_DAYS.index(s)
-        if len(found) >= 2:
-            hdr, cols = i, found
-            break
-    if hdr is None:
-        raise ApiError('Không thấy hàng tiêu đề THỨ HAI, THỨ BA... trong thời khóa biểu.')
-    first = min(cols)
-    slots, frm, teacher, subject = [], '', '', ''
-    for r in grid[:hdr]:
-        for j, v in enumerate(r):
-            t = str(v or '').strip().lower()
-            nxt = next((x for x in r[j + 1:] if x not in (None, '')), None)
-            if t == 'bắt đầu từ':
-                frm = _date_iso(nxt)
-            elif t == 'giáo viên' and nxt:
-                teacher = str(nxt).strip()
-            elif t == 'môn' and nxt:
-                subject = str(nxt).strip()
-    for r in grid[hdr + 1:]:
-        times = [_hhmm(v) for v in r[:first] if _hhmm(v)]
-        if len(times) < 2:
+    seen_titles = []
+    for title, grid in sheets:
+        hdr = cols = None
+        for i, r in enumerate(grid[:60]):
+            found = {}
+            for j, v in enumerate(r):
+                d = _day_of(v)
+                if d is not None and d not in found.values():
+                    found[j] = d
+            if len(found) >= 2:
+                hdr, cols = i, found
+                break
+        if hdr is None:
+            seen_titles.append(title)
             continue
-        st, en = times[0], times[1]
-        for j, day in cols.items():
-            c = _cls_norm(r[j] if j < len(r) else '')
-            if c:
-                slots.append({'day': day, 'start': st, 'end': en, 'cls': c})
-    if not slots:
-        raise ApiError('Thời khóa biểu không có tiết nào có tên lớp.')
-    slots.sort(key=lambda s: (s['day'], s['start']))
-    return {'slots': slots, 'from': frm, 'teacher': teacher, 'subject': subject}
+        first = min(cols)
+        slots, frm, teacher, subject, used_default = [], '', '', '', False
+        for r in grid[:hdr]:
+            for j, v in enumerate(r):
+                t = _fold(v)
+                nxt = next((x for x in r[j + 1:] if x not in (None, '')), None)
+                if t in ('BAT DAU TU', 'AP DUNG TU', 'TU NGAY'):
+                    frm = _date_iso(nxt)
+                elif t in ('GIAO VIEN', 'GV') and nxt:
+                    teacher = str(nxt).strip()
+                elif t in ('MON', 'MON HOC') and nxt:
+                    subject = str(nxt).strip()
+        for r in grid[hdr + 1:]:
+            left = r[:first]
+            times = _times_in_row(left)
+            if len(times) >= 2:
+                st, en = times[0], times[1]
+            else:
+                per = _period_of(left)
+                if per and per in DEFAULT_BELLS:
+                    st, en = DEFAULT_BELLS[per]
+                    used_default = True
+                else:
+                    continue
+            for j, day in cols.items():
+                c = _cls_from_cell(r[j] if j < len(r) else '')
+                if c:
+                    slots.append({'day': day, 'start': st, 'end': en, 'cls': c})
+        if not slots:
+            raise ApiError('Thấy hàng tiêu đề các thứ ở sheet "%s" nhưng không có tiết nào có tên lớp. Mỗi hàng tiết cần có giờ (7:00 và 7:45, hoặc "7:00 - 7:45", hoặc số tiết 1-10) ở bên trái các cột thứ.' % title)
+        slots.sort(key=lambda s: (s['day'], s['start']))
+        return {'slots': slots, 'from': frm, 'teacher': teacher, 'subject': subject, 'default_bells': used_default}
+    raise ApiError('Không thấy hàng tiêu đề các thứ (THỨ HAI, Thứ 2, T2...) ở sheet nào (đã xem: %s). Hàng tiêu đề cần ít nhất 2 cột thứ.' % ', '.join(seen_titles[:6]))
 
 
 def _mins(hhmm):

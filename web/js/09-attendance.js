@@ -72,8 +72,8 @@ async function schoolUpload(kind, file) {
     const r = await fetch(`/api/school_upload?kind=${kind}&name=${encodeURIComponent(file.name)}`, {method: 'PUT', headers: {'X-Token': TOKEN}, body: file}).finally(() => slowEnd(sid));
     const data = await r.json().catch(() => ({error: 'Phản hồi không hợp lệ'}));
     if (!r.ok || data.error) throw new Error(data.error || ('Lỗi ' + r.status));
-    S.school = data; if (kind === 'classes') S.stu = {}; toast(kind === 'classes' ? 'Đã nhập danh sách lớp' : 'Đã nhập thời khóa biểu', 'ok');
-  } catch (err) { toast(err.message, 'err'); }
+    S.school = data; S.schoolErr = ''; if (kind === 'classes') S.stu = {}; toast(kind === 'classes' ? 'Đã nhập danh sách lớp' : 'Đã nhập thời khóa biểu', 'ok');
+  } catch (err) { S.schoolErr = (kind === 'classes' ? 'Nhập danh sách lớp lỗi: ' : 'Nhập thời khóa biểu lỗi: ') + err.message; toast(err.message, 'err'); }
   await refreshBrief(); try { await loadSchool(); } catch (e) { /* bỏ qua */ } render();
 }
 

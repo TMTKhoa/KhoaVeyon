@@ -126,6 +126,8 @@ def school_import(kind, path, filename):
             SCHOOL.update({'slots': data['slots'], 'from': data['from'], 'teacher': data['teacher'], 'subject': data['subject'],
                            'timetable_file': filename, 'timetable_at': stamp, 'override': None})
         log('Đã nhập thời khóa biểu: %d tiết mỗi tuần%s' % (len(data['slots']), (', bắt đầu từ ' + data['from']) if data['from'] else ''), 'ok')
+        if data.get('default_bells'):
+            log('Thời khóa biểu chỉ ghi số tiết nên dùng giờ tiết mặc định (sáng 7:00, chiều 13:30, mỗi tiết 45 phút). Nếu trường bạn khác, ghi giờ cụ thể vào hai cột bên trái rồi nhập lại.', 'warn')
     school_save()
 
 

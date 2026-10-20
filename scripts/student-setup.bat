@@ -70,6 +70,20 @@ if exist "%HERE%KhoaVeyonAgent.cfg" (
 ) else (
   echo     Khong thay KhoaVeyonAgent.cfg canh file nay: may giao vien se dung chia se C$ nhu cu.
 )
+echo [6/6 b] Dong bo gio he thong
+REM Mui gio Viet Nam, bat Windows Time tu chay, dong bo voi may chu gio Internet. Gio lech qua 15 phut thi Agent bi may giao vien tu choi.
+tzutil /s "SE Asia Standard Time" >nul 2>&1
+sc config w32time start= auto >nul 2>&1
+net start w32time >nul 2>&1
+w32tm /config /manualpeerlist:"time.windows.com,0x9 time.google.com,0x9 pool.ntp.org,0x9" /syncfromflags:manual /reliable:no /update >nul 2>&1
+w32tm /resync /force >nul 2>&1
+if errorlevel 1 (
+  echo     Khong dong bo duoc voi may chu gio Internet: lay gio tu may giao vien neu co the.
+  if exist "%ProgramFiles%\KhoaVeyon\agent.cfg" powershell -NoProfile -ExecutionPolicy Bypass -Command "try{ $c=@{}; Get-Content ($env:ProgramFiles+'\KhoaVeyon\agent.cfg') | ForEach-Object { $p=$_.Split('=',2); if($p.Length -eq 2){$c[$p[0].Trim()]=$p[1].Trim()} }; $t=(Invoke-RestMethod ($c['url']+'/agent/time') -TimeoutSec 5).ts; Set-Date ([DateTimeOffset]::FromUnixTimeSeconds([int64]$t).LocalDateTime) | Out-Null; 'Da dat gio theo may giao vien.' }catch{ 'Khong lay duoc gio may giao vien: hay chinh gio bang tay.' }"
+) else (
+  echo     Da dong bo gio.
+)
+
 if not exist "C:\cmd\KhoaVeyonServices.bat" if not exist "%HERE%KhoaVeyonServices.bat" if exist "!KVAG!\agent.cfg" (
   echo     Dang tai KhoaVeyonServices.bat tu may giao vien...
   powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=@{};Get-Content -LiteralPath ($env:ProgramFiles+'\KhoaVeyon\agent.cfg') | ForEach-Object { $p=$_.Split('=',2); if($p.Length -eq 2){ $c[$p[0].Trim()]=$p[1].Trim() } }; if(-not $c['url'] -or -not $c['sha']){ exit 3 }; $f='C:\cmd\KhoaVeyonServices.bat'; (New-Object Net.WebClient).DownloadFile($c['url']+'/agent/boot/KhoaVeyonServices.bat',$f); $h=(Get-FileHash -LiteralPath $f -Algorithm SHA256).Hash.ToLower(); if($h -ne $c['sha']){ Remove-Item -LiteralPath $f -Force; exit 4 }" >nul 2>&1
@@ -96,6 +110,10 @@ if exist "C:\cmd\KhoaVeyonServices.bat" (
 echo.
 echo [KIEM TRA] Ket qua tung buoc (cung duoc ghi vao C:\cmd\KhoaVeyonSetup.log)
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$o=@(); function P($ok,$t){ if($ok){'  [OK]  '+$t}else{'  [LOI] '+$t} }; $cli=Join-Path $env:ProgramFiles 'Veyon\veyon-cli.exe'; $o+=P (Test-Path $cli) 'Veyon da cai'; $s=Get-Service VeyonService -ErrorAction SilentlyContinue; $o+=P ($s -and $s.Status -eq 'Running') ('VeyonService: '+$(if($s){$s.Status}else{'chua co'})); $s=Get-Service KhoaVeyonAutoLog -ErrorAction SilentlyContinue; $o+=P ($s -and $s.Status -eq 'Running') ('Dich vu Agent KhoaVeyonAutoLog: '+$(if($s){$s.Status}else{'CHUA CAI'})); $o+=P (Test-Path 'C:\cmd\KhoaVeyonServices.bat') 'C:\cmd\KhoaVeyonServices.bat'; $o+=P (Test-Path ($env:ProgramFiles+'\KhoaVeyon\agent.cfg')) 'agent.cfg (khoa Agent)'; $o+=P (Test-Path ($env:ProgramFiles+'\KhoaVeyon\KhoaVeyonAutoLog.exe')) 'KhoaVeyonAutoLog.exe'; $csc=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'; $o+=P (Test-Path $csc) '.NET Framework 4 (csc.exe) de bien dich dich vu'; try{ $c=@{}; Get-Content ($env:ProgramFiles+'\KhoaVeyon\agent.cfg') | ForEach-Object { $p=$_.Split('=',2); if($p.Length -eq 2){$c[$p[0].Trim()]=$p[1].Trim()} }; $u=[uri]$c['url']; $t=New-Object Net.Sockets.TcpClient; $a=$t.BeginConnect($u.Host,$u.Port,$null,$null); $ok=$a.AsyncWaitHandle.WaitOne(3000) -and $t.Connected; $o+=P $ok ('Ket noi toi may giao vien '+$u.Host+':'+$u.Port+' (cong Agent, can mo tuong lua may giao vien)') }catch{ $o+=P $false 'Khong doc duoc agent.cfg hoac khong ket noi duoc may giao vien' }; $o; (Get-Date -Format s)+' '+$env:COMPUTERNAME | Add-Content 'C:\cmd\KhoaVeyonSetup.log'; $o | Add-Content 'C:\cmd\KhoaVeyonSetup.log'"
+echo.
+echo Cho 15 giay de Agent goi ve may giao vien roi doc nhat ky Agent...
+timeout /t 15 /nobreak >nul
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=@(Get-Content 'C:\cmd\KhoaVeyonService.log' -ErrorAction SilentlyContinue | Select-String 'agent' | Select-Object -Last 4 | ForEach-Object { '  Nhat ky Agent: '+$_.Line }); if($l.Count -eq 0){ $l=@('  Nhat ky Agent: (chua co dong nao: dich vu chua ghi gi ve Agent)') }; $l; $l | Add-Content 'C:\cmd\KhoaVeyonSetup.log'"
 echo.
 if defined FAIL (
   echo CON THIEU: Veyon chua duoc cai. Chep bo cai Veyon vao cung thu muc voi file nay roi chay lai.

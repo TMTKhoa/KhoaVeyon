@@ -245,6 +245,25 @@ def _prune_nonces(now):
             NONCES.pop(n, None)
 
 
+REJECT_LOG = {}   # (ip, lý do) -> lần ghi nhật ký gần nhất; dùng để không ghi dồn dập
+
+
+def agent_reject(ip, reason, extra=''):
+    """Máy học sinh có gọi về nhưng bị từ chối: ghi vào Nhật ký kèm cách sửa (trước đây im lặng nên chỉ thấy “không có Agent”)."""
+    now = time.time()
+    k = (ip, reason)
+    if now - REJECT_LOG.get(k, 0) < 60:
+        return
+    REJECT_LOG[k] = now
+    hint = {
+        'bad signature': 'khóa Agent trên máy đó khác khóa của máy giáo viên (agent.cfg cũ hoặc đã đổi khóa) → chạy lại Setup-MayHocSinh.bat MỚI trên máy đó',
+        'bad time': 'đồng hồ máy đó lệch quá %d phút so với máy giáo viên%s → chỉnh lại ngày giờ và múi giờ của máy học sinh' % (CLOCK_SKEW // 60, extra),
+        'replay': 'gói tin bị lặp (thường do mạng); sẽ tự thử lại',
+        'bad request': 'dữ liệu gọi về không đọc được (bản dịch vụ trên máy học sinh khác bản KhoaVeyon) → chạy lại Setup-MayHocSinh.bat mới',
+    }.get(reason, reason)
+    log('Agent: máy %s gọi về nhưng bị từ chối (%s): %s' % (ip, reason, hint), 'warn')
+
+
 class AgentHandler(http.server.BaseHTTPRequestHandler):
     server_version = 'KhoaVeyonAgent'
     protocol_version = 'HTTP/1.1'
@@ -273,6 +292,7 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
             return None
         raw = self.rfile.read(n)
         if not hmac.compare_digest(self.headers.get('X-KV-Sig') or '', sign(raw)):
+            agent_reject(self.client_address[0], 'bad signature')
             self._send(403, {'error': 'bad signature'}, signed=False)
             return None
         try:
@@ -280,14 +300,17 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
             ts = float(d.get('ts'))
             nonce = str(d.get('nonce') or '')
         except (ValueError, TypeError, AttributeError):
+            agent_reject(self.client_address[0], 'bad request')
             self._send(400, {'error': 'bad request'}, signed=False)
             return None
         now = time.time()
         if abs(now - ts) > CLOCK_SKEW or len(nonce) < 8:
+            agent_reject(self.client_address[0], 'bad time', ' (lệch khoảng %d phút)' % int(abs(now - ts) // 60))
             self._send(403, {'error': 'bad time'}, signed=False)
             return None
         with LOCK:
             if nonce in NONCES:
+                agent_reject(self.client_address[0], 'replay')
                 self._send(403, {'error': 'replay'}, signed=False)
                 return None
             NONCES[nonce] = now
@@ -298,6 +321,9 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
         """Máy học sinh mới cài (chưa có KhoaVeyonServices.bat) tải bản chuẩn từ đây. Không cần khóa vì cấu hình Agent
         đã ghim sẵn mã SHA-256 của file: tải về sai mã thì Setup xóa đi."""
         path = self.path.split('?')[0]
+        if path == '/agent/time':   # máy học sinh mới cài lấy giờ máy giáo viên khi không có Internet để đồng bộ giờ chuẩn
+            self._send(200, {'ts': time.time()}, signed=False)
+            return
         pre = '/agent/boot/'
         if not path.startswith(pre):
             self._send(404, {'error': 'not found'}, signed=False)

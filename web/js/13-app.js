@@ -232,7 +232,7 @@ document.addEventListener('click', async e => {
     case 'saveapply': saveList(kind, true); break;
     case 'mode': await saveCfg({dist_mode: el.dataset.v}); render(); break;
     case 'upload': pickFile('', true, async files => { await uploadFiles(files); }); break;
-    case 'schoolimport': { const kind = el.dataset.kind; pickFile(kind === 'classes' ? '.xlsx,.xlsm,.json' : '.xlsx,.xlsm', false, async files => { await schoolUpload(kind, files[0]); }); break; }
+    case 'schoolimport': { const kind = el.dataset.kind; pickFile(kind === 'classes' ? '.xlsx,.xlsm,.xls,.json' : '.xlsx,.xlsm,.xls', false, async files => { await schoolUpload(kind, files[0]); }); break; }
     case 'schoolset': await schoolSet({action: 'set', cls: el.dataset.cls}); break;
     case 'seatpick': await seatPick(+el.dataset.n); break;
     case 'layopen': S.layOpen = !S.layOpen; render(); break;

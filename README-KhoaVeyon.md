@@ -237,6 +237,13 @@ Thao tác nào quá 0,7 giây chưa xong (quét mạng, hỏi Veyon, kết nối
 
 **Chưa kiểm chứng trên Windows và Veyon thật:** tên khóa `websiteUrls` của Veyon Open website (đã có phương án dự phòng `explorer.exe`), việc trang KhoaQuiz tải đủ khi bật "chỉ trang cho phép" (lệnh này chặn theo IP, trang dùng CDN có thể thiếu: hãy thử trên một máy trước giờ thi). Logic, giao diện và luồng gọi KhoaQuiz đã thử bằng KhoaQuiz giả lập (kiểm thử `tests/test_khoalink.py` và thử giao diện bằng trình duyệt).
 
+## Bản 4.0.0: tổng hợp các thay đổi từ 3.12.1
+- Nút điều khiển lớp chạy thẳng qua Agent trong phiên học sinh, không cần mục Veyon (Cài đặt → "Nút điều khiển lớp chạy bằng"); lỗi "Invalid feature name" có thông báo rõ và tự tra UID.
+- Thiết lập máy học sinh: tự dừng/xóa dịch vụ cũ trước khi cài, tự đồng bộ giờ (múi giờ VN, Internet hoặc lấy giờ máy giáo viên), in bảng [KIEM TRA] và ghi C:\cmd\KhoaVeyonSetup.log.
+- Agent: chọn IP máy giáo viên cùng dải mạng máy học sinh; ghi Nhật ký lý do khi máy học sinh bị từ chối (sai khóa, lệch giờ).
+- Quét máy: hiện tên PC (Agent, DNS, NetBIOS), nút sắp xếp danh sách máy, sửa lỗi tên "192".
+- Nhập Excel: hộp chọn file không còn mất khi trang vẽ lại; thời khóa biểu nhận nhiều kiểu file và báo lỗi rõ.
+
 ## Bản 3.12.1: sửa lỗi "authkeys export lỗi ... already exists" khi Thiết lập máy giáo viên
 
 `veyon-cli authkeys export` tạo file khóa public ở dạng **chỉ-đọc**, còn Windows không cho `os.remove` xóa file chỉ-đọc. Lần xuất sau chương trình không xóa được file cũ và Veyon báo `File ... already exists`, làm bước khóa xác thực (và cả Thiết lập máy giáo viên) dừng lại. Bản này bỏ thuộc tính chỉ-đọc trước khi xóa, cả cho file trong `data\veyon-backups\authkeys` lẫn bản chép trong `payload`. Lệnh `del` trong tập lệnh gửi xuống máy học sinh cũng đổi thành `del /f /q` vì cùng nguyên nhân. Kiểm thử mới: `tests/test_authkeys_readonly.py`.

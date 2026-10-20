@@ -156,6 +156,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         fname = os.path.basename(q.get('name', '')) or 'file.xlsx'
         body = self.rfile.read(n)
+        if fname.lower().endswith(('.xls', '.csv')):
+            self._send(400, {'error': 'File %s là định dạng cũ/không phải Excel mới. Mở bằng Excel, chọn Lưu thành (Save As) → Excel Workbook (.xlsx) rồi nhập lại.' % os.path.splitext(fname)[1]})
+            return
         tmp = ''
         try:
             fd, tmp = tempfile.mkstemp(suffix='.json' if fname.lower().endswith('.json') else '.xlsx')
