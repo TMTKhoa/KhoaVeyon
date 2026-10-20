@@ -23,6 +23,12 @@ def client_command(cfg, switch):
 
 
 def veyon_command(cfg, host, feature, template_key='run_template'):
+    if template_key == 'run_template' and feature:
+        try:
+            from .featres import resolve
+            feature = resolve(cfg, feature)   # gọi bằng UID thật của mục nếu tra được (tránh lỗi “Invalid feature name”)
+        except Exception:  # noqa
+            pass
     return cfg[template_key].format(cli=find_veyon_cli(cfg['veyon_cli']), host=host, feature=feature)
 
 

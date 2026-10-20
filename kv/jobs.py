@@ -33,7 +33,12 @@ def job_action(key, hosts):
         rc, out = run_shell(cmd, timeout=30)
         if rc == 0:
             applied_record(h, key)
-        return rc == 0, out if rc == 0 else '(%s) %s' % (rc, out)
+        if rc == 0:
+            return True, out
+        if 'invalid feature' in (out or '').lower():
+            out += ('\n   → Veyon trên máy giáo viên chưa có mục "%s". Vào Thiết lập → “Mục điều khiển trong Veyon” để tạo lại, '
+                    'hoặc kiểm tra tên mục ở Cài đặt (phải trùng tên trong Veyon Master → Programs & websites).' % feature)
+        return False, '(%s) %s' % (rc, out)
     pool_run(one, hosts, label)
 
 
