@@ -13,7 +13,7 @@ import time
 from .ai import ai_state_one
 from .health import health_probe
 from .network import tcp_open
-from .remote import run_shell, veyon_command
+from .remote import run_action, run_shell, veyon_command
 from .runtime import ApiError, CFG, CFG_LOCK, clean_hosts, log, split_host_port, start_job
 from .verify import compare, read_remote_state
 from .watch import watch_start_one, watch_stop_one
@@ -22,12 +22,10 @@ from .watch import watch_start_one, watch_stop_one
 def _apply(cfg, host, key):
     """Gửi một lệnh Veyon (mục 'features') xuống máy, đồng bộ. Trả về (ok, mô tả)."""
     from .actions import ACTION_BY_KEY
-    feature = cfg['features'].get(key) or ACTION_BY_KEY[key][3]
     try:
-        cmd = veyon_command(cfg, host, feature)
+        rc, out = run_action(cfg, host, key)
     except Exception as e:  # noqa
         return False, 'lỗi mẫu lệnh: %s' % e
-    rc, out = run_shell(cmd, timeout=30)
     return rc == 0, out
 
 

@@ -41,7 +41,9 @@ def kit_copy_key():
             os.makedirs(PAYLOAD_DIR, exist_ok=True)
             dst = os.path.join(PAYLOAD_DIR, os.path.basename(src))
             import shutil
-            shutil.copy2(src, dst)
+            from .authkeys import force_remove
+            force_remove(dst)   # file khóa cũ là chỉ-đọc: phải bỏ thuộc tính đó mới ghi đè được
+            shutil.copyfile(src, dst)
             return os.path.basename(dst)
     except OSError:
         pass

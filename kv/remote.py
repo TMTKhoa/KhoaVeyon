@@ -93,6 +93,38 @@ def use_agent(host):
     return agent_online(hh)
 
 
+def action_via_agent(cfg, host):
+    """Nút điều khiển lớp có chạy thẳng qua Agent trên máy học sinh (không cần mục Veyon) không."""
+    via = str(cfg.get('action_via') or 'auto')
+    if via == 'veyon' or transport_mode() == 'smb':
+        return False
+    if via == 'agent':
+        return True
+    return agent_online(split_host_port(host)[0])
+
+
+def run_action(cfg, host, key, feature=None, timeout=30):
+    """Chạy một lệnh điều khiển lớp trên 1 máy. Ưu tiên Agent: gửi thẳng `cmd.exe /c <script> <tham số>` cho dịch vụ trên máy
+    học sinh (SYSTEM), giống việc Veyon “Run program” nhưng không cần mục nào trong Veyon Master. Agent chưa kết nối hoặc lỗi
+    kết nối (chế độ tự động) thì dùng mục Veyon như cũ. Trả về (rc, mô tả) như run_shell."""
+    from .actions import ACTION_BY_KEY
+    a = ACTION_BY_KEY[key]
+    if action_via_agent(cfg, host):
+        try:
+            res = agent_call(split_host_port(host)[0], {'op': 'exec', 'cmd': client_command(cfg, a[2]), 'session': 'system',
+                                                      'wait': True, 'timeout': int(timeout)}, timeout=int(timeout) + 20)
+            if res.get('ok'):
+                rc = int(res.get('rc', 0) or 0)
+                return rc, ('xong (qua Agent)' if rc == 0 else (res.get('out') or '')[-300:].strip() or 'mã lỗi %s' % rc)
+            err = (res.get('out') or 'Agent báo lỗi')[:300]
+        except AgentError as e:
+            err = str(e)
+        if str(cfg.get('action_via') or 'auto') == 'agent':
+            return 1, 'Agent: ' + err
+    f = feature or cfg.get('features', {}).get(key) or a[3]
+    return run_shell(veyon_command(cfg, host, f), timeout=timeout)
+
+
 def rfs_reachable(host, tcp_open_fn=None):
     """Máy có đường để chép/đọc file không: Agent đã kết nối hoặc cổng 445 mở."""
     hh = split_host_port(host)[0]

@@ -22,6 +22,7 @@ DEFAULT_CONFIG = {
     'dist_files': [],
     'dist_include_lists': True,
     'dist_target': r'C:\cmd',
+    'action_via': 'auto',     # auto | agent | veyon: nút điều khiển lớp chạy qua Agent (khuyên dùng) hay mục Veyon "Programs & websites"
     'transport': 'auto',      # auto | agent | smb: cách chép file / chạy lệnh trên máy học sinh (xem kv/agent.py)
     'agent_token': '',        # khóa bí mật chung với dịch vụ trên máy học sinh (tự tạo)
     'agent_port': '8767',     # cổng máy giáo viên mở cho dịch vụ trên máy học sinh gọi về

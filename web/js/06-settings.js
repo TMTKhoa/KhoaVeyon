@@ -26,6 +26,7 @@ function viewSettings() {
     <section class="card"><h3>Kết nối tới máy học sinh</h3>
       <p class="sub">Cách chép file và chạy lệnh trên máy học sinh: <b>Tự động</b> dùng kênh Agent khi máy đã kết nối, không thì dùng chia sẻ C$ + Task Scheduler như cũ.</p>
       <div class="formgrid">
+        <div><label class="field">Nút điều khiển lớp chạy bằng</label><select data-set="action_via">${[['auto', 'Agent trước, thiếu thì dùng mục Veyon (khuyên dùng)'], ['agent', 'Chỉ Agent (không cần mục Veyon)'], ['veyon', 'Chỉ mục Veyon “Programs & websites”']].map(o => `<option value="${o[0]}" ${(c.action_via || 'auto') === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></div>
         <div><label class="field">Cách kết nối</label><select data-set="transport">${[['auto', 'Tự động (khuyên dùng)'], ['agent', 'Chỉ Agent'], ['smb', 'Chỉ C$ và Task Scheduler (cách cũ)']].map(o => `<option value="${o[0]}" ${c.transport === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></div>
         ${f('agent_port', 'Cổng Agent trên máy giáo viên', 'Mặc định 8767. Đổi cổng thì phải cài lại Agent trên máy học sinh.')}
         ${f('agent_host', 'Địa chỉ máy giáo viên (tùy chọn)', 'Để trống = tự lấy IP mạng LAN. Điền khi máy có nhiều card mạng, hoặc dùng tên máy nếu IP hay đổi.')}

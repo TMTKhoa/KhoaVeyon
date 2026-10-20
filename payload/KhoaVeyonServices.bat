@@ -1065,6 +1065,11 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $newExe)) {
     if (-not (Test-Path -LiteralPath $svcExe)) { exit 1 }
     Write-Host 'AutoLog service: keeping the exe from the previous install'
 } else {
+    # Make sure the old service process is really gone, then delete the old exe so the new one is always put in place
+    # (the compile above succeeded, so the old exe is no longer needed as a fallback).
+    Get-Process -Name 'KhoaVeyonAutoLog' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    Remove-Item -LiteralPath $svcExe -Force -ErrorAction SilentlyContinue
     try { Move-Item -LiteralPath $newExe -Destination $svcExe -Force -ErrorAction Stop }
     catch { Write-Host "AutoLog service: cannot replace $svcExe ($_)"; if (-not (Test-Path -LiteralPath $svcExe)) { exit 1 } }
 }

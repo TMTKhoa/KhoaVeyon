@@ -237,6 +237,10 @@ Thao tác nào quá 0,7 giây chưa xong (quét mạng, hỏi Veyon, kết nối
 
 **Chưa kiểm chứng trên Windows và Veyon thật:** tên khóa `websiteUrls` của Veyon Open website (đã có phương án dự phòng `explorer.exe`), việc trang KhoaQuiz tải đủ khi bật "chỉ trang cho phép" (lệnh này chặn theo IP, trang dùng CDN có thể thiếu: hãy thử trên một máy trước giờ thi). Logic, giao diện và luồng gọi KhoaQuiz đã thử bằng KhoaQuiz giả lập (kiểm thử `tests/test_khoalink.py` và thử giao diện bằng trình duyệt).
 
+## Bản 3.12.1: sửa lỗi "authkeys export lỗi ... already exists" khi Thiết lập máy giáo viên
+
+`veyon-cli authkeys export` tạo file khóa public ở dạng **chỉ-đọc**, còn Windows không cho `os.remove` xóa file chỉ-đọc. Lần xuất sau chương trình không xóa được file cũ và Veyon báo `File ... already exists`, làm bước khóa xác thực (và cả Thiết lập máy giáo viên) dừng lại. Bản này bỏ thuộc tính chỉ-đọc trước khi xóa, cả cho file trong `data\veyon-backups\authkeys` lẫn bản chép trong `payload`. Lệnh `del` trong tập lệnh gửi xuống máy học sinh cũng đổi thành `del /f /q` vì cùng nguyên nhân. Kiểm thử mới: `tests/test_authkeys_readonly.py`.
+
 ## Bản 3.12.0: sửa tên mục Veyon bị hỏng mã hóa
 
 - Đọc `veyon-cli config get` theo UTF-8. Trước đây tên tiếng Việt bị đọc sai bảng mã và hỏng thêm một lớp mỗi lần ghi lại, kèm các mục trùng lặp.

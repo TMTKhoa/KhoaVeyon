@@ -6,7 +6,7 @@ import os
 from .actions import ACTION_BY_KEY
 from .applied import applied_record
 from .network import tcp_open
-from .remote import distribute_to_host, remote_run, run_shell, veyon_command
+from .remote import action_via_agent, distribute_to_host, remote_run, run_action, run_shell, veyon_command
 from .runtime import CFG, CFG_LOCK, log, pool_run, split_host_port
 
 
@@ -19,15 +19,22 @@ def veyon_feature(key):
 def job_action(key, hosts):
     label = ACTION_BY_KEY[key][1]
     feature = veyon_feature(key)
-    log('>>> %s  (mục Veyon: "%s", %d máy)' % (label, feature, len(hosts)), 'head')
+    log('>>> %s  (%s, %d máy)' % (label, 'Agent / mục Veyon "%s"' % feature, len(hosts)), 'head')
 
     def one(h):
+        hh, pp = split_host_port(h)
+        with CFG_LOCK:
+            cfg = dict(CFG)
+        if action_via_agent(cfg, h):   # chạy thẳng qua Agent, không cần mục Veyon
+            rc, out = run_action(cfg, h, key, feature)
+            if rc == 0:
+                applied_record(h, key)
+            return rc == 0, out if rc == 0 else '(%s) %s' % (rc, out)
         try:
             with CFG_LOCK:
                 cmd = veyon_command(CFG, h, feature)
         except Exception as e:  # noqa
             return False, 'Lỗi mẫu lệnh: %s' % e
-        hh, pp = split_host_port(h)
         if not tcp_open(hh, pp, 1.5):  # máy tắt: báo lỗi sau vài giây thay vì chờ veyon-cli hết 60 giây
             return False, 'máy không trả lời (đang tắt, sai tên máy hoặc Veyon Service chưa chạy)'
         rc, out = run_shell(cmd, timeout=30)
@@ -75,12 +82,16 @@ def job_dist(hosts, files, mode, cmd, feature, interactive, target, title):
                 return False, '%schạy lệnh lỗi (%s) %s' % (', '.join(msgs) + ', ' if msgs else '', rc, out)
             msgs.append('đã chạy lệnh')
         elif mode == 'veyon':
+            with CFG_LOCK:
+                cfg = dict(CFG)
+            key = next((k for k in ACTION_BY_KEY if (cfg['features'].get(k) or ACTION_BY_KEY[k][3]) == feature), None)
             try:
-                with CFG_LOCK:
-                    c = veyon_command(CFG, h, feature)
+                if key:
+                    rc, out = run_action(cfg, h, key, feature)
+                else:
+                    rc, out = run_shell(veyon_command(cfg, h, feature))
             except Exception as e:  # noqa
                 return False, 'Lỗi mẫu lệnh: %s' % e
-            rc, out = run_shell(c)
             if rc != 0:
                 return False, '%schạy mục Veyon lỗi (%s) %s' % (', '.join(msgs) + ', ' if msgs else '', rc, out)
             msgs.append('đã kích hoạt mục Veyon')

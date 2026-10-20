@@ -79,6 +79,12 @@ if exist "%HERE%KhoaVeyonServices.bat" (
   copy /y "%HERE%KhoaVeyonServices.bat" "C:\cmd\" >nul
 )
 if exist "C:\cmd\KhoaVeyonServices.bat" (
+  REM Go ban dich vu cu truoc khi cai lai, vi file exe cu dang chay thi khong ghi de duoc
+  echo     Dang dung dich vu KhoaVeyonAutoLog cu...
+  sc stop KhoaVeyonAutoLog >nul 2>&1
+  ping -n 6 127.0.0.1 >nul
+  taskkill /f /im KhoaVeyonAutoLog.exe >nul 2>&1
+  del /f /q "%ProgramFiles%\KhoaVeyon\KhoaVeyonAutoLog.exe" >nul 2>&1
   call "C:\cmd\KhoaVeyonServices.bat" -install <nul
 ) else (
   echo     Chua co KhoaVeyonServices.bat tren may nay: bo qua, may giao vien se gui sau.

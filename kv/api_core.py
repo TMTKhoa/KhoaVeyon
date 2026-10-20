@@ -55,6 +55,8 @@ def api_settings(b):
                     raise ApiError('Kho GitHub phải có dạng chủ-sở-hữu/tên-kho, ví dụ khoa/KhoaVeyon')
                 if k == 'dist_mode' and v not in ('none', 'schtasks', 'veyon'):
                     raise ApiError('Cách chạy không hợp lệ')
+                if k == 'action_via' and v not in ('auto', 'agent', 'veyon'):
+                    raise ApiError('Cách chạy nút điều khiển không hợp lệ')
                 if k == 'transport' and v not in ('auto', 'agent', 'smb'):
                     raise ApiError('Cách kết nối máy học sinh không hợp lệ')
                 if k == 'agent_port' and not (v.isdigit() and 1024 <= int(v) <= 65535):

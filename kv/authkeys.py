@@ -4,6 +4,7 @@
 import json
 import os
 import re
+import stat
 
 from .paths import find_veyon_cli
 from .remote import run_args
@@ -12,6 +13,22 @@ from .vcfg import _bat, client_cli_path, client_script_run, elevated_op, vcfg_di
 
 
 AUTHKEY_DEFAULT = 'KhoaVeyon'  # tên cặp khóa tự tạo khi Veyon chưa có cặp khóa nào
+
+
+def force_remove(path):
+    """Xóa file kể cả khi nó có thuộc tính chỉ-đọc. veyon-cli xuất khóa ra file chỉ-đọc, mà Windows không cho xóa file chỉ-đọc
+    bằng os.remove, nên lần xuất sau báo \"already exists\". Trả về True nếu file không còn."""
+    if not os.path.lexists(path):
+        return True
+    try:
+        os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
+    except OSError:
+        pass
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+    return not os.path.lexists(path)
 
 
 def parse_authkeys(out):
@@ -64,14 +81,16 @@ def authkeys_prepare_master(cfg, want=''):
             return False, 'Chưa có cặp khóa và tạo mới lỗi (%s): %s' % (rc, out[:200])
         note = 'chưa có cặp khóa nên đã tạo mới "%s"' % name
     dest = os.path.join(authkeys_dir(), '%s_public.pem' % name)
-    try:
-        if os.path.exists(dest):
-            os.remove(dest)
-    except OSError:
-        pass
+    if not force_remove(dest):
+        return False, ('Không xóa được file khóa cũ %s (đang mở bởi chương trình khác hoặc không đủ quyền). '
+                       'Đóng chương trình đang mở file đó rồi thử lại.' % dest)
     rc, out = run_args([cli, 'authkeys', 'export', '%s/public' % name, dest], timeout=30)
     if rc != 0 or not os.path.isfile(dest) or os.path.getsize(dest) == 0:
         return False, 'authkeys export lỗi (%s): %s' % (rc, out[:200])
+    try:  # file xuất ra là chỉ-đọc: bỏ thuộc tính này để lần sau ghi đè được
+        os.chmod(dest, stat.S_IREAD | stat.S_IWRITE)
+    except OSError:
+        pass
     with open(os.path.join(authkeys_dir(), 'current.txt'), 'w', encoding='utf-8') as f:
         f.write(name)
     return True, '%s, đã xuất khóa public ra %s' % (note, dest)
@@ -83,17 +102,17 @@ def authkeys_push_client(cfg, host, name, pub):
     k = '%s/public' % name
     cur, new = t + '\\cur-key.pem', t + '\\key.pem'
     lines = ['chcp 65001 >nul',
-             'del "%s" >nul 2>&1' % cur,
+             'del /f /q "%s" >nul 2>&1' % cur,
              '"%s" authkeys export "%s" "%s" >nul 2>&1' % (cli, k, cur),
              'if not exist "%s" goto imp' % cur,
              'fc /b "%s" "%s" >nul 2>&1' % (cur, new),
              'if errorlevel 1 goto imp',
-             'del "%s" "%s" >nul 2>&1' % (cur, new),
+             'del /f /q "%s" "%s" >nul 2>&1' % (cur, new),
              'exit /b 0',
              ':imp',
              '"%s" authkeys import "%s" "%s"' % (cli, k, new),
              'set R=%errorlevel%',
-             'del "%s" "%s" >nul 2>&1' % (cur, new),
+             'del /f /q "%s" "%s" >nul 2>&1' % (cur, new),
              'exit /b %R%']
     ok, msg = client_script_run(host, cfg, 'authkey-push.bat', _bat(lines), files={'key.pem': pub}, timeout=90)
     return ok, ('khóa "%s" đã khớp với máy giáo viên' % name) if ok else 'import khóa lỗi: %s' % msg
