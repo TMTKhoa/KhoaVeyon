@@ -237,6 +237,13 @@ Thao tác nào quá 0,7 giây chưa xong (quét mạng, hỏi Veyon, kết nối
 
 **Chưa kiểm chứng trên Windows và Veyon thật:** tên khóa `websiteUrls` của Veyon Open website (đã có phương án dự phòng `explorer.exe`), việc trang KhoaQuiz tải đủ khi bật "chỉ trang cho phép" (lệnh này chặn theo IP, trang dùng CDN có thể thiếu: hãy thử trên một máy trước giờ thi). Logic, giao diện và luồng gọi KhoaQuiz đã thử bằng KhoaQuiz giả lập (kiểm thử `tests/test_khoalink.py` và thử giao diện bằng trình duyệt).
 
+## Bản 3.12.0: sửa tên mục Veyon bị hỏng mã hóa
+
+- Đọc `veyon-cli config get` theo UTF-8. Trước đây tên tiếng Việt bị đọc sai bảng mã và hỏng thêm một lớp mỗi lần ghi lại, kèm các mục trùng lặp.
+- Bấm **Thiết lập máy giáo viên** tự sửa tên bị hỏng và bỏ mục trùng dòng lệnh của KhoaVeyon (giữ UID, giữ nguyên mục bạn tự tạo). Bản sao lưu: `data\\veyon-programs-backup.json`.
+- Khi Veyon báo `Invalid feature name or UID`, Nhật ký ghi rõ chương trình đã gọi bằng UID hay bằng tên và đọc được bao nhiêu mục.
+- Kiểm thử mới: `tests/test_programs_repair.py`.
+
 ## Bản 3.11.0: kênh Agent, không cần tài khoản quản trị trùng tên
 
 Trước đây máy giáo viên chép file qua `\\máy\C$` và chạy lệnh bằng `schtasks /S`, nên phải đăng nhập bằng tài khoản quản trị **trùng tên và mật khẩu** với máy học sinh (lỗi `WinError 5 Access is denied` khi không trùng). Bản này thêm **kênh Agent**:

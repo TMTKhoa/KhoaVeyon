@@ -36,8 +36,18 @@ def job_action(key, hosts):
         if rc == 0:
             return True, out
         if 'invalid feature' in (out or '').lower():
-            out += ('\n   → Veyon trên máy giáo viên chưa có mục "%s". Vào Thiết lập → “Mục điều khiển trong Veyon” để tạo lại, '
-                    'hoặc kiểm tra tên mục ở Cài đặt (phải trùng tên trong Veyon Master → Programs & websites).' % feature)
+            try:
+                from .featres import _items, resolve
+                with CFG_LOCK:
+                    used = resolve(CFG, feature)
+                    n_items = len(_items(CFG) or [])
+            except Exception:  # noqa
+                used, n_items = feature, -1
+            how = ('UID %s' % used) if used != feature else ('tên "%s" (không tra được UID)' % feature)
+            out += ('\n   → Đã gọi veyon-cli bằng %s; đọc được %s mục Programs & websites từ Veyon trên máy giáo viên.'
+                    '\n   → Veyon trên máy giáo viên chưa có mục "%s". Bấm Thiết lập máy giáo viên để tạo/sửa các mục, '
+                    'rồi đóng và mở lại Veyon Master. Muốn xem tên và UID mà Veyon thực sự nhận, chạy: veyon-cli feature list %s'
+                    % (how, n_items if n_items >= 0 else 'không', feature, h))
         return False, '(%s) %s' % (rc, out)
     pool_run(one, hosts, label)
 

@@ -12,7 +12,7 @@ import uuid
 from .actions import ACTIONS
 from .excel_lists import AI_PRESETS, LISTS, write_list
 from .paths import abs_path, APP_DIR, CONFIG_PATH, ENTRY_SCRIPT, find_veyon_cli, load_script
-from .remote import run_args
+from .remote import run_args, run_args_utf8
 from .runtime import PAYLOAD_DIR
 
 
@@ -136,7 +136,7 @@ def _norm_programs(data):
 
 
 def _veyon_get_programs(cli):
-    rc, out = run_args([cli, 'config', 'get', 'DesktopServices/PredefinedPrograms'], timeout=30)
+    rc, out = run_args_utf8([cli, 'config', 'get', 'DesktopServices/PredefinedPrograms'], timeout=30)
     if rc != 0:
         # Veyon mới cài chưa có mục nào thì khóa này chưa tồn tại: coi như danh sách rỗng để còn tạo mới
         if 'does not exist' in out.lower() or 'not exist' in out.lower():
@@ -163,6 +163,54 @@ def _programs_missing(cur, want):
     names = {str(x.get('Name', '')) for x in cur if isinstance(x, dict)}
     paths = {_path_key(x.get('Path')) for x in cur if isinstance(x, dict)}
     return [n for n, c in want if n not in names and _path_key(c) not in paths]
+
+
+def _demojibake(s):
+    """Tên bị hỏng do đọc UTF-8 bằng bảng mã Windows (vd. 'KhÃ³a' -> 'Khóa'); có thể bị hỏng nhiều lớp. Trả về (tên đã sửa, có bị hỏng không)."""
+    s = str(s or '')
+    bad = '\ufffd' in s
+    for _ in range(10):
+        try:
+            t = s.encode('cp1252').decode('utf-8')
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            break
+        if t == s:
+            break
+        s, bad = t, True
+    return s, bad or '\ufffd' in s
+
+
+def _repair_programs(items, want):
+    """Sửa các mục KhoaVeyon bị hỏng tên (lỗi mã hóa ở bản cũ) và bỏ các mục trùng dòng lệnh do lỗi đó.
+    Chỉ đụng tới mục có dòng lệnh trùng với mục của KhoaVeyon và tên bị hỏng; mục tự tạo của giáo viên giữ nguyên.
+    Trả về (danh sách mới, có thay đổi không)."""
+    name_by_path = {_path_key(c): n for n, c in want}
+    out, changed, seen_clean, seen_fixed = [], False, set(), set()
+    groups = {}
+    for x in items:
+        k = _path_key(x.get('Path'))
+        if k in name_by_path:
+            groups.setdefault(k, []).append(x)
+    for k, g in groups.items():  # nhóm có mục tên đúng thì bỏ các mục tên hỏng cùng dòng lệnh
+        if any(not _demojibake(x.get('Name'))[1] for x in g):
+            seen_clean.add(k)
+    for x in items:
+        k = _path_key(x.get('Path'))
+        fixed, bad = _demojibake(x.get('Name'))
+        if k in name_by_path and bad:
+            if k in seen_clean or k in seen_fixed:
+                changed = True      # trùng: bỏ
+                continue
+            seen_fixed.add(k)
+            x = dict(x)
+            x['Name'] = name_by_path[k]
+            changed = True
+        elif bad and '\ufffd' not in fixed and fixed != x.get('Name'):
+            x = dict(x)
+            x['Name'] = fixed
+            changed = True
+        out.append(x)
+    return out, changed
 
 
 def veyon_items_status(cfg):
@@ -193,9 +241,11 @@ def apply_veyon_items(cfg):
         pass
     items = [x for x in cur if isinstance(x, dict)]
     want = desired_programs(cfg)
+    n_before = len(items)
+    items, repaired = _repair_programs(items, want)   # sửa tên bị hỏng / bỏ mục trùng do lỗi mã hóa của bản cũ
     todo = set(_programs_missing(items, want))
     kept = len(want) - len(todo)
-    if not todo:  # Veyon đã được thiết lập sẵn đủ: dùng nguyên, không ghi gì
+    if not todo and not repaired:  # Veyon đã được thiết lập sẵn đủ: dùng nguyên, không ghi gì
         return True, 'Veyon đã có sẵn đủ %d mục, giữ nguyên cấu hình hiện có (không ghi gì).' % len(want)
     extra = {}  # khóa phụ (vd. Type) lấy theo mục có sẵn để mục mới cùng dạng
     for x in items:
@@ -212,7 +262,11 @@ def apply_veyon_items(cfg):
 
     def missing():
         again, _e = _veyon_get_programs(cli)
-        return _programs_missing(again or [], want)
+        again = again or []
+        m = _programs_missing(again, want)
+        if repaired and not m and _repair_programs([x for x in again if isinstance(x, dict)], want)[1]:
+            m = ['(chưa sửa được tên/mục trùng)']
+        return m
 
     value = json.dumps(items, ensure_ascii=False, separators=(',', ':'))
     notes = []
@@ -233,11 +287,12 @@ def apply_veyon_items(cfg):
                 json.dump({'DesktopServices': {'PredefinedPrograms': items}}, f, ensure_ascii=False, indent=2)
         except OSError:
             pth = '(không ghi được file)'
-        rc3, raw = run_args([cli, 'config', 'get', PROGRAMS_KEY], timeout=30)
+        rc3, raw = run_args_utf8([cli, 'config', 'get', PROGRAMS_KEY], timeout=30)
         return False, ('Đã tự thử 2 cách (config set, rồi export/import) nhưng Veyon vẫn thiếu %d/%d mục. %s '
                        'Kết quả đọc lại (mã %s): %s. Đã tạo sẵn file %s để đối chiếu.'
                        % (len(miss), len(want), ' | '.join(notes), rc3, (raw or '(trống)')[:300].replace('\n', ' '), pth))
-    return True, 'Giữ nguyên %d mục có sẵn, thêm %d mục còn thiếu (bằng %s). Hãy mở lại Veyon Master để thấy các mục mới.' % (kept, added, method)
+    fixmsg = (' Đã sửa tên bị hỏng và bỏ %d mục trùng.' % max(0, n_before - (len(items) - added))) if repaired else ''
+    return True, 'Giữ nguyên %d mục có sẵn, thêm %d mục còn thiếu (bằng %s).%s Hãy đóng và mở lại Veyon Master để thấy các mục mới.' % (kept, added, method, fixmsg)
 
 
 def _apply_programs_via_import(cli, items):

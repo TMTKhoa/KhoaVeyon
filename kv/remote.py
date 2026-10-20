@@ -56,6 +56,18 @@ def run_args(args, timeout=60):
         return -1, str(e)
 
 
+def run_args_utf8(args, timeout=60):
+    """Như run_args nhưng đọc kết quả theo UTF-8 (veyon-cli xuất UTF-8; đọc theo bảng mã Windows sẽ làm tên tiếng Việt bị hỏng)."""
+    try:
+        p = subprocess.run(args, capture_output=True, encoding='utf-8', errors='replace', timeout=timeout,
+                           stdin=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW)
+        return p.returncode, ((p.stdout or '') + (p.stderr or '')).strip()
+    except subprocess.TimeoutExpired:
+        return -1, 'Quá thời gian chờ'
+    except Exception as e:  # noqa
+        return -1, str(e)
+
+
 def unc_target(host, target_dir):
     """C:\\cmd trên máy học sinh -> \\\\HOST\\C$\\cmd (chia sẻ quản trị)."""
     m = re.match(r'^([A-Za-z]):[\\/]*(.*)$', (target_dir or '').strip())
