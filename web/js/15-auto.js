@@ -5,8 +5,8 @@ async function loadAuto() {
   S.auto = d;
   const a = d.auto;
   Object.values(a.modes).forEach(m => { m.lists = Object.fromEntries(Object.entries(m.lists || {}).filter(([k, v]) => ((d.variants || {})[k] || []).includes(v))); });   // bản riêng đã bị xóa thì quay về danh sách chính
-  S.autoDraft = {enabled: a.enabled, wake_min: a.wake_min, shutdown_min: a.shutdown_min, shutdown_delay: a.shutdown_delay,
-    modes: Object.entries(a.modes).map(([name, m]) => ({name, start: m.start.slice(), end: m.end.slice(), lists: Object.assign({}, m.lists || {})})), class_mode: Object.assign({}, a.class_mode)};
+  S.autoDraft = {enabled: a.enabled, wake_min: a.wake_min, shutdown_min: a.shutdown_min, shutdown_delay: a.shutdown_delay, cleanup: (a.cleanup || []).slice(),
+    modes: Object.entries(a.modes).map(([name, m]) => ({name, start: m.start.slice(), end: m.end.slice(), lists: Object.assign({}, m.lists || {}), wall: m.wall || ''})), class_mode: Object.assign({}, a.class_mode)};
   S.autoDirty = false;
   S.logonModes = (await api('/api/logon_policy', {step: 'modes'})).modes;
   if (!S.lpSel) S.lpSel = ['lockdown'];
@@ -27,12 +27,14 @@ function viewAuto() {
     }).join('');
     return `<div class="ph"><b>Danh sách riêng</b>${parts || '<span class="muted">chưa có bản riêng nào (tạo ở các trang danh sách bằng nút “Lưu bảng thành bản riêng”)</span>'}</div>`;
   };
+  const wallSel = mi => { const ws = S.auto.walls || [], cur = d.modes[mi].wall || '';
+    return `<div class="ph"><b>Hình nền máy học sinh</b><select class="xsel" data-xc="modewall" data-m="${mi}"><option value="">(không đổi hình nền)</option>${ws.map(w => `<option ${w === cur ? 'selected' : ''}>${esc(w)}</option>`).join('')}</select><span class="muted">${ws.length ? 'Vào tiết: vẽ số máy + tên em ngồi; hết tiết: trả lại hình nền cũ.' : 'Chưa có mẫu nào, tạo ở trang Tương tác → Hình nền.'}</span></div>`; };
   const modes = d.modes.map((m, i) => `<div class="modeblock"><div class="row" style="flex-wrap:wrap">
       <input type="text" data-xc="modename" data-m="${i}" value="${esc(m.name)}" style="flex:1;min-width:200px;font-weight:700">
       <button class="btn sm ghost" data-xa="modetest" data-m="${i}" data-ph="start">▶ Chạy thử vào tiết</button>
       <button class="btn sm ghost" data-xa="modetest" data-m="${i}" data-ph="end">▶ Chạy thử hết tiết</button>
       <button class="btn sm ghost" data-xa="modedel" data-m="${i}">Xóa</button></div>
-      ${lst(i)}${phase(i, 'start', 'Vào tiết')}${phase(i, 'end', 'Hết tiết')}</div>`).join('');
+      ${lst(i)}${wallSel(i)}${phase(i, 'start', 'Vào tiết')}${phase(i, 'end', 'Hết tiết')}</div>`).join('');
   const sel = cur => `<option value="">(không làm gì)</option>${d.modes.map(m => `<option value="${esc(m.name)}" ${m.name === cur ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}`;
   const clsRows = ['*', ...S.auto.classes].map(c => `<tr><td><b>${c === '*' ? 'Mọi lớp khác' : 'Lớp ' + esc(c)}</b></td><td><select class="xsel" data-xc="clsmode" data-c="${esc(c)}">${sel(d.class_mode[c] || '')}</select></td></tr>`).join('');
   const today = S.auto.today.length ? S.auto.today.map(s => `<tr><td>${esc(s.start)}–${esc(s.end)}</td><td>Lớp ${esc(s.cls)}</td><td>${s.mode ? esc(s.mode) : '<span class="muted">không làm gì</span>'}</td></tr>`).join('') : '<tr><td colspan="3" class="muted">Hôm nay không có tiết nào.</td></tr>';
@@ -45,6 +47,9 @@ function viewAuto() {
     <section class="card"><h3>Chế độ lớp</h3>${modes}<div class="row"><button class="btn" data-xa="modeadd">＋ Thêm chế độ</button></div></section>
     <section class="card"><h3>Gán chế độ cho lớp</h3><table class="tbl"><thead><tr><th>Lớp</th><th>Chế độ</th></tr></thead><tbody>${clsRows}</tbody></table>
       <p class="hint" style="margin-bottom:0">Lớp không có dòng riêng dùng dòng “Mọi lớp khác”. Lớp lấy từ thời khóa biểu và danh sách lớp.</p></section>
+    <section class="card"><h3>Dọn máy sau mỗi tiết</h3>
+      <p class="sub">Hết tiết thì tự chạy các lệnh dưới đây để máy sạch cho lớp sau (chạy sau các lệnh “khi hết tiết” của chế độ lớp). Không có lệnh đóng ứng dụng vì có thể làm mất bài chưa lưu của học sinh.</p>
+      <div class="row" style="flex-wrap:wrap;gap:14px">${['clearhistory', 'unmute', 'unlock', 'allowall', 'allowai', 'unblockapp', 'lockall-stop', 'lockapp-stop', 'lockrun-stop', 'weboff'].filter(k => (S.auto.actions || []).some(x => x.key === k)).map(k => `<label class="switch"><input type="checkbox" data-xc="cleanup" data-k="${esc(k)}" ${(d.cleanup || []).includes(k) ? 'checked' : ''}><span class="tr"></span><span>${esc(autoActLabel(k).label)}</span></label>`).join('')}</div></section>
     <section class="card"><h3>Bật và tắt máy theo giờ</h3>
       <div class="autogrid">
         <label>Bật máy trước tiết đầu (phút, 0 = tắt)<input type="number" min="0" max="120" data-xc="num" data-f="wake_min" value="${esc(d.wake_min)}"></label>
@@ -73,7 +78,7 @@ document.addEventListener('click', async e => {
       const v = await modal({title: 'Chế độ mới', ok: 'Thêm', collect: r => r.querySelector('input').value.trim(), html: '<input type="text" class="xsel" style="width:100%" placeholder="Ví dụ: Kiểm 15 phút">'});
       if (!v) return;
       if (d.modes.some(m => m.name === v)) { toast('Đã có chế độ tên này', 'warn'); return; }
-      d.modes.push({name: v, start: [], end: [], lists: {}}); autoTouch();
+      d.modes.push({name: v, start: [], end: [], lists: {}, wall: ''}); autoTouch();
     }
     else if (a === 'modetest') {
       if (S.autoDirty) { toast('Hãy lưu cài đặt trước khi chạy thử', 'warn'); return; }
@@ -93,8 +98,8 @@ document.addEventListener('click', async e => {
     }
     else if (a === 'autosave') {
       const modes = {};
-      for (const m of d.modes) { if (!m.name.trim()) throw new Error('Có chế độ chưa đặt tên'); if (modes[m.name]) throw new Error('Trùng tên chế độ: ' + m.name); modes[m.name] = {start: m.start, end: m.end, lists: m.lists || {}}; }
-      await api('/api/auto_set', {enabled: d.enabled, modes, class_mode: d.class_mode, wake_min: d.wake_min, shutdown_min: d.shutdown_min, shutdown_delay: d.shutdown_delay});
+      for (const m of d.modes) { if (!m.name.trim()) throw new Error('Có chế độ chưa đặt tên'); if (modes[m.name]) throw new Error('Trùng tên chế độ: ' + m.name); modes[m.name] = {start: m.start, end: m.end, lists: m.lists || {}, wall: m.wall || ''}; }
+      await api('/api/auto_set', {enabled: d.enabled, modes, class_mode: d.class_mode, wake_min: d.wake_min, shutdown_min: d.shutdown_min, shutdown_delay: d.shutdown_delay, cleanup: d.cleanup || []});
       await loadAuto(); render(); toast('Đã lưu cài đặt tự động', 'ok');
     }
   } catch (err) { toast(err.message, 'err'); }
@@ -105,9 +110,11 @@ document.addEventListener('change', e => {
   const d = S.autoDraft, mi = +t.dataset.m;
   if (c === 'lpmode') { const id = t.dataset.id; S.lpSel = S.lpSel.filter(x => x !== id); if (t.checked) S.lpSel.push(id); return; }
   if (c === 'autoon') d.enabled = t.checked;
+  else if (c === 'cleanup') { d.cleanup = (d.cleanup || []).filter(x => x !== t.dataset.k); if (t.checked) d.cleanup.push(t.dataset.k); }
   else if (c === 'num') d[t.dataset.f] = Math.max(0, parseInt(t.value || '0', 10) || 0);
   else if (c === 'cmdadd') { if (!t.value) return; d.modes[mi][t.dataset.ph].push(t.value); }
   else if (c === 'modelist') { const L2 = d.modes[mi].lists = d.modes[mi].lists || {}; t.value ? L2[t.dataset.k] = t.value : delete L2[t.dataset.k]; }
+  else if (c === 'modewall') { d.modes[mi].wall = t.value; }
   else if (c === 'clsmode') { t.value ? d.class_mode[t.dataset.c] = t.value : delete d.class_mode[t.dataset.c]; }
   else if (c === 'modename') {
     const nv = t.value.trim(), old = d.modes[mi].name;

@@ -46,6 +46,7 @@ function viewSchool() {
       <p class="hint" style="margin-bottom:0">Danh sách lớp: file điểm danh của trường (mỗi lớp một sheet, tên lớp ở ô E2, họ tên ở cột C), thay toàn bộ danh sách; hoặc file <b>.json</b> xuất từ KhoaTool (Thống kê → Xuất cho KhoaVeyon) hay nút <b>Lấy từ KhoaQuiz</b>, chỉ cập nhật các lớp có trong đó. Thời khóa biểu: bảng tiết × thứ, ô ghi tên lớp. File chỉ được đọc để lấy dữ liệu, không gửi xuống máy học sinh. Nhập lại bất cứ lúc nào để cập nhật.</p>
       ${(sc.unknown || []).length ? `<div class="note warn" style="margin-top:10px">Lớp có trong thời khóa biểu nhưng không có trong danh sách lớp: <b>${sc.unknown.map(esc).join(', ')}</b></div>` : ''}
     </section>
+    ${schoolTemplateCard(sc)}
     <section class="card"><div class="toolbar" style="margin-bottom:10px"><b>Thời khóa biểu</b>${sc.subject || sc.teacher ? `<span class="muted">${esc([sc.subject, sc.teacher].filter(Boolean).join(' · '))}${sc.from ? ' · từ ' + esc(sc.from.split('-').reverse().join('/')) : ''}</span>` : ''}</div>${grid}</section>
     <section class="card"><div class="toolbar" style="margin-bottom:10px"><b>Các lớp</b><span class="muted">${cls.length} lớp · ${total} học sinh</span><span class="grow"></span></div>${chips}
       ${cls.length ? `<div class="row" style="margin-top:12px;gap:8px;flex-wrap:wrap"><span class="muted">Xem danh sách học sinh:</span>${cls.map(c => `<button class="btn ghost sm" data-act="schoolstudents" data-cls="${esc(c.name)}">${esc(c.name)}</button>`).join('')}</div>` : ''}

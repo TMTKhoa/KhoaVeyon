@@ -22,6 +22,7 @@ import secrets
 import socket
 import threading
 import time
+import urllib.parse
 
 from .config import save_config
 from .runtime import CFG, CFG_LOCK, log
@@ -248,16 +249,29 @@ def _prune_nonces(now):
 REJECT_LOG = {}   # (ip, lý do) -> lần ghi nhật ký gần nhất; dùng để không ghi dồn dập
 
 
-def agent_reject(ip, reason, extra=''):
+REJECTED = {}     # ip -> {'reason', 'at', 'skew'}: lần bị từ chối gần nhất (trang Trạng thái dùng để báo lệch giờ / sai khóa)
+
+
+def agent_reject_info(host):
+    """Lý do gần đây nhất máy này gọi về nhưng bị từ chối (trong 5 phút), hoặc None."""
+    ip = _resolve((host or '').rsplit(':', 1)[0] if (host or '').count(':') == 1 else host)
+    with LOCK:
+        r = REJECTED.get(ip)
+    return dict(r) if r and time.time() - r['at'] < 300 else None
+
+
+def agent_reject(ip, reason, extra='', skew=None):
     """Máy học sinh có gọi về nhưng bị từ chối: ghi vào Nhật ký kèm cách sửa (trước đây im lặng nên chỉ thấy “không có Agent”)."""
     now = time.time()
+    with LOCK:
+        REJECTED[ip] = {'reason': reason, 'at': now, 'skew': skew}
     k = (ip, reason)
     if now - REJECT_LOG.get(k, 0) < 60:
         return
     REJECT_LOG[k] = now
     hint = {
         'bad signature': 'khóa Agent trên máy đó khác khóa của máy giáo viên (agent.cfg cũ hoặc đã đổi khóa) → chạy lại Setup-MayHocSinh.bat MỚI trên máy đó',
-        'bad time': 'đồng hồ máy đó lệch quá %d phút so với máy giáo viên%s → chỉnh lại ngày giờ và múi giờ của máy học sinh' % (CLOCK_SKEW // 60, extra),
+        'bad time': 'đồng hồ máy đó lệch quá %d phút so với máy giáo viên%s → dịch vụ mới trên máy học sinh tự chỉnh lại giờ; máy dịch vụ cũ thì chỉnh tay hoặc cài lại Agent' % (CLOCK_SKEW // 60, extra),
         'replay': 'gói tin bị lặp (thường do mạng); sẽ tự thử lại',
         'bad request': 'dữ liệu gọi về không đọc được (bản dịch vụ trên máy học sinh khác bản KhoaVeyon) → chạy lại Setup-MayHocSinh.bat mới',
     }.get(reason, reason)
@@ -305,7 +319,7 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
             return None
         now = time.time()
         if abs(now - ts) > CLOCK_SKEW or len(nonce) < 8:
-            agent_reject(self.client_address[0], 'bad time', ' (lệch khoảng %d phút)' % int(abs(now - ts) // 60))
+            agent_reject(self.client_address[0], 'bad time', ' (lệch khoảng %d phút)' % int(abs(now - ts) // 60), skew=now - ts)
             self._send(403, {'error': 'bad time'}, signed=False)
             return None
         with LOCK:
@@ -322,7 +336,10 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
         đã ghim sẵn mã SHA-256 của file: tải về sai mã thì Setup xóa đi."""
         path = self.path.split('?')[0]
         if path == '/agent/time':   # máy học sinh mới cài lấy giờ máy giáo viên khi không có Internet để đồng bộ giờ chuẩn
-            self._send(200, {'ts': time.time()}, signed=False)
+            n = ''
+            if '?' in self.path:   # máy học sinh gửi nonce, giờ trả về có chữ ký và có nonce đó nên không phát lại được
+                n = dict(urllib.parse.parse_qsl(self.path.split('?', 1)[1])).get('n', '')[:64]
+            self._send(200, {'ts': time.time(), 'nonce': n})
             return
         pre = '/agent/boot/'
         if not path.startswith(pre):
@@ -346,13 +363,21 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split('?')[0]
-        if path not in ('/agent/poll', '/agent/result'):
+        if path not in ('/agent/poll', '/agent/result', '/agent/event'):
             self._send(404, {'error': 'not found'}, signed=False)
             return
         d = self._read_signed()
         if d is None:
             return
         ip = self.client_address[0]
+        if path == '/agent/event':   # giơ tay, nộp bài... do trợ lý trên máy học sinh ghi, dịch vụ chuyển về
+            try:
+                from .student import handle_events
+                handle_events(ip, d)
+            except Exception as e:  # noqa
+                log('Lỗi xử lý sự kiện từ %s: %s' % (ip, e), 'err')
+            self._send(200, {'ok': True, 'nonce': d.get('nonce')})
+            return
         if path == '/agent/result':
             with LOCK:
                 slot = PENDING.get(str(d.get('id') or ''))
@@ -366,7 +391,8 @@ class AgentHandler(http.server.BaseHTTPRequestHandler):
             info = AGENTS.setdefault(ip, {'ip': ip})
             info.update({'name': str(d.get('host') or '')[:64], 'user': str(d.get('user') or '')[:96],
                          'sessions': d.get('sessions') or [], 'ver': d.get('ver') or 0, 'boot': d.get('boot') or 0,
-                         'seen': time.time()})
+                         'seen': time.time(), 'skew': time.time() - float(d.get('ts') or time.time()),
+                         'health': {k: v for k, v in (d.get('health') or {}).items() if k in ('disk', 'diskgb', 'bat', 'ac', 'veyon') and isinstance(v, (int, bool))} if isinstance(d.get('health'), dict) else {}})
             end = time.time() + POLL_WAIT
             jobs = []
             while True:

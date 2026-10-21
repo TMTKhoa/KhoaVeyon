@@ -6,8 +6,9 @@ import time
 
 from .announce import job_announce
 from .runtime import ApiError, log, start_job
+from .templates import bell_set, bell_sets_info
 from .school import (
-    _cls_norm, layout_clean, parse_classes_json, parse_classes_xlsx, parse_timetable_xlsx, SCHOOL, SCHOOL_LOCK,
+    _cls_norm, _hhmm, layout_clean, school_bells, parse_classes_json, parse_classes_xlsx, parse_timetable_xlsx, SCHOOL, SCHOOL_LOCK,
     SCHOOL_MANUAL_MIN, school_now, school_save,
 )
 
@@ -42,6 +43,8 @@ def api_school(_q=None):
                                    'timetable_at', 'teacher', 'subject', 'attend_notify', 'auto_announce')}
         d['classes'] = [{'name': n, 'count': len(v)} for n, v in sorted(SCHOOL['classes'].items())]
         d['layouts'] = json.loads(json.dumps(SCHOOL['layouts']))
+        d['bells'] = {str(n): list(v) for n, v in school_bells().items()}
+        d['bell_sets'] = bell_sets_info()
         known = set(SCHOOL['classes'])
     d['unknown'] = sorted({s['cls'] for s in d['slots'] if known and s['cls'] not in known})
     d.update(school_now())
@@ -74,6 +77,26 @@ def api_school_set(b):
         elif act == 'clear':
             SCHOOL['override'] = None
             SCHOOL['manual'] = ''
+        elif act == 'bells':   # đặt giờ 10 tiết: chọn bộ có sẵn (preset) hoặc tự nhập (bells: {"1": ["07:00","07:45"], ...})
+            if b.get('preset'):
+                bs = bell_set(str(b['preset']))
+                if not bs:
+                    raise ApiError('Bộ giờ tiết không tồn tại')
+                SCHOOL['bells'] = {str(n): list(v) for n, v in bs.items()}
+            else:
+                new = {}
+                for k, v in (b.get('bells') or {}).items():
+                    try:
+                        n, st, en = int(k), _hhmm(v[0]), _hhmm(v[1])
+                    except (ValueError, TypeError, IndexError):
+                        continue
+                    if not 1 <= n <= 10:
+                        continue
+                    if not st or not en or en <= st:
+                        raise ApiError('Tiết %s: giờ bắt đầu và kết thúc chưa hợp lệ (cần dạng 07:00 và giờ kết thúc sau giờ bắt đầu)' % k)
+                    new[str(n)] = [st, en]
+                SCHOOL['bells'] = new
+            log('Đã đặt giờ các tiết (dùng khi file thời khóa biểu chỉ ghi số tiết)', 'ok')
         else:
             raise ApiError('Thao tác không hợp lệ')
     school_save()
@@ -127,7 +150,7 @@ def school_import(kind, path, filename):
                            'timetable_file': filename, 'timetable_at': stamp, 'override': None})
         log('Đã nhập thời khóa biểu: %d tiết mỗi tuần%s' % (len(data['slots']), (', bắt đầu từ ' + data['from']) if data['from'] else ''), 'ok')
         if data.get('default_bells'):
-            log('Thời khóa biểu chỉ ghi số tiết nên dùng giờ tiết mặc định (sáng 7:00, chiều 13:30, mỗi tiết 45 phút). Nếu trường bạn khác, ghi giờ cụ thể vào hai cột bên trái rồi nhập lại.', 'warn')
+            log('Thời khóa biểu chỉ ghi số tiết nên dùng giờ các tiết đang đặt (mặc định sáng 7:00, chiều 13:30, mỗi tiết 45 phút). Nếu trường bạn khác, chọn bộ giờ tiết hoặc sửa giờ ở trang Lớp & lịch dạy rồi nhập lại.', 'warn')
     school_save()
 
 

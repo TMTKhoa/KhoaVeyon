@@ -30,7 +30,7 @@ AUTO_DEFAULT_MODES = {
     'Không dùng AI': {'start': ['blockai'], 'end': ['allowai']},
 }
 AUTO_LOCK = threading.RLock()
-AUTO = {'enabled': False, 'modes': {}, 'class_mode': {}, 'wake_min': 0, 'shutdown_min': 0, 'shutdown_delay': 60, 'done': {}}
+AUTO = {'enabled': False, 'modes': {}, 'class_mode': {}, 'wake_min': 0, 'shutdown_min': 0, 'shutdown_delay': 60, 'cleanup': [], 'done': {}}
 
 
 def auto_load():
@@ -148,13 +148,25 @@ def auto_transition(old, new):
     keys = []
     if om and om != nm:
         keys += mode_steps(om, 'end')
+    if old and new != old:   # hết một tiết: dọn máy cho lớp sau (các lệnh giáo viên chọn ở trang Tự động)
+        with AUTO_LOCK:
+            keys += [k for k in AUTO.get('cleanup', []) if k in ACTION_BY_KEY and k not in keys]
     if nm and nm != om:
         keys += mode_steps(nm, 'start')
-    if not keys:
+    from .engage import job_wall_apply, job_wall_restore, wall_for_mode
+    wall_new = wall_for_mode(nm) if (new and nm) else None   # hình nền có tên em ngồi nên đổi lớp là vẽ lại, dù cùng chế độ
+    wall_back = bool(old and om and wall_for_mode(om) and not wall_new)
+    if not keys and not wall_new and not wall_back:
         return
     hosts = auto_hosts()
     if not hosts:
         log('Tự động: chưa có máy học sinh nào trong danh sách', 'warn')
+        return
+    if wall_new:
+        start_job(job_wall_apply, hosts, wall_new)
+    elif wall_back:
+        start_job(job_wall_restore, hosts)
+    if not keys:
         return
     reason = ('hết tiết %s' % old if old and not new else ('vào tiết %s' % new if new and not old else 'đổi từ %s sang %s' % (old, new)))
     start_job(job_auto_keys, keys, hosts, reason)
@@ -216,11 +228,11 @@ def auto_loop():
 
 def auto_view():
     with AUTO_LOCK:
-        a = json.loads(json.dumps({k: AUTO[k] for k in ('enabled', 'modes', 'class_mode', 'wake_min', 'shutdown_min', 'shutdown_delay')}))
+        a = json.loads(json.dumps({k: AUTO[k] for k in ('enabled', 'modes', 'class_mode', 'wake_min', 'shutdown_min', 'shutdown_delay', 'cleanup')}))
     with SCHOOL_LOCK:
         classes = sorted(set(SCHOOL['classes']) | {s['cls'] for s in SCHOOL.get('slots') or []})
     today = [dict(s, mode=auto_mode_for(s['cls'])) for s in auto_day_slots(datetime.datetime.now())]
-    return {'auto': a, 'classes': classes, 'today': today, 'has_timetable': bool(SCHOOL.get('slots')),
+    return {'auto': a, 'classes': classes, 'today': today, 'has_timetable': bool(SCHOOL.get('slots')), 'walls': sorted(SCHOOL.get('wall_presets') or {}),
             'variants': list_variants(os.path.dirname(list_path('allow'))), 'list_titles': {k: m['file'] for k, m in LISTS.items()},
             'actions': [{'key': k, 'label': lbl, 'confirm': k in CONFIRM_KEYS} for k, lbl, _s, _d in ACTIONS]}
 
@@ -258,6 +270,9 @@ def api_auto_set(b):
                 raise ApiError('Tên chế độ không được để trống')
             ent = {}
             ent['lists'] = auto_clean_lists((m or {}).get('lists'))
+            wn = str((m or {}).get('wall') or '')
+            with SCHOOL_LOCK:
+                ent['wall'] = wn if wn in (SCHOOL.get('wall_presets') or {}) else ''
             for ph in ('start', 'end'):
                 keys = [str(k) for k in ((m or {}).get(ph) or [])]
                 bad = [k for k in keys if k not in ACTION_BY_KEY]
@@ -265,6 +280,7 @@ def api_auto_set(b):
                     raise ApiError('Lệnh không tồn tại: %s' % ', '.join(bad))
                 ent[ph] = keys
             new['modes'][name] = ent
+        new['cleanup'] = [k for k in dict.fromkeys(str(k) for k in (b.get('cleanup') or [])) if k in ACTION_BY_KEY and k not in ('killapp', 'keepapp')][:10]
         cm = b.get('class_mode') or {}
         for cls, name in cm.items():
             if name and name in new['modes']:

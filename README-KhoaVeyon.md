@@ -237,6 +237,36 @@ Thao tác nào quá 0,7 giây chưa xong (quét mạng, hỏi Veyon, kết nối
 
 **Chưa kiểm chứng trên Windows và Veyon thật:** tên khóa `websiteUrls` của Veyon Open website (đã có phương án dự phòng `explorer.exe`), việc trang KhoaQuiz tải đủ khi bật "chỉ trang cho phép" (lệnh này chặn theo IP, trang dùng CDN có thể thiếu: hãy thử trên một máy trước giờ thi). Logic, giao diện và luồng gọi KhoaQuiz đã thử bằng KhoaQuiz giả lập (kiểm thử `tests/test_khoalink.py` và thử giao diện bằng trình duyệt).
 
+## 4.3.0
+
+- **Bốc thăm gọi tên** (trang Tương tác và trang Sơ đồ chỗ ngồi): chọn ngẫu nhiên một em có mặt (bỏ em vắng, máy tắt), không gọi trùng trong một vòng, tên em hiện trên máy của em đó và nổi bật trên sơ đồ.
+- **Hình nền máy học sinh**: vẽ ngay trên máy học sinh, có tiêu đề, dòng phụ, số máy và tên em ngồi; nền màu chuyển sắc hoặc ảnh; tùy chọn khóa không cho đổi hình nền; lưu thành mẫu. Gắn mẫu vào từng chế độ ở trang Tự động: vào tiết tự đổi, hết tiết tự trả hình nền cũ. Ảnh nền nằm trong file sao lưu.
+- Phần PowerShell trên máy học sinh chưa thử trên Windows thật: hãy thử một máy trước khi dùng cho cả lớp.
+
+## Bản 4.2.0: tương tác với học sinh
+Cần máy học sinh đã nhận dịch vụ mới (tự cập nhật qua Agent, xem 4.1.2) và tệp `KhoaVeyonStudent.ps1` (tự chép từ payload). Trợ lý chạy ẩn trong phiên học sinh, hiện một nút nhỏ ở góc phải dưới màn hình. Muốn tắt trên một máy: tạo tệp `C:\ProgramData\KhoaVeyon\tray.off`. Nhật ký lỗi: `C:\ProgramData\KhoaVeyon\student.log`.
+- **Trang Tương tác** (mới): danh sách học sinh giơ tay (có tên và số máy, bật âm báo và thông báo, hạ tay từng em hoặc tất cả), nhắn tin tới máy, **khóa màn hình kèm lời nhắn** (khóa mềm), yêu cầu nộp bài, bảng bài nộp, thống kê dùng máy.
+- **Giơ tay**: học sinh bấm nút nổi; ô máy tương ứng trên Sơ đồ lớp học nhấp nháy cam.
+- **Nộp bài**: học sinh chọn tệp hoặc thư mục (tối đa 200 tệp, 200 MB, mỗi tệp 24 MB), bài được chép về `data\submissions\<ngày>\<lớp>\<tên>_<giờ>` rồi xóa khỏi máy học sinh.
+- **Thống kê dùng máy**: tổng hợp ứng dụng và cửa sổ dùng nhiều nhất từ nhật ký hoạt động có sẵn (khoảng 15 phút đến cả ngày), xuất CSV.
+- **Dọn máy sau mỗi tiết** (trang Tự động theo tiết): chọn các lệnh chạy khi hết tiết (xóa lịch sử, bật tiếng, mở khóa...). Không có lệnh đóng ứng dụng.
+- **Sức khỏe máy**: dịch vụ báo ổ đĩa còn ít (dưới 10%) và pin yếu chưa cắm sạc lên trang Trạng thái.
+- Chưa có chiếu màn hình giáo viên: lệnh chiếu của Veyon cần Veyon Master chạy làm máy chủ chiếu nên veyon-cli không tự bật được; dùng Veyon Master cho việc này.
+- Kênh sự kiện mới `/agent/event` (có chữ ký HMAC, nonce, kiểm giờ như các kênh khác). Trợ lý PowerShell chưa được kiểm thử trên Windows thật: hãy thử trên một máy trước (`tests\check_powershell.ps1` kiểm cú pháp).
+
+## Bản 4.1.2
+- **Tự cập nhật dịch vụ trên máy học sinh**: máy nào đang kết nối Agent mà chạy `KhoaVeyonServices.bat` bản cũ thì chương trình tự chép bản mới nhất trong payload xuống và chạy `-install`, không cần Setup lại. Mỗi vòng tối đa 4 máy, 10 phút kiểm tra một lần, thử lại sau 30 phút nếu chưa được, không chạy khi đang thi. Tắt/bật ở trang Trạng thái máy. Máy chưa có Agent vẫn phải chạy Setup một lần.
+
+## Bản 4.1.1
+- **Máy học sinh tự chỉnh giờ** khi đồng hồ lệch (pin CMOS yếu): dịch vụ lấy giờ từ máy giáo viên (có chữ ký và nonce, không phát lại được) rồi đặt giờ hệ thống, không cần giáo viên làm gì. Cần cài lại dịch vụ bản mới (Thiết lập máy học sinh hoặc Chẩn đoán → Cài lại dịch vụ).
+- **Trang Trạng thái** báo thẳng: dòng tóm tắt "N máy mất Agent / lệch giờ / sai khóa", lý do ghi ở cột Sức khỏe, nút "Đồng bộ giờ" cho máy lệch nhưng vẫn kết nối.
+
+## Bản 4.1.0
+- **Sao lưu và khôi phục** (Cài đặt): một file .zip gồm cấu hình và danh sách máy, tên hiển thị, lớp, thời khóa biểu, sơ đồ, các danh sách Excel; có bản không kèm khóa Agent. Khi khôi phục có xem trước, chọn phần cần khôi phục, tự lưu bản hiện tại vào `truoc-khi-khoi-phuc.zip`; đường dẫn riêng từng máy không bị chép đè.
+- **Chẩn đoán** (trang mới): bảng xanh/đỏ Veyon, Agent, giờ máy (độ lệch đọc từ Agent), bản dịch vụ; tường lửa kiểm ở máy giáo viên; nút sửa: đồng bộ giờ, cài lại dịch vụ, mở cổng tường lửa.
+- **Excel mẫu**: tải thời khóa biểu mẫu và danh sách lớp mẫu (đọc lại được bằng nút Nhập); **giờ tiết** chọn từ 6 bộ có sẵn hoặc tự nhập, dùng khi file chỉ ghi số tiết.
+- **Sơ đồ mẫu**: chọn kiểu phòng có sẵn (24–48 máy, nhiều dãy) và **chép sơ đồ từ lớp khác** (Cài đặt phòng). Chỉ hỗ trợ dạng lưới dãy × hàng, chưa có chữ U hoặc nhóm bàn.
+
 ## Bản 4.0.0: tổng hợp các thay đổi từ 3.12.1
 - Nút điều khiển lớp chạy thẳng qua Agent trong phiên học sinh, không cần mục Veyon (Cài đặt → "Nút điều khiển lớp chạy bằng"); lỗi "Invalid feature name" có thông báo rõ và tự tra UID.
 - Thiết lập máy học sinh: tự dừng/xóa dịch vụ cũ trước khi cài, tự đồng bộ giờ (múi giờ VN, Internet hoặc lấy giờ máy giáo viên), in bảng [KIEM TRA] và ghi C:\cmd\KhoaVeyonSetup.log.

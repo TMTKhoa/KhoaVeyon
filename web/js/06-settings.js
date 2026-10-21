@@ -5,6 +5,7 @@ function viewSettings() {
   const f = (k, label, hint) => `<div><label class="field">${label}</label><input type="text" data-set="${k}" value="${esc(c[k])}">${hint ? `<div class="hint" style="margin-top:5px">${hint}</div>` : ''}</div>`;
   const feats = S.st.actions.map(a => `<tr><td style="width:46%">${a.icon} ${esc(a.label)}</td><td><input type="text" class="cell" style="border:1px solid #d3dae8!important" data-feat="${esc(a.key)}" value="${esc(c.features[a.key] || '')}"></td></tr>`).join('');
   return `<div class="steps">
+    ${backupCard()}
     <section class="card"><h3>Đường dẫn</h3><div class="formgrid">
       ${f('list_dir', 'Thư mục chứa 4 file Excel', 'Có thể ghi đường dẫn tương đối (ví dụ lists) hoặc đầy đủ (ví dụ C:\\cmd).')}
       ${f('script_path', 'Đường dẫn script trên máy học sinh', 'Dùng khi sao chép lệnh để dán vào Veyon.')}

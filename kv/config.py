@@ -59,6 +59,7 @@ DEFAULT_CONFIG = {
     'ai_block_ext': False,       # khóa AI: chặn MỌI extension trình duyệt (tắt hết, không chỉ AI)
     'watch_notify_student': True,  # sau khi máy giáo viên nhận ảnh vi phạm, báo cho học sinh biết mình vừa vi phạm và đã được báo cho giáo viên
     'watch_disclose': True,  # bật giám sát thì hiện nhãn nhỏ “Đang giám sát” trên màn hình học sinh (công khai việc giám sát)
+    'auto_update_students': True,   # máy học sinh có Agent mà dịch vụ là bản cũ thì tự chép bản mới và chạy -install
     'reapply_on_boot': True,  # máy học sinh khởi động lại hoặc bật lại thì tự gửi lại các hạn chế đang bật
     'lock_with_ai': False,  # bấm "Khóa toàn bộ" thì khóa luôn AI, bấm "Mở khóa toàn bộ" thì mở AI
     'watch_autostart': True,  # máy học sinh tự chạy lại giám sát mỗi khi có người đăng nhập (kể cả sau khi khởi động lại)

@@ -15,6 +15,26 @@ function seatNumbers(lay) {
   return num;
 }
 
+/* Kiểu phòng mẫu: [số dãy, máy mỗi dãy, tên]. Chỉ là điểm bắt đầu, vẫn chỉnh tiếp được. */
+const SEAT_PRESETS = [[4, 10, '40 máy · 4 dãy × 10'], [5, 8, '40 máy · 5 dãy × 8'], [2, 20, '40 máy · 2 dãy dài × 20'], [6, 8, '48 máy · 6 dãy × 8'],
+  [5, 9, '45 máy · 5 dãy × 9'], [6, 6, '36 máy · 6 dãy × 6'], [3, 12, '36 máy · 3 dãy × 12'], [5, 7, '35 máy · 5 dãy × 7'], [5, 6, '30 máy · 5 dãy × 6'],
+  [3, 10, '30 máy · 3 dãy × 10'], [4, 6, '24 máy · 4 dãy × 6']];
+
+async function seatPreset(i) {
+  const p = SEAT_PRESETS[i]; if (!p) return;
+  await seatSave({cols: p[0], per: p[1], from: 'teacher', first: 'left', gv: 'center', door: 'back'});
+  toast('Đã áp dụng kiểu phòng ' + p[2], 'ok');
+}
+
+async function seatCopyFrom(cls) {   // chép kiểu phòng (không chép tên học sinh) từ lớp khác sang lớp đang xem
+  const o = ((S.school || {}).layouts || {})[cls]; if (!o) return toast('Lớp đó chưa có sơ đồ', 'warn');
+  const keep = ['cols', 'per', 'from', 'first', 'pattern', 'gv', 'door', 'flipv', 'fliph'], patch = {};
+  keep.forEach(k => { if (o[k] !== undefined) patch[k] = o[k]; });
+  patch.broken = o.broken || [];
+  await seatSave(patch);
+  toast('Đã chép kiểu phòng và máy hỏng từ lớp ' + cls, 'ok');
+}
+
 async function seatSave(patch, all) {
   const lay = Object.assign(curLay(), patch);
   for (const k of ['cols', 'per']) lay[k] = Math.max(1, Math.min(k === 'cols' ? 12 : 20, parseInt(lay[k]) || 1));
@@ -85,6 +105,7 @@ function viewSeats() {
   const lay = curLay(), {num, dayNo, side} = seatOrient(lay), cnt = (cls.find(c => c.name === S.seatCls) || {}).count || 0;
   const by = lay.seats, inCls = new Set(S.stu[S.seatCls] || []), filled = Object.values(by).filter(v => !inCls.size || inCls.has(v)).length;
   const bad = new Set(lay.broken || []);
+  const handNo = new Set(((S.interact || {}).hands || []).filter(h => h.cls === S.seatCls).map(h => h.no));
   const att = (S.att && S.att.cls === S.seatCls) ? S.att : null, eff = att ? att.seats : by, off = new Set(att ? att.offline : []);
   const shareAt = {}; if (att) Object.entries(att.shares || {}).forEach(([n, m]) => { (shareAt[m] = shareAt[m] || []).push(n); });
   const head = num[0].map((_, c) => `<div class="dayhead">Dãy ${dayNo(c)}</div>`).join('');
@@ -97,7 +118,7 @@ function viewSeats() {
     const av = isBad ? '✕' : gone ? seatInit(by[n]) : shown ? seatInit(shown) : '＋';
     const tag = isBad ? '' : gone ? '<em class="tg">vắng</em>' : mates.length ? `<em class="tg">+${mates.length} chung</em>` : moved ? '<em class="tg">mới</em>' : '';
     const tip = isBad ? 'Máy hỏng' : gone ? 'Vắng: ' + by[n] : moved ? shown + ' (được chuyển đến)' : (shown || 'Chưa xếp') + (mates.length ? ' · ngồi chung với ' + mates.join(', ') : '') + (off.has(n) ? ' · máy đang tắt' : '');
-    return `<button class="seat ${cl} ${mates.length ? 'shared' : ''} ${off.has(n) && !isBad ? 'off' : ''}" data-act="seatpick" data-n="${n}" title="${esc(tip)}"><i class="sn">${n}</i>${tag}<span class="av">${esc(av)}</span><span class="nm">${esc(nm)}</span></button>`; }).join('')).join('');
+    return `<button class="seat ${cl} ${mates.length ? 'shared' : ''} ${off.has(n) && !isBad ? 'off' : ''} ${handNo.has(n) ? 'hand' : ''} ${S.drawNo === n ? 'drawn' : ''}" data-act="seatpick" data-n="${n}" title="${esc(tip + (handNo.has(n) ? ' · đang giơ tay' : ''))}"><i class="sn">${n}</i>${handNo.has(n) ? '<em class="tg hnd">✋</em>' : ''}${tag}<span class="av">${esc(av)}</span><span class="nm">${esc(nm)}</span></button>`; }).join('')).join('');
   const slot = {left: [], center: [], right: []};
   slot[side(lay.gv)].push('<div class="tdesk">🖥 Bàn giáo viên</div>');
   if (lay.door === 'tl') slot[side('left')].push('<div class="tdoor2">🚪 Cửa ra vào</div>');
@@ -105,7 +126,10 @@ function viewSeats() {
   const gw = 'calc(' + lay.cols + ' * var(--sw,132px) + ' + (lay.cols - 1) + ' * var(--cg,22px))';
   const front = `<div class="frontrow ${lay.flipv ? 'fv' : ''}" style="width:${gw}">${['left', 'center', 'right'].map(k => `<div>${slot[k].join('')}</div>`).join('')}</div>`;
   const opt = (v, cur, t) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${t}</option>`;
+  const others = Object.keys((S.school || {}).layouts || {}).filter(c => c !== S.seatCls);
   const settings = S.layOpen ? `<div class="lgrid">
+      <label style="grid-column:1/-1">Kiểu phòng mẫu<select data-seatpreset><option value="">— chọn để áp dụng —</option>${SEAT_PRESETS.map((p, i) => `<option value="${i}">${esc(p[2])}</option>`).join('')}</select></label>
+      ${others.length ? `<label style="grid-column:1/-1">Chép kiểu phòng từ lớp khác<select data-seatcopy><option value="">— chọn lớp —</option>${others.map(c => `<option value="${esc(c)}">Lớp ${esc(c)}</option>`).join('')}</select></label>` : ''}
       <label>Số dãy<input type="number" min="1" max="12" data-lay="cols" value="${lay.cols}"></label>
       <label>Máy mỗi dãy<input type="number" min="1" max="20" data-lay="per" value="${lay.per}"></label>
       <label>Đánh số từ<select data-lay="from">${opt('teacher', lay.from, 'Bàn giáo viên (đầu dãy)')}${opt('door', lay.from, 'Cửa ra vào (cuối dãy)')}</select></label>
@@ -118,7 +142,7 @@ function viewSeats() {
   const lg = (bg, bd, t) => `<span><i style="background:${bg};border-color:${bd}"></i>${t}</span>`;
   return `<div class="seatpage"><div class="seatmain"><section class="card"><div class="toolbar" style="margin-bottom:12px"><b>Sơ đồ chỗ ngồi</b>
       <select id="seatClsSel">${cls.map(c => `<option value="${esc(c.name)}" ${c.name === S.seatCls ? 'selected' : ''}>Lớp ${esc(c.name)}</option>`).join('')}</select><span class="grow"></span>
-      <button class="btn primary" data-act="seatproject">📽 Chiếu sơ đồ cho lớp</button><button class="btn" data-act="seatauto">Tự xếp theo danh sách</button><button class="btn ghost" data-act="seatclear">Xóa chỗ ngồi</button><button class="btn ghost ${lay.flipv ? 'on' : ''}" data-act="seatflipv" title="Đảo trên dưới: đưa bàn giáo viên xuống dưới cùng của sơ đồ">⇅ Đảo dọc</button><button class="btn ghost ${lay.fliph ? 'on' : ''}" data-act="seatfliph" title="Đảo trái phải: đổi vị trí bàn giáo viên, cửa và thứ tự các dãy">⇄ Đảo ngang</button><button class="btn ghost" data-act="layopen">⚙ ${S.layOpen ? 'Ẩn cài đặt phòng' : 'Cài đặt phòng'}</button></div>
+      <button class="btn primary" data-act="seatproject">📽 Chiếu sơ đồ cho lớp</button><button class="btn" data-ev="draw" title="Chọn ngẫu nhiên một em để gọi trả lời">🎲 Bốc thăm</button><button class="btn" data-act="seatauto">Tự xếp theo danh sách</button><button class="btn ghost" data-act="seatclear">Xóa chỗ ngồi</button><button class="btn ghost ${lay.flipv ? 'on' : ''}" data-act="seatflipv" title="Đảo trên dưới: đưa bàn giáo viên xuống dưới cùng của sơ đồ">⇅ Đảo dọc</button><button class="btn ghost ${lay.fliph ? 'on' : ''}" data-act="seatfliph" title="Đảo trái phải: đổi vị trí bàn giáo viên, cửa và thứ tự các dãy">⇄ Đảo ngang</button><button class="btn ghost" data-act="layopen">⚙ ${S.layOpen ? 'Ẩn cài đặt phòng' : 'Cài đặt phòng'}</button></div>
     <div class="sstats" style="margin-bottom:12px"><span class="sstat"><b>${filled}/${cnt}</b> học sinh đã có chỗ</span><span class="sstat"><b>${lay.cols * lay.per - bad.size}</b> máy dùng được</span>${bad.size ? `<span class="sstat" style="background:#fdecec;color:#b91c1c"><b>${bad.size}</b> máy hỏng</span>` : ''}${att && att.absent.length ? `<span class="sstat"><b>${att.absent.length}</b> vắng hôm nay</span>` : ''}<span class="muted" style="font-size:12.5px">Bấm vào một máy để xếp chỗ hoặc báo máy hỏng</span></div>
     ${settings}
     <div class="room"><div class="inner">${lay.flipv ? '' : front}${lay.flipv && lay.door === 'back' ? '<div class="tdoor fv">🚪 Cửa ra vào</div>' : ''}<div class="seats" style="grid-template-columns:repeat(${lay.cols},var(--sw,132px))">${lay.flipv ? cells + head : head + cells}</div>${!lay.flipv && lay.door === 'back' ? '<div class="tdoor">🚪 Cửa ra vào</div>' : ''}${lay.flipv ? front : ''}</div></div>

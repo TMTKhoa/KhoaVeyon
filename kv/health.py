@@ -15,6 +15,10 @@ from .runtime import ApiError, CFG, CFG_LOCK, clean_hosts, log, PAYLOAD_DIR, poo
 from .watch import job_watch
 
 
+AGENT_GRACE = 90     # giây sau khi máy bật chưa thấy Agent thì mới báo mất Agent (Agent cần vài chục giây để khởi động)
+DISK_WARN = 10       # % ổ đĩa trống: dưới mức này thì báo
+BAT_WARN = 15        # % pin
+SKEW_WARN = 120      # giây: lệch giờ quá mức này thì báo vàng
 ALIVE_MAX_AGE = 45   # giây: script giám sát ghi alive.txt mỗi 10 giây
 
 
@@ -62,12 +66,34 @@ def health_of(r, exam=None):
     probs = []
     if not r.get('veyon'):
         probs.append({'text': 'Veyon Service chưa chạy hoặc chưa cài', 'fix': '', 'sev': 'red'})
-    if not r.get('smb'):
+    agent_prob = False
+    if 'agent' in r and not r.get('agent'):
+        rej = r.get('reject') or {}
+        if rej.get('reason') == 'bad time':
+            mins = int(abs(rej.get('skew') or 0) // 60)
+            probs.append({'id': 'clock', 'text': 'Đồng hồ máy lệch khoảng %s nên Agent bị từ chối (pin CMOS yếu?). Dịch vụ bản mới tự chỉnh giờ, bản cũ thì chỉnh tay' % (('%d phút' % mins) if mins < 120 else ('%.1f giờ' % (mins / 60.0))), 'fix': '', 'sev': 'red'})
+            agent_prob = True
+        elif rej.get('reason') == 'bad signature':
+            probs.append({'id': 'badkey', 'text': 'Agent trên máy gọi về nhưng sai khóa: chạy lại Setup-MayHocSinh.bat mới', 'fix': '', 'sev': 'red'})
+            agent_prob = True
+        elif r.get('veyon') and r.get('up_for', 999) > AGENT_GRACE:
+            probs.append({'id': 'noagent', 'text': 'Agent chưa kết nối về máy giáo viên (chưa cài, dịch vụ dừng, hoặc tường lửa máy giáo viên chặn cổng Agent)', 'fix': '', 'sev': 'red'})
+            agent_prob = True
+    elif r.get('skew') is not None and abs(r['skew']) > SKEW_WARN:
+        probs.append({'id': 'clock', 'text': 'Giờ máy lệch %d giây so với máy giáo viên' % abs(r['skew']), 'fix': 'time', 'sev': 'yellow'})
+    if agent_prob:
+        pass
+    elif not r.get('smb'):
         probs.append({'text': 'Chưa cài Agent / chưa mở chia sẻ C$ (chạy Setup-MayHocSinh.bat một lần)', 'fix': '', 'sev': 'red'})
     elif r.get('svc') == 'none':
         probs.append({'text': 'Chưa cài dịch vụ KhoaVeyon', 'fix': 'svc', 'sev': 'red'})
     elif r.get('svc') == 'old':
         probs.append({'text': 'Dịch vụ KhoaVeyon là bản cũ', 'fix': 'svc', 'sev': 'yellow'})
+    ah = r.get('ahealth') or {}   # báo cáo sức khỏe do dịch vụ trên máy học sinh gửi kèm
+    if isinstance(ah.get('disk'), int) and ah['disk'] <= DISK_WARN:
+        probs.append({'id': 'disk', 'text': 'Ổ đĩa hệ thống sắp đầy: còn %d%% (%s GB)' % (ah['disk'], ah.get('diskgb', '?')), 'fix': '', 'sev': 'red' if ah['disk'] <= 5 else 'yellow'})
+    if isinstance(ah.get('bat'), int) and 0 <= ah['bat'] <= BAT_WARN and ah.get('ac') is False:
+        probs.append({'id': 'battery', 'text': 'Pin còn %d%% và chưa cắm sạc' % ah['bat'], 'fix': '', 'sev': 'yellow'})
     exam = exam or {}
     steps = exam.get('steps') or {}
     if r.get('smb') and r.get('watching') and r.get('watch_alive') is False:
@@ -104,9 +130,24 @@ def job_fix_service(hosts):
     pool_run(one, hosts, 'Cài lại dịch vụ KhoaVeyon')
 
 
+TIME_FIX_CMD = ('cmd.exe /c tzutil /s "SE Asia Standard Time" & sc config w32time start= auto & net start w32time & '
+                'w32tm /config /manualpeerlist:"time.windows.com,0x9 time.google.com,0x9 pool.ntp.org,0x9" /syncfromflags:manual /reliable:no /update & '
+                'w32tm /resync /force')
+
+
+def job_fix_time(hosts):
+    from .remote import remote_run_wait
+    log('>>> Đồng bộ giờ %d máy (múi giờ Việt Nam)' % len(hosts), 'head')
+    for h in hosts:
+        ok, msg = remote_run_wait(h, TIME_FIX_CMD, timeout=60)
+        log('[%s] %s' % (h, 'đã đồng bộ giờ' if ok else 'chưa đồng bộ được: ' + msg), 'ok' if ok else 'err')
+
+
 def job_fix(fix, hosts):
     try:
-        if fix == 'svc':
+        if fix == 'time':
+            job_fix_time(hosts)
+        elif fix == 'svc':
             job_fix_service(hosts)
         elif fix == 'watch':
             job_watch('start', hosts)
@@ -123,7 +164,7 @@ def job_fix(fix, hosts):
 
 def api_health_fix(b):
     fix = b.get('fix')
-    if fix not in ('svc', 'watch', 'blockai'):
+    if fix not in ('svc', 'watch', 'blockai', 'time'):
         raise ApiError('Cách sửa không hợp lệ')
     hosts = clean_hosts(b.get('hosts'))
     if not hosts:

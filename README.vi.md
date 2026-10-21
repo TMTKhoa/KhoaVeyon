@@ -22,6 +22,9 @@
 | 🪑 **Sơ đồ & điểm danh** | Sơ đồ chỗ ngồi theo lớp, học sinh vắng, liên kết KhoaQuiz |
 | 🚨 **Giám sát vi phạm** | Tự chụp ảnh khi mở trang/ứng dụng cấm, thư viện bằng chứng, báo cáo |
 | 📋 **Danh sách Excel** | Sửa ứng dụng/trang được phép, bị chặn, trang AI bằng bảng; tự gửi xuống máy học sinh |
+| 🩺 **Chẩn đoán** | Bảng xanh/đỏ từng máy (Veyon, Agent, giờ máy, bản dịch vụ, tường lửa) kèm nút sửa |
+| 💾 **Sao lưu** | Một file .zip chứa máy, lớp, thời khóa biểu, sơ đồ, danh sách; chuyển sang máy giáo viên khác một thao tác |
+| 🙋 **Tương tác** | Học sinh giơ tay / nộp bài từ máy; nhắn tin, khóa màn hình kèm lời nhắn, thống kê dùng máy |
 | 🔌 **Agent** | Máy giáo viên điều khiển máy học sinh không cần tài khoản quản trị, chia sẻ C$ hay Task Scheduler từ xa |
 
 ## Cách hoạt động
@@ -54,6 +57,7 @@ Xong: chọn máy ở **Điều khiển lớp** và bấm nút.
 |---|---|
 | `Invalid feature name or UID` | **Cài đặt → "Nút điều khiển lớp chạy bằng"** chọn *Agent*; không cần mục "Programs & websites" trong Veyon |
 | Máy học sinh không có Agent | Kiểm tra giờ/múi giờ máy học sinh (lệch > 15 phút bị từ chối), tường lửa cổng 8767 máy giáo viên, rồi chạy lại `Setup-MayHocSinh.bat`. Lý do hiện ở **Nhật ký** |
+| Máy được bật bằng Wake-on-LAN nhưng kẹt ở màn hình `PXE ... DHCP...` | BIOS đang ưu tiên khởi động mạng. Vào BIOS (HP: F10, máy khác: Del/F2), tắt **Network/PXE Boot** (hoặc đưa ổ cứng / Windows Boot Manager lên đầu), **giữ bật** Wake on LAN / Power On by PCI-E |
 | Máy hiện IP thay vì tên | Cần Agent, DNS ngược hoặc NetBIOS; quét lại sau khi cài |
 | Nhập thời khóa biểu lỗi | Cần hàng tiêu đề các thứ (`THỨ HAI`, `T2`…) + giờ hoặc số tiết; lỗi hiện ngay trên trang |
 

@@ -17,6 +17,10 @@ foreach ($f in Get-ChildItem -Path (Join-Path $root 'scripts') -Filter *.ps1) {
     $bad += Test-Source $f.Name ([IO.File]::ReadAllText($f.FullName))
 }
 
+foreach ($f in Get-ChildItem -Path (Join-Path $root 'payload') -Filter *.ps1 -ErrorAction SilentlyContinue) {
+    $bad += Test-Source $f.Name ([IO.File]::ReadAllText($f.FullName))
+}
+
 # KhoaVeyonServices.bat: phần sau dòng #PS1START là PowerShell (được nạp bằng iex khi chạy)
 foreach ($f in Get-ChildItem -Path (Join-Path $root 'payload') -Filter *.bat -ErrorAction SilentlyContinue) {
     $t = [IO.File]::ReadAllText($f.FullName)

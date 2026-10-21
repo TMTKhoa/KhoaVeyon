@@ -20,6 +20,7 @@ from .meta import BOOL_KEYS, LIST_KEYS, STR_KEYS
 from .network import scan_veyon_hosts
 from .paths import abs_path, CONFIG_PATH, find_veyon_cli
 from .remote import run_args, run_shell, sync_lists, unc_target, veyon_command
+from .student import submissions_root
 from .reports import report_root
 from .runtime import (
     ApiError, BUSY_LOCK, CFG, CFG_LOCK, clean_hosts, JOBS, list_path, LOG, log, LOG_LOCK, LOG_SEQ,
@@ -177,7 +178,7 @@ def api_payload_delete(b):
 
 def api_open(b):
     with CFG_LOCK:
-        folders = {'payload': PAYLOAD_DIR, 'lists': abs_path(CFG['list_dir']), 'data': os.path.dirname(CONFIG_PATH), 'shots': shot_root(), 'evidence': evidence_root(), 'reports': report_root(), 'examfiles': examfiles_root()}
+        folders = {'payload': PAYLOAD_DIR, 'lists': abs_path(CFG['list_dir']), 'data': os.path.dirname(CONFIG_PATH), 'shots': shot_root(), 'evidence': evidence_root(), 'reports': report_root(), 'examfiles': examfiles_root(), 'submissions': submissions_root()}
     p = folders.get(b.get('what'))
     if not p:
         raise ApiError('Thư mục không hợp lệ')

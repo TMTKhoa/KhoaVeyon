@@ -22,6 +22,9 @@
 | 🪑 **Seating & attendance** | Seat map per class, absent students, KhoaQuiz link |
 | 🚨 **Violation monitor** | Auto screenshots on forbidden pages/apps, evidence gallery, reports |
 | 📋 **Excel lists** | Edit allowed apps/sites, blocked apps/AI sites in a table; synced to students |
+| 🩺 **Diagnostics** | Green/red table per PC (Veyon, Agent, clock, service version, firewall) with fix buttons |
+| 💾 **Backup** | One .zip with PCs, classes, timetable, seat maps and lists; move to another teacher PC in one step |
+| 🙋 **Interaction** | Students raise a hand / hand in work from their PC; messages, lock screen with a note, usage stats |
 | 🔌 **Agent** | Teacher PC controls students without an admin account, C$ share or remote Task Scheduler |
 
 ## How it works

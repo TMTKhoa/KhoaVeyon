@@ -10,7 +10,7 @@ from .ai import ai_state_one
 from .health import exam_snapshot, health_of, health_probe
 from .applied import applied_list
 from .network import mac_known, mac_learn, tcp_probe
-from .agent import agent_online
+from .agent import agent_info, agent_online, agent_reject_info
 from .remote import logged_on_user
 from .runtime import CFG, CFG_LOCK, log, split_host_port
 
@@ -107,6 +107,12 @@ def status_loop():
             log('Lỗi quét trạng thái máy: %s' % e, 'err')
 
 
+def _agent_state(probs):
+    """Phân loại để giao diện đếm: 'clock' (lệch giờ), 'lost' (mất/không có Agent), 'badkey' (sai khóa), '' (bình thường)."""
+    ids = {p.get('id') for p in probs}
+    return 'clock' if 'clock' in ids else 'badkey' if 'badkey' in ids else 'lost' if 'noagent' in ids else ''
+
+
 def api_status(q):
     now = time.time()
     STATUS_WANT[0] = now + 25
@@ -122,12 +128,17 @@ def api_status(q):
             e = dict(STATUS.get(h) or {})
         hh, _ = split_host_port(h)
         watching_now = hh in watching or h in watching
-        level, probs = health_of({'online': bool(e.get('online')), 'veyon': bool(e.get('veyon')), 'smb': bool(e.get('smb')), 'svc': e.get('svc', '?'),
+        ai_ = agent_info(hh) if e.get('agent') else None
+        rej = agent_reject_info(hh) if (e.get('online') and not e.get('agent')) else None
+        level, probs = health_of({'online': bool(e.get('online')), 'veyon': bool(e.get('veyon')), 'smb': bool(e.get('smb')), 'agent': bool(e.get('agent')), 'svc': e.get('svc', '?'),
+                                  'skew': (ai_ or {}).get('skew'), 'ahealth': (ai_ or {}).get('health'), 'reject': rej, 'up_for': now - e.get('since', now),
                                   'watch_alive': e.get('watch_alive'), 'watching': watching_now, 'ai': e.get('ai', '')} if e.get('checked') else {}, exam)
         rows.append({'health': level if e.get('checked') else 'wait', 'problems': probs, 'svc': e.get('svc', ''), 'watch_alive': e.get('watch_alive'), 'host': h, 'checked': bool(e.get('checked')), 'online': bool(e.get('online')), 'veyon': bool(e.get('veyon')),
-                     'smb': bool(e.get('smb')), 'agent': bool(e.get('agent')), 'user': e.get('user', ''), 'ai': e.get('ai', ''), 'since': e.get('since', 0),
+                     'smb': bool(e.get('smb')), 'agent': bool(e.get('agent')), 'agent_state': _agent_state(probs), 'user': e.get('user', ''), 'ai': e.get('ai', ''), 'since': e.get('since', 0),
                      'age': int(now - e['checked']) if e.get('checked') else -1,
                      'watching': hh in watching or h in watching, 'restrict': applied_list(h), 'mac': mac_known(h)})
     return {'hosts': rows, 'ts': now, 'online': sum(1 for r in rows if r['online']), 'total': len(rows),
             'green': sum(1 for r in rows if r['health'] == 'green'), 'yellow': sum(1 for r in rows if r['health'] == 'yellow'),
-            'red': sum(1 for r in rows if r['health'] == 'red'), 'off': sum(1 for r in rows if r['health'] == 'off')}
+            'red': sum(1 for r in rows if r['health'] == 'red'), 'off': sum(1 for r in rows if r['health'] == 'off'),
+            'agent_lost': sum(1 for r in rows if r['agent_state'] == 'lost'), 'agent_clock': sum(1 for r in rows if r['agent_state'] == 'clock'),
+            'agent_badkey': sum(1 for r in rows if r['agent_state'] == 'badkey')}

@@ -20,7 +20,7 @@ SCHOOL_DAYS = ['THỨ HAI', 'THỨ BA', 'THỨ TƯ', 'THỨ NĂM', 'THỨ SÁU',
 SCHOOL_DAY_SHORT = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
 SCHOOL = {'classes': {}, 'layouts': {}, 'slots': [], 'from': '', 'auto': True, 'override': None, 'manual': '',
           'classes_file': '', 'classes_at': '', 'timetable_file': '', 'timetable_at': '', 'teacher': '', 'subject': '',
-          'attendance': {}, 'attend_notify': True, 'auto_announce': False, 'kq_game_absent': True, 'automation': None}
+          'bells': {}, 'wall_presets': {}, 'attendance': {}, 'attend_notify': True, 'auto_announce': False, 'kq_game_absent': True, 'automation': None}
 
 
 def school_path():
@@ -183,6 +183,20 @@ DEFAULT_BELLS = {1: ('07:00', '07:45'), 2: ('07:50', '08:35'), 3: ('08:55', '09:
                  6: ('13:30', '14:15'), 7: ('14:20', '15:05'), 8: ('15:25', '16:10'), 9: ('16:15', '17:00'), 10: ('17:05', '17:50')}
 
 
+def school_bells():
+    """Giờ 10 tiết đang dùng: giờ giáo viên đã đặt (SCHOOL['bells']), tiết nào chưa đặt thì lấy giờ mặc định."""
+    out = dict(DEFAULT_BELLS)
+    with SCHOOL_LOCK:
+        for k, v in (SCHOOL.get('bells') or {}).items():
+            try:
+                n = int(k)
+                if 1 <= n <= 10 and _hhmm(v[0]) and _hhmm(v[1]):
+                    out[n] = (_hhmm(v[0]), _hhmm(v[1]))
+            except (ValueError, TypeError, IndexError):
+                pass
+    return out
+
+
 def _times_in_row(cells):
     """Các giờ có trong một dãy ô, kể cả khi hai giờ nằm chung một ô ('7:00 - 7:45', '07h00-07h45')."""
     out = []
@@ -255,8 +269,9 @@ def parse_timetable_xlsx(path):
                 st, en = times[0], times[1]
             else:
                 per = _period_of(left)
-                if per and per in DEFAULT_BELLS:
-                    st, en = DEFAULT_BELLS[per]
+                bells = school_bells()
+                if per and per in bells:
+                    st, en = bells[per]
                     used_default = True
                 else:
                     continue

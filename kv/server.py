@@ -25,7 +25,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *args):  # không ghi log truy cập
         pass
 
-    def _send(self, code, body, ctype='application/json; charset=utf-8'):
+    def _send(self, code, body, ctype='application/json; charset=utf-8', filename=''):
         if isinstance(body, (dict, list)):
             body = json.dumps(body, ensure_ascii=False).encode('utf-8')
         elif isinstance(body, str):
@@ -35,6 +35,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(body)))
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
+        if filename:
+            self.send_header('Content-Disposition', "attachment; filename*=UTF-8''" + urllib.parse.quote(filename))
         self.end_headers()
         if self.command != 'HEAD':
             self.wfile.write(body)
@@ -115,6 +117,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
             with open(p, 'rb') as f:
                 self._send(200, f.read(), 'image/jpeg')
+        elif u.path == '/api/download':   # tải file: sao lưu, Excel mẫu (cần X-Token)
+            if not self._token_ok():
+                self._send(403, {'error': 'Sai mã bảo vệ'})
+                return
+            if self._locked(u.path):
+                return
+            try:
+                data, name = self._download(q)
+            except ApiError as e:
+                self._send(400, {'error': str(e)})
+                return
+            except Exception as e:  # noqa
+                self._send(500, {'error': '%s: %s' % (type(e).__name__, e)})
+                return
+            self._send(200, data, 'application/octet-stream', name)
         elif u.path in GET_ROUTES:
             if not self._token_ok():
                 self._send(403, {'error': 'Sai mã bảo vệ'})
@@ -124,6 +141,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._api(GET_ROUTES[u.path], q)
         else:
             self._send(404, {'error': 'Không tìm thấy'})
+
+    @staticmethod
+    def _download(q):
+        what = q.get('what')
+        if what == 'backup':
+            from .backup import backup_name, make_backup
+            return make_backup(q.get('secrets') != '0'), backup_name()
+        if what == 'timetable':
+            from .school import school_bells
+            from .templates import bell_set, timetable_template
+            return timetable_template(bell_set(q.get('set', '')) or school_bells()), 'Thoi-khoa-bieu-mau.xlsx'
+        if what == 'classes':
+            from .templates import classes_template
+            return classes_template(), 'Danh-sach-lop-mau.xlsx'
+        raise ApiError('Không có file này')
 
     def do_POST(self):
         if not self._guard():

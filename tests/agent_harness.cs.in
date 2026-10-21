@@ -6,6 +6,10 @@ using System.IO;
 using System.Net;
 using System.Diagnostics;
 using System.Text;
+using System.Runtime.InteropServices;
+using System.Security.AccessControl;
+using System.Security.Principal;
+using System.ServiceProcess;
 
 // Test stub of the service class: KvAgent only needs these members (the real ones call Win32 APIs).
 public static class KvAutoLogService
@@ -23,6 +27,7 @@ public static class Harness
     {
         FieldInfo f = typeof(KvAgent).GetField("CfgFile", BindingFlags.NonPublic | BindingFlags.Static);
         f.SetValue(null, a[0]);
+        if (a.Length > 2) KvAgent.DataRoot = a[2];
         KvAgent.Start();
         Thread.Sleep(int.Parse(a[1]) * 1000);
         KvAgent.Stop();

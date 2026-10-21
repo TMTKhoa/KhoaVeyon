@@ -2,7 +2,7 @@
 /* ---------- điều hướng và vẽ lại ---------- */
 function buildNav() {
   $('#nav').innerHTML = PAGES.map(p => p.grp ? `<div class="grp">${p.grp}</div>`
-    : `<button data-page="${p.id}" class="${S.page === p.id ? 'on' : ''}${p.id === 'viol' && S.unseen ? ' alerting' : ''}"><span class="ic">${p.ic}</span><span class="tx">${esc(p.name)}</span>${p.id === 'viol' && S.unseen ? `<span class="nbadge">${S.unseen > 99 ? '99+' : S.unseen}</span>` : ''}</button>`).join('');
+    : `<button data-page="${p.id}" class="${S.page === p.id ? 'on' : ''}${p.id === 'viol' && S.unseen ? ' alerting' : ''}"><span class="ic">${p.ic}</span><span class="tx">${esc(p.name)}</span>${p.id === 'viol' && S.unseen ? `<span class="nbadge">${S.unseen > 99 ? '99+' : S.unseen}</span>` : ''}${p.id === 'interact' && S.handCount ? `<span class="nbadge">✋${S.handCount}</span>` : ''}</button>`).join('');
 }
 
 async function go(id) {
@@ -44,6 +44,8 @@ function render(top) {
   else if (S.page === 'dist') v.innerHTML = viewDist();
   else if (S.page === 'vcfg') v.innerHTML = viewVcfg();
   else if (S.page === 'viol') v.innerHTML = viewViol();
+  else if (S.page === 'diag') v.innerHTML = viewDiag();
+  else if (S.page === 'interact') v.innerHTML = viewInteract();
   else if (S.page === 'school') v.innerHTML = viewSchool();
   else if (S.page === 'seats') v.innerHTML = viewSeatsPage();
   else if (S.page === 'report') v.innerHTML = viewReport();
@@ -270,6 +272,7 @@ document.addEventListener('click', async e => {
     }
     case 'openpayload': api('/api/open', {what: 'payload'}).catch(err => toast(err.message, 'warn')); break;
     case 'openlists': api('/api/open', {what: 'lists'}).catch(err => toast(err.message, 'warn')); break;
+    case 'openfolder': api('/api/open', {what: el.dataset.what}).catch(err => toast(err.message, 'warn')); break;
     case 'opendata': api('/api/open', {what: 'data'}).catch(err => toast(err.message, 'warn')); break;
     case 'dist': runDist(el.dataset.copy === '1', el.dataset.run === '1'); break;
     case 'savesettings': saveSettings(); break;
@@ -327,6 +330,8 @@ document.addEventListener('change', async e => {
   else if (t.id === 'seatClsSel') { S.seatCls = t.value; try { await seatNames(); } catch (err) { /* bỏ qua */ } await loadAtt(); render(); }
   else if (t.dataset.attset) { await attAct({action: 'setting', [t.dataset.attset]: t.checked}); }
   else if (t.dataset.lay) { await seatSave({[t.dataset.lay]: t.value}); }
+  else if (t.dataset.seatpreset !== undefined) { if (t.value !== '') await seatPreset(+t.value); }
+  else if (t.dataset.seatcopy !== undefined) { if (t.value) await seatCopyFrom(t.value); }
   else if (t.id === 'violCls') { S.violCls = t.value; render(); }
   else if (t.dataset.gal) { galState().f[t.dataset.gal] = t.value; await loadGallery(); }
   else if (t.dataset.schoolfile) { await schoolUpload(t.dataset.schoolfile, t.files[0]); t.value = ''; }

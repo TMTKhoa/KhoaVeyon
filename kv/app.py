@@ -29,6 +29,7 @@ from .server import make_server
 from .setup_jobs import run_apply_mode
 from .status import status_loop
 from .updater import update_loop
+from .autoupdate import autoupdate_loop
 from .vcfg import run_elevated_job
 
 
@@ -143,6 +144,7 @@ def main(argv=None):
     threading.Thread(target=alert_loop, daemon=True).start()
     threading.Thread(target=watchdog, args=(srv,), daemon=True).start()
     threading.Thread(target=update_loop, daemon=True).start()
+    threading.Thread(target=autoupdate_loop, daemon=True).start()
     if '--background' in argv:
         log('Đang chạy nền (khởi động cùng Windows). Mở lại bằng Chay-KhoaVeyon.bat.', 'head')
     elif '--no-browser' in argv:

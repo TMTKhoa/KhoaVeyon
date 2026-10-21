@@ -14,9 +14,14 @@ function healthSummary() {
   const s = S.stat; if (!s || !S.hosts.length) return '';
   const fixes = {};
   s.hosts.forEach(r => (r.problems || []).forEach(p => { if (p.fix) (fixes[p.fix] = fixes[p.fix] || []).push(r.host); }));
-  const names = {svc: 'Cài lại dịch vụ', watch: 'Bật lại giám sát', blockai: 'Khóa AI'};
+  const names = {svc: 'Cài lại dịch vụ', watch: 'Bật lại giám sát', blockai: 'Khóa AI', time: 'Đồng bộ giờ'};
   const btns = Object.entries(fixes).map(([k, hs]) => `<button class="btn sm" data-xa="healthfix" data-fix="${esc(k)}" data-hs="${esc(JSON.stringify(hs))}">🔧 ${names[k]} (${hs.length} máy)</button>`).join(' ');
-  return `<span style="color:#16a34a">● <b>${s.green}</b> tốt</span> · <span style="color:#f59e0b">● <b>${s.yellow}</b> cần chú ý</span> · <span style="color:#dc2626">● <b>${s.red}</b> có lỗi</span> · <span style="color:#64748b">● <b>${s.off}</b> tắt</span>${btns ? '<div class="row" style="margin-top:8px;flex-wrap:wrap">' + btns + '</div>' : ''}`;
+  const warn = [];
+  if (s.agent_lost) warn.push(`<b>${s.agent_lost}</b> máy mất Agent`);
+  if (s.agent_clock) warn.push(`<b>${s.agent_clock}</b> máy lệch giờ`);
+  if (s.agent_badkey) warn.push(`<b>${s.agent_badkey}</b> máy sai khóa Agent`);
+  const alert = warn.length ? `<div class="note warn" style="margin:0 0 8px">⚠ ${warn.join(' · ')}. Chi tiết ở cột Sức khỏe; <a href="#" data-page="diag">mở trang Chẩn đoán</a>.</div>` : '';
+  return alert + `<span style="color:#16a34a">● <b>${s.green}</b> tốt</span> · <span style="color:#f59e0b">● <b>${s.yellow}</b> cần chú ý</span> · <span style="color:#dc2626">● <b>${s.red}</b> có lỗi</span> · <span style="color:#64748b">● <b>${s.off}</b> tắt</span>${btns ? '<div class="row" style="margin-top:8px;flex-wrap:wrap">' + btns + '</div>' : ''}`;
 }
 function statusRows() {
   const rows = (S.stat && S.stat.hosts) || [];
@@ -49,6 +54,7 @@ function viewStatus() {
     <h3>Trạng thái các máy học sinh <span class="badge" id="statusSum">${statusSummary()}</span></h3>
     <p class="sub">Tự cập nhật vài giây một lần khi trang này đang mở. Cột “Đang hạn chế” cho biết lệnh KhoaVeyon đã gửi gần nhất (chưa chắc đã có hiệu lực: bấm “Kiểm tra hiệu lực” để đọc trạng thái thật). Cột AI được đọc thật từ máy.</p>
     <label class="switch" style="margin:4px 0 8px"><input type="checkbox" data-cfg="reapply_on_boot" ${S.st.cfg.reapply_on_boot !== false ? 'checked' : ''}><span class="tr"></span><span>Máy khởi động lại hoặc bật lại thì tự áp lại các hạn chế đang bật (đợi có người đăng nhập; chỉ hoạt động khi KhoaVeyon đang mở)</span></label>
+    <label class="switch" style="margin:4px 0 8px"><input type="checkbox" data-cfg="auto_update_students" ${S.st.cfg.auto_update_students !== false ? 'checked' : ''}><span class="tr"></span><span>Tự cập nhật dịch vụ trên máy học sinh khi có bản mới (máy đang kết nối Agent; không chạy khi đang thi)</span></label>
     <div class="row" style="flex-wrap:wrap;margin:6px 0 10px"><button class="btn" data-xa="verify" data-fix="0">✔ Kiểm tra hiệu lực</button><button class="btn" data-xa="verify" data-fix="1">✔ Kiểm tra và gửi lại lệnh nếu lệch</button><button class="btn" data-act="selftest">🧪 Tự kiểm tra 1 máy</button></div>
     <div id="healthSum" style="margin:6px 0 10px">${healthSummary()}</div>
     <div class="hosttools"><button class="link" data-act="selall">Chọn tất cả</button><button class="link" data-act="selnone">Bỏ chọn</button><span class="muted">Đã chọn ${S.hosts.filter(h => S.sel.has(h)).length}/${S.hosts.length}. Không chọn = tất cả.</span></div>
@@ -110,9 +116,9 @@ document.addEventListener('click', async e => {
       toast(`Đang kiểm tra ${hs.length} máy, xem kết quả ở Nhật ký`, 'ok');
     } else if (a === 'healthfix') {
       const fix = el.dataset.fix, hs = el.dataset.hs ? JSON.parse(el.dataset.hs) : [el.dataset.h];
-      const names = {svc: 'Cài lại dịch vụ KhoaVeyon', watch: 'Bật lại giám sát', blockai: 'Khóa công cụ AI'};
+      const names = {svc: 'Cài lại dịch vụ KhoaVeyon', watch: 'Bật lại giám sát', blockai: 'Khóa công cụ AI', time: 'Đồng bộ giờ'};
       const ok = await modal({title: `${names[fix]} trên ${hs.length} máy?`, ok: 'Sửa ngay', danger: fix === 'blockai',
-        html: fix === 'blockai' ? 'Trình duyệt đang mở trên các máy này sẽ bị đóng.' : fix === 'svc' ? 'Chép <code>KhoaVeyonServices.bat</code> mới nhất từ thư mục payload xuống máy học sinh rồi chạy <code>-install</code>.' : 'Chép lại script giám sát và chạy lại trên các máy này.'});
+        html: fix === 'blockai' ? 'Trình duyệt đang mở trên các máy này sẽ bị đóng.' : fix === 'time' ? 'Đặt múi giờ Việt Nam và đồng bộ giờ qua Internet.' : fix === 'svc' ? 'Chép <code>KhoaVeyonServices.bat</code> mới nhất từ thư mục payload xuống máy học sinh rồi chạy <code>-install</code>.' : 'Chép lại script giám sát và chạy lại trên các máy này.'});
       if (!ok) return;
       await api('/api/health_fix', {fix, hosts: hs});
       openLog(); toast('Đang sửa, xem kết quả ở Nhật ký', 'ok');

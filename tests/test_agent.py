@@ -86,6 +86,36 @@ import kv.remote as R
 
 CS_CODE = '\nimport subprocess\nexe = "__EXE__"; work = "__WORK__"\ncfg = os.path.join(work, "agent.cfg")\nopen(cfg, "w").write("url=%s\\ntoken=%s\\n" % (URL, TOKEN))\nproc = subprocess.Popen(["mono", exe, cfg, "12"], stderr=subprocess.PIPE, text=True)\nfor _ in range(100):\n    if AG.agent_online("127.0.0.1"): break\n    time.sleep(0.2)\ninfo = AG.agent_info("127.0.0.1")\nprint(AG.agent_online("127.0.0.1"), info["user"], info["sessions"], info["name"] != "")\nd = os.path.join(work, "dst", "sub")\nf1 = os.path.join(d, "bai.txt")\ndata = ("Xin chào " * 5000).encode()\nR.rfs_write("127.0.0.1", f1, data)\nprint(R.rfs_read("127.0.0.1", f1) == data, os.path.isfile(f1))\nprint(R.rfs_sha("127.0.0.1", f1) == hashlib.sha256(data).hexdigest())\nprint(sorted((e["name"], e["size"], e["dir"]) for e in R.rfs_scan("127.0.0.1", os.path.join(work, "dst"))))\nprint(abs(R.rfs_mtime("127.0.0.1", f1) - time.time()) < 60, R.rfs_exists("127.0.0.1", f1), R.rfs_exists("127.0.0.1", f1 + "x"))\nR.rfs_remove("127.0.0.1", f1)\nprint(os.path.exists(f1))\ntry:\n    R.rfs_read("127.0.0.1", f1); print("no error")\nexcept FileNotFoundError:\n    print("FNF")\ntry:\n    R.rfs_scan("127.0.0.1", os.path.join(work, "nope")); print("no error")\nexcept FileNotFoundError:\n    print("FNF")\ntry:\n    R.rfs_write("127.0.0.1", "relative/x.txt", b"x"); print("no error")\nexcept OSError as e:\n    print("rejected", "invalid path" in str(e))\nproc.wait(timeout=60)\nprint(proc.returncode)\n'
 
+CS_EVENT_CODE = """
+import subprocess
+import kv.student as ST
+GOT = []
+ST.handle_events = lambda ip, d: GOT.append(d)
+exe = "__EXE__"; work = "__WORK__"
+cfg = os.path.join(work, "agent.cfg")
+open(cfg, "w").write("url=%s\\ntoken=%s\\n" % (URL, TOKEN))
+root = os.path.join(work, "kvdata")
+proc = subprocess.Popen(["mono", exe, cfg, "10", root], stderr=subprocess.PIPE, text=True)
+for _ in range(100):
+    if os.path.isdir(os.path.join(root, "outbox")): break
+    time.sleep(0.1)
+print(sorted(os.listdir(root)))
+open(os.path.join(root, "outbox", "bad.json"), "w").write("{not json")
+open(os.path.join(root, "outbox", "a1.json"), "w").write(json.dumps({"t": "hand", "on": True}))
+for _ in range(60):
+    if GOT: break
+    time.sleep(0.2)
+print(len(GOT), GOT[0]["events"] if GOT else None, GOT[0].get("host") != "" if GOT else None)
+time.sleep(1)
+print(sorted(os.listdir(os.path.join(root, "outbox"))))
+for _ in range(60):
+    if "health" in (AG.agent_info("127.0.0.1") or {}) and AG.agent_info("127.0.0.1")["health"]: break
+    time.sleep(0.2)
+print(sorted((AG.agent_info("127.0.0.1") or {}).get("health", {}).keys())[:1])
+proc.wait(timeout=60)
+print(proc.returncode)
+"""
+
 
 class AgentTests(Base):
     def run_code(self, code):
@@ -280,6 +310,40 @@ print(open(cfgp).read() != old, ("token=" + AG.agent_token()) in open(cfgp).read
 ''')
         self.assertEqual(out.splitlines(), ["True True", "True", "True True"])
 
+    def _build_cs(self):
+        here = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(os.path.dirname(here), 'payload', 'KhoaVeyonServices.bat'), encoding='utf-8') as f:
+            text = f.read()
+        cs = re.search(r"\$csSource = @'\n(.*?)\n'@", text, re.S).group(1)
+        agent_src = cs[cs.index('// KvAgent:') - 100:]
+        agent_src = agent_src[agent_src.index('// ----'):]
+        with open(os.path.join(here, 'agent_harness.cs.in'), encoding='utf-8') as f:
+            harness = f.read()
+        work = tempfile.mkdtemp(prefix='kvcs')
+        src = os.path.join(work, 'h.cs')
+        with open(src, 'w', encoding='utf-8') as f:
+            f.write(harness + '\n' + agent_src)
+        exe = os.path.join(work, 'h.exe')
+        r = subprocess.run(['mcs', '-langversion:5', '-target:exe', '-r:System.Web.Extensions.dll', '-r:System.ServiceProcess.dll', '-out:' + exe, src], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        return exe, work
+
+    @unittest.skipUnless(shutil.which('mcs') and shutil.which('mono'), 'cần mono (mcs) để biên dịch và chạy mã C# của dịch vụ')
+    def test_csharp_agent_sends_student_events_and_health(self):
+        """Trợ lý học sinh ghi file vào outbox → dịch vụ C# gửi /agent/event tới máy giáo viên rồi xóa file; poll kèm báo cáo sức khỏe."""
+        exe, work = self._build_cs()
+        os.environ['KV_NO_FAKE'] = '1'   # chỉ có dịch vụ C# thật gọi về
+        try:
+            out = self.run_code(CS_EVENT_CODE.replace('__EXE__', exe).replace('__WORK__', work))
+        finally:
+            os.environ.pop('KV_NO_FAKE', None)
+        lines = out.splitlines()
+        self.assertEqual(lines[0], "['inbox', 'outbox', 'submit']")
+        self.assertTrue(lines[1].startswith("1 [{'t': 'hand', 'on': True}]"), lines[1])
+        self.assertEqual(lines[2], '[]')
+        self.assertEqual(lines[3], "['disk']")
+        self.assertEqual(lines[-1], '0')
+
     @unittest.skipUnless(shutil.which('mcs') and shutil.which('mono'), 'cần mono (mcs) để biên dịch và chạy mã C# của dịch vụ')
     def test_real_csharp_agent_talks_to_the_python_server(self):
         """Biên dịch đúng lớp KvAgent nằm trong KhoaVeyonServices.bat (kèm bản giả của lớp dịch vụ Win32) rồi cho nó gọi vào máy chủ Agent thật."""
@@ -296,7 +360,7 @@ print(open(cfgp).read() != old, ("token=" + AG.agent_token()) in open(cfgp).read
         with open(src, 'w', encoding='utf-8') as f:
             f.write(harness + '\n' + agent_src)
         exe = os.path.join(work, 'h.exe')
-        r = subprocess.run(['mcs', '-langversion:5', '-target:exe', '-r:System.Web.Extensions.dll', '-out:' + exe, src], capture_output=True, text=True)
+        r = subprocess.run(['mcs', '-langversion:5', '-target:exe', '-r:System.Web.Extensions.dll', '-r:System.ServiceProcess.dll', '-out:' + exe, src], capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         os.environ['KV_NO_FAKE'] = '1'   # không bật dịch vụ giả: chỉ có dịch vụ C# thật gọi về
         try:

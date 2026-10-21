@@ -88,3 +88,13 @@ label.field{display:block;font-weight:600;margin:0 0 6px}
 .lockbox .btn{padding:12px;font-size:16px}
 .lockbox .lk-err{color:#b91c1c;font-size:14px;min-height:18px}
 .lockbox .lk-hint{margin:14px 0 0;color:var(--muted);font-size:13px}
+
+.seat.hand{border-color:#ea580c;box-shadow:0 0 0 3px rgba(234,88,12,.28);animation:handpulse 1.2s ease-in-out infinite}
+.seat.drawn{border-color:#7c3aed;box-shadow:0 0 0 4px rgba(124,58,237,.35);animation:handpulse 1s ease-in-out infinite}
+.drawbg{position:fixed;inset:0;background:rgba(15,23,42,.72);display:flex;align-items:center;justify-content:center;z-index:60}
+.drawbox{background:var(--card,#fff);color:var(--fg,#0f172a);border-radius:18px;padding:28px 36px;min-width:min(420px,90vw);text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.drawbox .big{font-size:40px;font-weight:800;margin:14px 0 4px;min-height:52px}
+.drawbox .big.roll{opacity:.6}
+.wallprev{width:100%;max-width:420px;aspect-ratio:16/9;border-radius:10px;border:1px solid #cbd5e1;display:block}
+.seat .tg.hnd{background:#ea580c;color:#fff}
+@keyframes handpulse{50%{box-shadow:0 0 0 6px rgba(234,88,12,.12)}}

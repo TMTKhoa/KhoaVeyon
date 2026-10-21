@@ -241,6 +241,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.ServiceProcess;
 using System.Text;
 using System.Threading;
@@ -336,6 +338,7 @@ public class KvAutoLogService : ServiceBase
     const int WTSActive = 0;
     const int STARTF_USESHOWWINDOW = 0x1;
     const short SW_HIDE = 0;
+    const short SW_SHOWNORMAL = 1;
     const int CREATE_UNICODE_ENVIRONMENT = 0x400;
     const int CREATE_NO_WINDOW = 0x08000000;
 
@@ -376,9 +379,42 @@ public class KvAutoLogService : ServiceBase
         }
     }
 
+    // Student helper (hand raise / hand in work / teacher messages): KhoaVeyonStudent.ps1 next to this script, one copy per
+    // student session. It touches tray-<session>.alive every 10s; relaunch it within ~30s when that heartbeat is stale.
+    static readonly Dictionary<int, DateTime> TrayLaunch = new Dictionary<int, DateTime>();
+    static void EnsureTray()
+    {
+        string dir = Path.GetDirectoryName(Script);
+        if (string.IsNullOrEmpty(dir)) dir = @"C:\cmd";
+        string ps1 = Path.Combine(dir, "KhoaVeyonStudent.ps1");
+        string root = KvAgent.DataRoot;
+        if (!File.Exists(ps1) || File.Exists(Path.Combine(root, "tray.off"))) return;
+        foreach (int sid in ActiveSessions())
+        {
+            try
+            {
+                string hb = Path.Combine(root, "tray-" + sid + ".alive");
+                if (File.Exists(hb) && (DateTime.Now - File.GetLastWriteTime(hb)).TotalSeconds < 40) continue;
+                lock (Gate)
+                {
+                    DateTime t;
+                    if (TrayLaunch.TryGetValue(sid, out t) && (DateTime.Now - t).TotalSeconds < 45) continue;
+                    TrayLaunch[sid] = DateTime.Now;
+                }
+                string err; IntPtr h;
+                int pid = LaunchH(sid, null, "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + ps1 + "\"", out err, out h, true);
+                if (h != IntPtr.Zero) CloseHandle(h);
+                if (pid > 0) Log("session " + sid + ": started student helper");
+                else Log("session " + sid + ": student helper not started (" + err + ")");
+            }
+            catch { }
+        }
+    }
+
     // Keep each guard command (one per line in kvguard.txt) running in every active student session.
     static void EnsureGuards()
     {
+        try { EnsureTray(); } catch { }
         string[] lines;
         try
         {
@@ -576,7 +612,7 @@ public class KvAutoLogService : ServiceBase
     }
 
     // Same as Launch but keeps the process handle (caller must CloseHandle it) so the caller can wait for the exit code.
-    static int LaunchH(int sessionId, string app, string cmdLine, out string err, out IntPtr hProc)
+    static int LaunchH(int sessionId, string app, string cmdLine, out string err, out IntPtr hProc, bool visible = false)
     {
         err = null; hProc = IntPtr.Zero;
         IntPtr token, env = IntPtr.Zero;
@@ -588,7 +624,7 @@ public class KvAutoLogService : ServiceBase
             si.cb = Marshal.SizeOf(typeof(STARTUPINFO));
             si.lpDesktop = @"winsta0\default";
             si.dwFlags = STARTF_USESHOWWINDOW;
-            si.wShowWindow = SW_HIDE;
+            si.wShowWindow = visible ? SW_SHOWNORMAL : SW_HIDE;   // a hidden start would also hide the first WinForms window of the process
             StringBuilder cmd = new StringBuilder(cmdLine);
             string cwd = Path.GetDirectoryName(Script);
             if (string.IsNullOrEmpty(cwd) || !Directory.Exists(cwd)) cwd = Environment.SystemDirectory;
@@ -648,6 +684,145 @@ public static class KvAgent
     static readonly DateTime Boot = DateTime.UtcNow;
     static bool lastOk = true;
     static DateTime lastLog = DateTime.MinValue;
+    static DateTime lastClockTry = DateTime.MinValue;
+
+    // Student side data folder (inbox: teacher -> student, outbox: student -> teacher, submit: handed-in work). Users may write there.
+    public static string DataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "KhoaVeyon");
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct SYSTEM_POWER_STATUS { public byte ACLineStatus, BatteryFlag, BatteryLifePercent, SystemStatusFlag; public uint BatteryLifeTime, BatteryFullLifeTime; }
+    [DllImport("kernel32.dll")]
+    static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS s);
+
+    static Dictionary<string, object> healthCache;
+    static DateTime healthAt = DateTime.MinValue;
+    // Small health report sent with every poll: free disk space, battery, Veyon service state (cached for a minute).
+    static Dictionary<string, object> Health()
+    {
+        if (healthCache != null && (DateTime.UtcNow - healthAt).TotalSeconds < 60) return healthCache;
+        var h = new Dictionary<string, object>();
+        try { string sd = Environment.SystemDirectory; string dr = Path.GetPathRoot(string.IsNullOrEmpty(sd) ? DataRoot : sd); var di = new DriveInfo(dr); h["disk"] = (int)(100.0 * di.AvailableFreeSpace / di.TotalSize); h["diskgb"] = (int)(di.AvailableFreeSpace / 1073741824L); } catch { }
+        try { SYSTEM_POWER_STATUS ps; if (GetSystemPowerStatus(out ps)) { h["ac"] = ps.ACLineStatus == 1; h["bat"] = ps.BatteryLifePercent <= 100 ? (int)ps.BatteryLifePercent : -1; } } catch { }
+        try { using (var sc = new ServiceController("VeyonService")) h["veyon"] = sc.Status == ServiceControllerStatus.Running; } catch { }
+        healthCache = h; healthAt = DateTime.UtcNow;
+        return h;
+    }
+
+    static void EnsureDirs()
+    {
+        foreach (string n in new string[] { "", "inbox", "outbox", "submit" })
+            Directory.CreateDirectory(string.IsNullOrEmpty(n) ? DataRoot : Path.Combine(DataRoot, n));
+        try
+        {
+            var di = new DirectoryInfo(DataRoot);
+            var sec = di.GetAccessControl();
+            sec.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null), FileSystemRights.Modify,
+                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
+            di.SetAccessControl(sec);
+        }
+        catch { }
+    }
+
+    // Events written by the student helper (outbox\*.json: hand raise, hand-in) are posted to the teacher PC within ~2 seconds.
+    static void EventLoop()
+    {
+        while (!stop)
+        {
+            try { SendEvents(); } catch { }
+            Thread.Sleep(2000);
+        }
+    }
+
+    static void SendEvents()
+    {
+        string dir = Path.Combine(DataRoot, "outbox");
+        if (token.Length < 16 || !Directory.Exists(dir)) return;
+        var evs = new List<object>();
+        var used = new List<string>();
+        foreach (string f in Directory.GetFiles(dir, "*.json"))
+        {
+            if (evs.Count >= 20) break;
+            try
+            {
+                var fi = new FileInfo(f);
+                if (fi.Length > 16384) { File.Delete(f); continue; }
+                object o = Js().DeserializeObject(File.ReadAllText(f, Encoding.UTF8));
+                if (o == null) { File.Delete(f); continue; }
+                evs.Add(o); used.Add(f);
+            }
+            catch (IOException) { }                                   // still being written: next round
+            catch { try { File.Delete(f); } catch { } }               // not valid JSON
+        }
+        if (evs.Count == 0) return;
+        List<string> list;
+        lock (urls) { list = new List<string>(urls); }
+        foreach (string u in list)
+        {
+            try
+            {
+                string nonce = NewNonce();
+                var body = new Dictionary<string, object>();
+                body["host"] = Environment.MachineName;
+                string user; KvAutoLogService.ActiveSessionsInfo(out user);
+                body["user"] = user;
+                body["events"] = evs;
+                body["nonce"] = nonce;
+                body["ts"] = Now();
+                var reply = Post(u, "/agent/event", body, 10000);
+                if (reply != null && Convert.ToString(reply["nonce"]) == nonce)
+                {
+                    foreach (string f in used) { try { File.Delete(f); } catch { } }
+                    return;
+                }
+            }
+            catch { }
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct SYSTEMTIME { public ushort Year, Month, DayOfWeek, Day, Hour, Minute, Second, Millis; }
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool SetSystemTime(ref SYSTEMTIME st);
+
+    // Self-heal a wrong clock (dead CMOS battery): the teacher PC rejects requests whose clock is off by more than 15 minutes,
+    // so after a failed poll ask the teacher PC for its time (signed reply, echoes our nonce so it cannot be replayed) and set it.
+    static void SyncClock()
+    {
+        if (stop || (DateTime.UtcNow - lastClockTry).TotalSeconds < 120) return;
+        lastClockTry = DateTime.UtcNow;
+        List<string> list;
+        lock (urls) { list = new List<string>(urls); }
+        foreach (string u in list)
+        {
+            try
+            {
+                string nonce = NewNonce();
+                var req = (HttpWebRequest)WebRequest.Create(u + "/agent/time?n=" + nonce);
+                req.Timeout = 8000; req.ReadWriteTimeout = 8000; req.Proxy = null; req.KeepAlive = false;
+                byte[] buf;
+                using (var resp = (HttpWebResponse)req.GetResponse())
+                using (Stream rs = resp.GetResponseStream())
+                using (var ms = new MemoryStream())
+                {
+                    rs.CopyTo(ms);
+                    buf = ms.ToArray();
+                    if (!SameSig(resp.Headers["X-KV-Sig"], Sign(buf))) continue;
+                }
+                var d = Js().DeserializeObject(Encoding.UTF8.GetString(buf)) as Dictionary<string, object>;
+                if (d == null || Convert.ToString(d["nonce"]) != nonce) continue;
+                double skew = Convert.ToDouble(d["ts"]) - Now();
+                if (Math.Abs(skew) < 60) return;
+                DateTime t = DateTime.UtcNow.AddSeconds(skew);
+                var st = new SYSTEMTIME();
+                st.Year = (ushort)t.Year; st.Month = (ushort)t.Month; st.Day = (ushort)t.Day; st.Hour = (ushort)t.Hour;
+                st.Minute = (ushort)t.Minute; st.Second = (ushort)t.Second; st.Millis = (ushort)t.Millisecond;
+                if (SetSystemTime(ref st)) { KvAutoLogService.AgentLog("agent: clock was off by " + (int)skew + "s, set from the teacher PC"); lastClockTry = DateTime.MinValue; }
+                else KvAutoLogService.AgentLog("agent: cannot set the clock (error " + Marshal.GetLastWin32Error() + ")");
+                return;
+            }
+            catch { }
+        }
+    }
 
     // %ProgramFiles%\KhoaVeyon\agent.cfg: "url=http://teacher-pc:8767" and "token=..." lines (written by Setup-MayHocSinh.bat).
     static string CfgFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "KhoaVeyon", "agent.cfg");
@@ -655,9 +830,13 @@ public static class KvAgent
     public static void Start()
     {
         stop = false;
+        try { EnsureDirs(); } catch { }
         worker = new Thread(Loop);
         worker.IsBackground = true;
         worker.Start();
+        var ev = new Thread(EventLoop);
+        ev.IsBackground = true;
+        ev.Start();
     }
 
     public static void Stop() { stop = true; }
@@ -784,6 +963,7 @@ public static class KvAgent
                 if (Convert.ToString(reply["nonce"]) != nonce) throw new Exception("nonce mismatch");
                 double ts = Convert.ToDouble(reply["ts"]);
                 if (Math.Abs(Now() - ts) > 900) throw new Exception("clock skew");
+                if (Math.Abs(Now() - ts) > 120) { try { SyncClock(); } catch { } }
                 bad = 0;
                 if (!lastOk) { KvAutoLogService.AgentLog("agent: connected again"); lastOk = true; }
                 object[] jobs = AsArray(reply.ContainsKey("jobs") ? reply["jobs"] : null);
@@ -811,6 +991,7 @@ public static class KvAgent
                     lastLog = DateTime.Now;
                 }
                 lastOk = false;
+                if (!stop) { try { SyncClock(); } catch { } }
                 Thread.Sleep(Math.Min(30000, 3000 + bad * 2000));
                 continue;
             }
@@ -837,6 +1018,7 @@ public static class KvAgent
         d["sessions"] = sessions;
         d["ver"] = Version;
         d["boot"] = (Boot - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
+        try { d["health"] = Health(); } catch { }
         d["nonce"] = nonce;
         d["ts"] = Now();
         return d;
