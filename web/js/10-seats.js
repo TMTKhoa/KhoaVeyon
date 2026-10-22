@@ -49,12 +49,11 @@ async function seatNames() {
 }
 
 async function seatAuto() {
-  const names = await seatNames(), lay = curLay(), seats = {}, bad = new Set(lay.broken || []);
-  const slots = [...Array(lay.cols * lay.per).keys()].map(i => i + 1).filter(n => !bad.has(n)), total = slots.length;
-  names.slice(0, total).forEach((n, i) => { seats[slots[i]] = n; });
-  if (Object.keys(lay.seats).length && !(await modal({title: 'Xếp lại từ đầu?', html: 'Chỗ ngồi hiện tại của lớp này sẽ được thay bằng thứ tự trong danh sách lớp (học sinh số 1 ngồi máy 1...), bỏ qua các máy hỏng.', ok: 'Xếp lại'}))) return;
-  if (names.length > total) toast(`Lớp có ${names.length} học sinh nhưng chỉ có ${total} máy dùng được, ${names.length - total} em chưa có chỗ`, 'warn');
-  await seatSave({seats});
+  if (Object.keys(curLay().seats).length && !(await modal({title: 'Xếp lại theo số thứ tự?', ok: 'Xếp lại', html: 'HS số 1 trong danh sách lớp ngồi Máy 1, số 2 ngồi Máy 2... Chỗ ngồi hiện tại của lớp này sẽ bị thay.'}))) return;
+  try {
+    const r = await api('/api/seat_auto', {cls: S.seatCls}); S.school = await api('/api/school'); S.stu = {}; await seatNames(); await loadAtt(); render();
+    if (r.left) toast(`Lớp có nhiều học sinh hơn số máy: ${r.left} em chưa có chỗ`, 'warn');
+  } catch (err) { toast(err.message, 'err'); }
 }
 
 async function seatPick(n) {

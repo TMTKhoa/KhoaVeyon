@@ -179,9 +179,11 @@ class HostMapTest(unittest.TestCase):
     def test_hostmap_overrides_and_validates(self):
         from kv import board, seating
         with mock.patch.dict(seating.CFG, {'hosts': ['10.0.0.5', '10.0.0.6', 'PC3'], 'host_names': {}, 'host_auto_names': {'10.0.0.5': 'PC11', '10.0.0.6': 'PC8'}}), \
-             mock.patch.dict(seating.SCHOOL, {'seat_hostmap': {}}), mock.patch.object(board, 'school_save'):
+             mock.patch.dict(seating.SCHOOL, {'seat_hostmap': {}, 'seat_by_name': True}), mock.patch.object(board, 'school_save'):
             self.assertEqual(seating.school_seat_no('10.0.0.5', {}), 11)         # chưa gán: lấy số cuối tên PC (PC11 -> 11)
-            board.api_seat_hostmap({'map': {'10.0.0.5': 8, '10.0.0.6': '11', 'PC3': ''}})
+            board.api_seat_hostmap({'map': {'10.0.0.5': 8, '10.0.0.6': '11', 'PC3': ''}, 'by_name': True})
+            self.assertEqual(seating.school_seat_no('10.0.0.5', {}), 11)         # bảng gán cũ không thắng tên PC khi bật "số vị trí = số trong tên"
+            board.api_seat_hostmap({'map': {'10.0.0.5': 8, '10.0.0.6': '11', 'PC3': ''}, 'by_name': False})
             self.assertEqual(seating.school_seat_no('10.0.0.5', {}), 8)
             self.assertEqual(seating.school_seat_no('10.0.0.6', {'pattern': 'PC{n}'}), 11)   # bảng gán thắng tên máy mẫu
             self.assertEqual(seating.school_seat_no('PC3', {}), 3)
@@ -223,3 +225,22 @@ class UiPrefsTest(unittest.TestCase):
         p = uiprefs.ui_clean({'theme': 'neon', 'accent': 'red', 'font': 9999, 'zoom': 'x', 'hidden_pages': ['viol', 'settings', 'control', '../x', 'viol'], 'brand': '<b>Lab</b>', 'tile': 'large', 'anim': 0})
         self.assertEqual((p['theme'], p['accent'], p['font'], p['zoom']), ('light', '#2563eb', 140, 100))
         self.assertEqual(p['hidden_pages'], ['viol']); self.assertNotIn('<', p['brand']); self.assertEqual(p['tile'], 'large'); self.assertFalse(p['anim'])
+
+
+class SeatAutoTest(unittest.TestCase):
+    def test_roster_order(self):
+        from kv import board
+        lay = {'cols': 2, 'per': 3, 'broken': [2], 'seats': {}}
+        with mock.patch.dict(board.SCHOOL, {'classes': {'10A': ['A', 'B', 'C', 'D', 'E', 'F']}, 'layouts': {'10A': lay}}), mock.patch.object(board, 'school_save'):
+            r = board.api_seat_auto({'cls': '10A'})
+        self.assertEqual(lay['seats'], {str(i + 1): n for i, n in enumerate('ABCDEF')}); self.assertEqual(r['left'], 0)   # đúng số thứ tự, kể cả máy hỏng
+
+
+    def test_default_seats_once(self):
+        from kv import school
+        lay = {'cols': 2, 'per': 2, 'seats': {}}
+        with mock.patch.dict(school.SCHOOL, {'classes': {'10A': ['A', 'B', 'C', 'D', 'E']}, 'layouts': {'10A': lay}, 'seats_init': []}):
+            self.assertTrue(school.ensure_default_seats())
+            self.assertEqual(lay['seats'], {'1': 'A', '2': 'B', '3': 'C', '4': 'D'})
+            lay['seats'] = {}                       # giáo viên chủ động xóa: không tự xếp lại
+            self.assertFalse(school.ensure_default_seats()); self.assertEqual(lay['seats'], {})

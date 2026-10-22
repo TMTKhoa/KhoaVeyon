@@ -7,7 +7,7 @@ import time
 
 from .alerts import ALERT_LOCK, ALERTS, hn_of
 from .runtime import ApiError, CFG, CFG_LOCK, clean_hosts, split_host_port, start_job
-from .school import _cls_norm, LAYOUT_DEFAULT, SCHOOL, SCHOOL_LOCK, school_bells, school_now, school_save
+from .school import _cls_norm, identity_seats, LAYOUT_DEFAULT, SCHOOL, SCHOOL_LOCK, school_bells, school_now, school_save
 from .seating import att_state, seat_host_map
 from .status import api_status
 from .student import ACT, HANDS, LOCK, send_message
@@ -73,7 +73,9 @@ def api_monitor(q):
             hmap = seat_host_map(lay)
             absent_by_seat = {str(k): v for k, v in (lay.get('seats') or {}).items() if v in att['absent']}
             out['lay'] = json.loads(json.dumps(lay))
-            out['seats'] = {str(no): {'host': hmap.get(no, ''), 'name': att['seats'].get(str(no), ''), 'absent': absent_by_seat.get(str(no), ''),
+            with SCHOOL_LOCK:
+                stt = {nm: i + 1 for i, nm in enumerate(SCHOOL['classes'].get(cls, []))}
+            out['seats'] = {str(no): {'host': hmap.get(no, ''), 'name': att['seats'].get(str(no), ''), 'stt': stt.get(att['seats'].get(str(no), ''), 0), 'absent': absent_by_seat.get(str(no), ''),
                                       'broken': no in set(int(x) for x in lay.get('broken') or [])} for no in range(1, int(lay['cols']) * int(lay['per']) + 1)}
             used = {s['host'] for s in out['seats'].values() if s['host']}
             out['extras'] = [h for h in hosts if h not in used]
@@ -140,6 +142,8 @@ def api_monitor_live(b):
 # ---------------------------------------------------------------- gán máy (tên PC) vào vị trí trong phòng
 def api_seat_hostmap(b):
     """Bảng máy -> số vị trí (số máy trên sơ đồ). Dùng khi tên PC không trùng số vị trí (vd. PC11 ngồi ở vị trí 8). Gửi rỗng để xóa hết."""
+    with SCHOOL_LOCK:
+        SCHOOL['seat_by_name'] = bool(b.get('by_name', True))
     raw = b.get('map')
     if not isinstance(raw, dict):
         raise ApiError('Dữ liệu không hợp lệ')
@@ -163,3 +167,20 @@ def api_seat_hostmap(b):
         SCHOOL['seat_hostmap'] = out
     school_save()
     return {'ok': True, 'map': out}
+
+
+def api_seat_auto(b):
+    """Xếp học sinh đúng số thứ tự trong danh sách lớp: HS 1 ngồi Máy 1 (PC1), HS 2 ngồi Máy 2... Ghi đè chỗ ngồi hiện tại của lớp."""
+    cls = _cls_norm(b.get('cls'))
+    with SCHOOL_LOCK:
+        names = list(SCHOOL['classes'].get(cls, []))
+        lay = SCHOOL['layouts'].get(cls)
+        if not cls or not names:
+            raise ApiError('Chọn một lớp có danh sách học sinh')
+        if not lay:
+            raise ApiError('Lớp %s chưa có sơ đồ phòng: vào trang Sơ đồ lớp học để chọn kiểu phòng trước' % cls)
+        total = int(lay.get('cols', 4)) * int(lay.get('per', 10))
+        lay['seats'] = identity_seats(names, total)
+        left = max(0, len(names) - total)
+    school_save()
+    return {'ok': True, 'placed': len(names) - left, 'left': left}

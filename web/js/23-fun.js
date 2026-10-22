@@ -9,7 +9,7 @@ function viewFun() {
   const c = funCls(), F = S.fun;
   if (F.boardCls !== c) { F.boardCls = c; F.board = null; api('/api/stars?cls=' + encodeURIComponent(c), undefined, {quiet: true}).then(r => { F.board = r.board; if (S.page === 'interact') render(); }).catch(() => {}); }
   const board = (F.board || []).length ? `<ol style="margin:6px 0 0;padding-left:22px">${F.board.slice(0, 8).map(x => `<li>${esc(x.name)} <b>${'⭐'.repeat(Math.min(x.stars, 10))}${x.stars > 10 ? ' ×' + x.stars : ''}</b></li>`).join('')}</ol>` : '<div class="muted">Chưa có em nào được sao. Ở trang Monitor, chọn máy rồi bấm “⭐ Tặng sao”.</div>';
-  const groups = F.groups ? `<div class="grpbox">${F.groups.map(g => `<div class="grp"><b>Nhóm ${g.no} (${g.names.length})</b>${g.names.map(n => `<div>${esc(n)}</div>`).join('')}</div>`).join('')}</div>` : '';
+  const groups = F.groups ? `<div class="grpbox">${F.groups.map(g => `<div class="grpcard"><b>Nhóm ${g.no} (${g.names.length})</b>${g.names.map(n => `<div>${esc(n)}</div>`).join('')}</div>`).join('')}</div>` : '';
   return `<section class="card"><h3>🎉 Vui lớp học</h3>
       <div class="row" style="flex-wrap:wrap;gap:8px;align-items:center">Lớp <select id="funCls" class="xsel" style="width:auto">${cl.map(x => `<option ${x === c ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>
         <button class="btn" data-fun="timer">⏱ Đếm ngược cả lớp</button><button class="btn ghost" data-fun="timerstop">Dừng đếm ngược</button></div>

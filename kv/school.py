@@ -20,7 +20,7 @@ SCHOOL_DAYS = ['THỨ HAI', 'THỨ BA', 'THỨ TƯ', 'THỨ NĂM', 'THỨ SÁU',
 SCHOOL_DAY_SHORT = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
 SCHOOL = {'classes': {}, 'layouts': {}, 'slots': [], 'from': '', 'auto': True, 'override': None, 'manual': '',
           'classes_file': '', 'classes_at': '', 'timetable_file': '', 'timetable_at': '', 'teacher': '', 'subject': '',
-          'bells': {}, 'wall_presets': {}, 'seat_hostmap': {}, 'stars': {}, 'wall_follow': None, 'lock_style': None, 'hand_enabled': True, 'act_enabled': True, 'attendance': {}, 'attend_notify': True, 'auto_announce': False, 'kq_game_absent': True, 'automation': None}
+          'bells': {}, 'wall_presets': {}, 'seat_hostmap': {}, 'seat_by_name': True, 'seats_init': [], 'stars': {}, 'wall_follow': None, 'lock_style': None, 'hand_enabled': True, 'act_enabled': True, 'attendance': {}, 'attend_notify': True, 'auto_announce': False, 'kq_game_absent': True, 'automation': None}
 
 
 def school_path():
@@ -343,6 +343,29 @@ def school_class_at(ts):
     """Tên lớp tại thời điểm ts, dùng để ghi vào mỗi vi phạm (rỗng nếu không biết)."""
     c = school_now(ts)['current']
     return (c or {}).get('cls', '')
+
+
+def identity_seats(names, total):
+    """HS số k trong danh sách lớp ngồi Máy k (đúng số thứ tự, không bỏ qua máy hỏng: máy hỏng thì em đó được chuyển chỗ khi điểm danh)."""
+    return {str(i + 1): n for i, n in enumerate(names[:total])}
+
+
+def ensure_default_seats():
+    """Lớp có sơ đồ phòng mà chưa từng xếp chỗ thì tự xếp theo số thứ tự (HS 1 -> Máy 1). Mỗi lớp chỉ tự xếp một lần, sau đó giáo viên đổi chỗ thoải mái."""
+    changed = False
+    with SCHOOL_LOCK:
+        done = set(SCHOOL.setdefault('seats_init', []))
+        for cls, lay in (SCHOOL.get('layouts') or {}).items():
+            if cls in done:
+                continue
+            names = SCHOOL['classes'].get(cls) or []
+            if not names:
+                continue
+            if not lay.get('seats'):
+                lay['seats'] = identity_seats(names, int(lay.get('cols', 4)) * int(lay.get('per', 10)))
+            done.add(cls); changed = True
+        SCHOOL['seats_init'] = sorted(done)
+    return changed
 
 
 LAYOUT_DEFAULT = {'cols': 4, 'per': 10, 'from': 'teacher', 'first': 'left', 'pattern': '', 'seats': {}, 'broken': [], 'gv': 'center', 'door': 'back', 'flipv': False, 'fliph': False}

@@ -10,7 +10,7 @@ from .meta import VEYON_PORT
 from .network import tcp_open
 from .paths import load_script
 from .runtime import CFG, CFG_LOCK
-from .school import _cls_norm, SCHOOL, SCHOOL_LOCK
+from .school import _cls_norm, ensure_default_seats, SCHOOL, SCHOOL_LOCK, school_save
 
 
 def _short(h):
@@ -36,16 +36,25 @@ def _host_names(host):
 
 
 def school_seat_no(host, lay):
-    """Số máy (số chỗ ngồi) của một tên máy. Thứ tự ưu tiên: bảng "Gán máy vào vị trí" giáo viên đã lập (vị trí vật lý của máy trong phòng,
-    dùng chung mọi lớp), tên máy mẫu (MAY{n}), số ở cuối tên máy (PC3 là vị trí 3), cuối cùng là thứ tự trong danh sách máy."""
+    """Số máy (số chỗ ngồi) của một tên máy. Máy cố định theo vị trí, chỉ học sinh đổi chỗ.
+    Mặc định (seat_by_name bật): số ở cuối tên PC là số vị trí (PC1 ở vị trí 1, PC07 ở vị trí 7).
+    Thứ tự: tên máy mẫu (MAY{n}) nếu khớp, số cuối tên PC, bảng "Gán máy vào vị trí" cho máy tên không có số, rồi thứ tự danh sách.
+    Tắt seat_by_name thì bảng gán đứng đầu."""
     names = _host_names(host)
     with SCHOOL_LOCK:
         hm = dict(SCHOOL.get('seat_hostmap') or {})
-    if hm:
-        low = {str(k).strip().lower(): v for k, v in hm.items()}
+        by_name = bool(SCHOOL.get('seat_by_name', True))
+    low = {str(k).strip().lower(): v for k, v in hm.items()}
+
+    def from_map():
         for cand in names:
             if cand in low:
                 return int(low[cand])
+        return 0
+    if not by_name:
+        n = from_map()
+        if n:
+            return n
     pat = (lay.get('pattern') or '').strip().lower()
     if pat and '{n}' in pat:
         pre, post = pat.split('{n}', 1)
@@ -53,12 +62,17 @@ def school_seat_no(host, lay):
             m = re.fullmatch(re.escape(pre) + r'0*(\d+)' + re.escape(post), cand)
             if m:
                 return int(m.group(1))
-        return 0
-    for cand in names:   # PC máy cố định theo vị trí: PC1 luôn ở vị trí 1, PC12 ở vị trí 12 (chỉ học sinh đổi chỗ, máy thì không)
-        if not re.fullmatch(r'[\d.:]+', cand):
-            m = re.search(r'(\d+)$', cand)
-            if m and int(m.group(1)) > 0:
-                return int(m.group(1))
+        if not by_name:
+            return 0
+    if by_name:
+        for cand in names:
+            if not re.fullmatch(r'[\d.:]+', cand):
+                m = re.search(r'(\d+)$', cand)
+                if m and int(m.group(1)) > 0:
+                    return int(m.group(1))
+        n = from_map()
+        if n:
+            return n
     with CFG_LOCK:
         hosts = [str(x).strip().lower() for x in CFG.get('hosts') or []]
     for cand in names:
@@ -204,6 +218,8 @@ def att_today():
 def att_state(cls):
     """Điểm danh hôm nay của một lớp, kèm chỗ ngồi thực tế."""
     cls = _cls_norm(cls)
+    if ensure_default_seats():
+        school_save()
     with SCHOOL_LOCK:
         e = (SCHOOL['attendance'].get('%s|%s' % (att_today(), cls)) or {})
         lay = SCHOOL['layouts'].get(cls) or {}

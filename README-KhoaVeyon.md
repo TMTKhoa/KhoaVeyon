@@ -241,6 +241,22 @@ Thao tác nào quá 0,7 giây chưa xong (quét mạng, hỏi Veyon, kết nối
 
 - **PC cố định theo vị trí**: mặc định số cuối tên PC là số vị trí (PC1 luôn ở vị trí 1, PC12 ở vị trí 12). Chỉ học sinh đổi chỗ, máy không đổi. Thứ tự ưu tiên: bảng "Gán máy vào vị trí" (nếu có), Tên máy mẫu, số cuối tên PC, thứ tự danh sách. Máy thêm bằng IP dùng tên PC tự dò được; chưa dò được tên thì tạm theo thứ tự danh sách.
 
+## Bản 4.9.4
+
+- **Học sinh số thứ tự k ngồi Máy k (PC k) theo đúng số thứ tự**: lớp có sơ đồ phòng mà chưa từng xếp chỗ thì tự xếp như vậy (một lần, sau đó đổi chỗ thoải mái). Nút "Xếp HS k → Máy k" ở Monitor và "Tự xếp theo danh sách" ở trang Sơ đồ lớp học nay xếp đúng số thứ tự, không bỏ qua máy hỏng (máy hỏng thì em đó được chuyển chỗ khi điểm danh).
+
+## Bản 4.9.3
+
+- **HS k → Máy k → PC k**: nút "🪑 Xếp HS k → Máy k" ở trang Monitor xếp học sinh theo đúng thứ tự danh sách lớp (HS 1 ngồi Máy 1, bỏ qua máy hỏng); cùng với quy tắc PC1 ở vị trí 1, ô máy ở Monitor hiện "HS số · tên", số máy và tên PC.
+
+## Bản 4.9.2
+
+- Sửa lỗi hiển thị: tiêu đề nhóm trong menu ("DANH SÁCH", "HỆ THỐNG") hiện khung trắng do trùng tên lớp CSS với khung nhóm của tính năng chia nhóm.
+
+## Bản 4.9.1
+
+- Sửa vị trí máy trên sơ đồ vẫn lệch: bảng "Gán máy vào vị trí" lập trước đó (hoặc điền theo thứ tự danh sách) đang thắng tên PC. Nay mặc định **số vị trí = số cuối tên PC** (PC1 ở vị trí 1, PC07 ở vị trí 7) và bảng gán chỉ dùng cho máy có tên không có số; công tắc ở đầu hộp thoại "🔗 Gán máy vào vị trí" cho tắt nếu muốn bảng gán thắng.
+
 ## Bản 4.9.0 - Tùy chỉnh giao diện
 
 Trang Cài đặt có thẻ "🎨 Giao diện" (đổi ngay, tự lưu, đi theo file sao lưu): chế độ sáng / tối / theo hệ thống (có nút 🌓 nhanh ở thanh bên), màu chủ đạo (8 màu mẫu hoặc tự chọn), màu thanh bên, bo góc, cỡ chữ, thu phóng toàn giao diện, thu gọn menu, hiển thị gọn, tắt hiệu ứng, đổi tên hiển thị góc trên trái, cỡ ô máy ở Monitor, ẩn các trang ít dùng khỏi menu.

@@ -8,6 +8,7 @@ from .announce import job_announce
 from .runtime import ApiError, log, start_job
 from .templates import bell_set, bell_sets_info
 from .school import (
+    ensure_default_seats,
     _cls_norm, _hhmm, layout_clean, school_bells, parse_classes_json, parse_classes_xlsx, parse_timetable_xlsx, SCHOOL, SCHOOL_LOCK,
     SCHOOL_MANUAL_MIN, school_now, school_save,
 )
@@ -38,12 +39,15 @@ def school_brief():
 
 
 def api_school(_q=None):
+    if ensure_default_seats():
+        school_save()
     with SCHOOL_LOCK:
         d = {k: SCHOOL[k] for k in ('slots', 'from', 'auto', 'manual', 'classes_file', 'classes_at', 'timetable_file',
                                    'timetable_at', 'teacher', 'subject', 'attend_notify', 'auto_announce')}
         d['classes'] = [{'name': n, 'count': len(v)} for n, v in sorted(SCHOOL['classes'].items())]
         d['layouts'] = json.loads(json.dumps(SCHOOL['layouts']))
         d['seat_hostmap'] = dict(SCHOOL.get('seat_hostmap') or {})
+        d['seat_by_name'] = bool(SCHOOL.get('seat_by_name', True))
         d['bells'] = {str(n): list(v) for n, v in school_bells().items()}
         d['bell_sets'] = bell_sets_info()
         known = set(SCHOOL['classes'])
