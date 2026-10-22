@@ -57,6 +57,7 @@ function viewInteract() {
       <label class="switch" style="margin-bottom:8px"><input type="checkbox" data-ev="handopt" ${I.hand_enabled === false ? '' : 'checked'}><span class="tr"></span><span>Cho phép học sinh giơ tay (tắt thì nút “Giơ tay” biến mất trên máy học sinh, chỉ còn “Nộp bài”)</span></label>${hands}</section>
     <section class="card"><h3>Nhắn tin và khóa màn hình</h3>
       <p class="sub">Gửi tới các máy đang chọn (không chọn = tất cả). Tin nhắn hiện giữa màn hình học sinh. “Khóa màn hình” phủ kín màn hình kèm lời nhắn cho đến khi bạn bấm “Mở màn hình”; đây là khóa mềm (học sinh có thể tắt bằng Task Manager), cần khóa chắc thì dùng thêm “Khóa toàn bộ” ở trang Điều khiển.</p>
+      ${quickChips('#ixText')}
       <textarea id="ixText" rows="3" style="width:100%;box-sizing:border-box" placeholder="Nội dung, ví dụ: Còn 5 phút, các em lưu bài lại.">${esc(S.ixText || '')}</textarea>
       <div class="row" style="flex-wrap:wrap;margin-top:8px">
         <label class="muted">Tự tắt sau <select id="ixSec" class="xsel"><option value="0">khi học sinh bấm Đã hiểu</option><option value="10">10 giây</option><option value="30">30 giây</option><option value="60">1 phút</option></select></label>
@@ -68,6 +69,7 @@ function viewInteract() {
       </div></section>
     ${viewEngage()}
     ${viewFun()}
+    ${viewClassroom()}
     <section class="card"><h3>📥 Bài nộp</h3>
       <p class="sub">Học sinh bấm nút nổi → Nộp tệp / Nộp thư mục. Bài được chép về máy giáo viên, xếp theo ngày, lớp và tên học sinh.</p>${subs}
       <div class="row" style="margin-top:8px"><button class="btn" data-act="openfolder" data-what="submissions">📂 Mở thư mục bài nộp</button></div></section>

@@ -1,0 +1,48 @@
+{
+ "classes": {
+  "10A": [
+   "An",
+   "Binh"
+  ]
+ },
+ "layouts": {
+  "10A": {
+   "cols": 2,
+   "per": 2,
+   "seats": {
+    "1": "An",
+    "2": "Binh"
+   },
+   "pattern": "MAY{n}"
+  }
+ },
+ "slots": [],
+ "from": "",
+ "auto": true,
+ "override": null,
+ "manual": "",
+ "classes_file": "",
+ "classes_at": "",
+ "timetable_file": "",
+ "timetable_at": "",
+ "teacher": "",
+ "subject": "",
+ "bells": {},
+ "wall_presets": {},
+ "seat_hostmap": {},
+ "seat_by_name": true,
+ "seats_init": [
+  "10A"
+ ],
+ "quick_notes": null,
+ "stars": {},
+ "wall_follow": null,
+ "lock_style": null,
+ "hand_enabled": true,
+ "act_enabled": true,
+ "attendance": {},
+ "attend_notify": true,
+ "auto_announce": false,
+ "kq_game_absent": true,
+ "automation": null
+}

@@ -244,3 +244,55 @@ class SeatAutoTest(unittest.TestCase):
             self.assertEqual(lay['seats'], {'1': 'A', '2': 'B', '3': 'C', '4': 'D'})
             lay['seats'] = {}                       # giáo viên chủ động xóa: không tự xếp lại
             self.assertFalse(school.ensure_default_seats()); self.assertEqual(lay['seats'], {})
+
+
+class QuickNotesTest(unittest.TestCase):
+    def test_quick(self):
+        from kv import fun
+        with mock.patch.dict(fun.SCHOOL, {'quick_notes': None}), mock.patch.object(fun, 'school_save'):
+            d = fun.api_quick_notes(); self.assertFalse(d['custom']); self.assertGreaterEqual(len(d['items']), 8)
+            r = fun.api_quick_notes_save({'items': [{'icon': '🎒', 'label': 'Về', 'text': 'Được về'}, {'label': '', 'text': 'x'}, 'bad']})
+            self.assertEqual(r['items'], [{'icon': '🎒', 'label': 'Về', 'text': 'Được về'}]); self.assertTrue(r['custom'])
+            self.assertFalse(fun.api_quick_notes_save({'items': []})['custom'])
+
+
+class ClassroomTest(unittest.TestCase):
+    def setUp(self):
+        from kv import classroom
+        self.c = classroom
+        self.c.QUIZ.clear()
+        self.sent = []
+        mock.patch.object(classroom, 'start_job', lambda f, *a: self.sent.append(a)).start()
+        mock.patch.object(classroom, 'log').start()
+        mock.patch.object(classroom, 'who', lambda h, c='': ('HS ' + h, c, 1)).start()
+
+    def tearDown(self):
+        mock.patch.stopall()
+
+    def test_quiz_flow(self):
+        with mock.patch.object(self.c, 'clean_hosts', lambda h: list(h)):
+            self.assertRaises(ApiError, self.c.api_quiz_start, {'hosts': ['a'], 'q': 'x', 'opts': ['1']})
+            st = self.c.api_quiz_start({'hosts': ['a', 'b', 'c'], 'q': 'Hỏi?', 'opts': ['x', 'y', '', 'z'], 'correct': 1, 'secs': 30, 'cls': '10A'})
+            self.assertEqual(st['opts'], ['x', 'y', 'z']); self.assertEqual(st['total'], 3)
+            qid = st['id']
+            self.c.quiz_answer('a', qid, 1); self.c.quiz_answer('b', qid, 0); self.c.quiz_answer('b', qid, 2)
+            self.c.quiz_answer('zz', qid, 0); self.c.quiz_answer('c', 'sai', 0); self.c.quiz_answer('c', qid, 9)
+            st = self.c.api_quiz_state()
+            self.assertEqual(st['counts'], [0, 1, 1]); self.assertEqual(st['answered'], 2); self.assertEqual(st['pending'], ['HS c (máy 1)'])
+            st = self.c.api_quiz_end({'reveal': True}); self.assertTrue(st['closed'])
+            self.c.quiz_answer('c', qid, 0); self.assertEqual(self.c.api_quiz_state()['answered'], 2)
+
+    def test_open_url(self):
+        with mock.patch.object(self.c, 'clean_hosts', lambda h: list(h)):
+            self.assertRaises(ApiError, self.c.api_open_url, {'hosts': ['a'], 'url': 'javascript:alert(1)'})
+            self.assertRaises(ApiError, self.c.api_open_url, {'hosts': ['a'], 'url': 'file:///c:/x'})
+            self.assertTrue(self.c.api_open_url({'hosts': ['a'], 'url': 'https://example.com/a?b=1'})['ok'])
+
+    def test_handout_validation(self):
+        b64 = lambda d: base64.b64encode(d).decode()
+        with mock.patch.object(self.c, 'clean_hosts', lambda h: list(h)), tempfile.TemporaryDirectory() as td, mock.patch.object(self.c, 'handouts_root', lambda: td):
+            self.assertRaises(ApiError, self.c.api_handout_send, {'hosts': ['a'], 'files': [{'name': 'x.exe', 'data': b64(b'1')}]})
+            self.assertRaises(ApiError, self.c.api_handout_send, {'hosts': ['a'], 'files': [{'name': 'a.txt', 'data': ''}]})
+            r = self.c.api_handout_send({'hosts': ['a'], 'files': [{'name': '..\\..\\bai 1.pdf', 'data': b64(b'pdf')}]})
+            self.assertEqual(r['files'], ['bai 1.pdf'])
+            self.assertEqual(self.c.safe_name('a/b:c?.txt'), 'b_c_.txt')

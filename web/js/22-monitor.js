@@ -140,8 +140,9 @@ document.addEventListener('click', async e => {
     else if (a === 'selnone') monSelect(() => false);
     else if (a === 'act') await runAction(el.dataset.k);
     else if (a === 'lockscr' || a === 'msg') {
+      if (!S.qn) await loadQuick();
       const text = await modal({title: a === 'msg' ? 'Gửi tin nhắn' : 'Khóa màn hình kèm lời nhắn', ok: a === 'msg' ? 'Gửi' : 'Khóa', danger: a !== 'msg',
-        html: '<textarea id="monTxt" rows="3" style="width:100%;box-sizing:border-box" placeholder="Nội dung hiện giữa màn hình học sinh"></textarea>', collect: r => r.querySelector('#monTxt').value.trim()});
+        html: quickChips('#monTxt') + '<textarea id="monTxt" rows="3" style="width:100%;box-sizing:border-box" placeholder="Nội dung hiện giữa màn hình học sinh"></textarea>', collect: r => r.querySelector('#monTxt').value.trim()});
       if (!text) return;
       const hs = await resolveTargets(); if (!hs) return;
       await api('/api/student_send', {kind: a === 'msg' ? 'msg' : 'block', hosts: hs, text, cls: S.mon.cls, seconds: a === 'msg' ? 0 : 0}); openLog(); toast('Đã gửi tới ' + hs.length + ' máy', 'ok');

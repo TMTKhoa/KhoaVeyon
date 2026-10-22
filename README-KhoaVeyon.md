@@ -241,6 +241,10 @@ Thao tác nào quá 0,7 giây chưa xong (quét mạng, hỏi Veyon, kết nối
 
 - **PC cố định theo vị trí**: mặc định số cuối tên PC là số vị trí (PC1 luôn ở vị trí 1, PC12 ở vị trí 12). Chỉ học sinh đổi chỗ, máy không đổi. Thứ tự ưu tiên: bảng "Gán máy vào vị trí" (nếu có), Tên máy mẫu, số cuối tên PC, thứ tự danh sách. Máy thêm bằng IP dùng tên PC tự dò được; chưa dò được tên thì tạm theo thứ tự danh sách.
 
+## Bản 4.10.0
+
+- **Thông báo nhanh**: hàng nút mẫu lời nhắn (Lớp ổn định, Nhìn lên bảng, Còn 5 phút, Lưu bài, Nộp bài, Dọn dẹp, Tắt máy, Được phép ra về, Cần hỗ trợ, Cảm ơn cả lớp) trên trang Tương tác và trong hộp Nhắn tin / Khóa màn hình ở Monitor. Bấm mẫu để điền lời nhắn rồi gửi thành thông báo hoặc hiện trên màn hình khóa; nút "Sửa mẫu" để thêm, sửa, xóa mẫu riêng.
+
 ## Bản 4.9.4
 
 - **Học sinh số thứ tự k ngồi Máy k (PC k) theo đúng số thứ tự**: lớp có sơ đồ phòng mà chưa từng xếp chỗ thì tự xếp như vậy (một lần, sau đó đổi chỗ thoải mái). Nút "Xếp HS k → Máy k" ở Monitor và "Tự xếp theo danh sách" ở trang Sơ đồ lớp học nay xếp đúng số thứ tự, không bỏ qua máy hỏng (máy hỏng thì em đó được chuyển chỗ khi điểm danh).
@@ -527,6 +531,10 @@ Mục **Nâng cao** sao chép sẵn dòng lệnh dạng `cmd.exe /c C:\cmd\KhoaV
 - Dùng SID thay cho tên nhóm nên chạy đúng trên Windows tiếng Việt.
 - Chỉ có tác dụng khi học sinh đăng nhập bằng tài khoản người dùng thường. Veyon File transfer ghi file bằng tài khoản học sinh nên không ghi đè được vào thư mục đã khóa. Hãy cập nhật file bằng KhoaVeyon.
 - Chưa thử trên Windows thật. Sau khi khóa một máy, hãy thử `-lockall-start` rồi `-lockall-stop` và kiểm tra thư mục `log` vẫn có file mới.
+
+### Câu đố nhanh, phát tài liệu, mở trang web (bản 4.11.0)
+Trang **Tương tác → ❓ Câu đố nhanh**: nhập câu hỏi, 2–4 đáp án (tùy chọn chấm đáp án đúng, đặt thời gian), bấm Gửi. Máy học sinh hiện hộp chọn đáp án (đổi được đến khi hết giờ). Giáo viên xem biểu đồ cột trực tiếp, danh sách em chưa trả lời; bấm "Kết thúc và công bố đáp án" để từng máy hiện đúng/sai.
+**Phát tệp**: chọn tệp (tối đa 10 tệp, 12 MB/tệp, 30 MB/lần; không nhận .exe/.bat/.ps1...), tệp được chép vào thư mục trên màn hình nền học sinh và mở thư mục. **Mở trang web**: dán địa chỉ http/https rồi bấm mở trên các máy đang chọn. Cần dịch vụ KhoaVeyonAutoLog và Agent; phần PowerShell chưa thử trên Windows thật.
 
 ### Cài đặt
 

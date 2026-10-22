@@ -59,3 +59,26 @@ document.addEventListener('click', async e => {
     }
   } catch (err) { toast(err.message, 'err'); }
 });
+
+
+/* ---------- Thông báo nhanh: bấm một mẫu để điền vào ô lời nhắn (tin nhắn hoặc màn hình khóa) ---------- */
+S.qn = null; S.qnNow = false;
+async function loadQuick() { try { S.qn = (await api('/api/quick_notes', undefined, {quiet: true})).items; } catch (e) { S.qn = S.qn || []; } }
+function quickChips(target) {
+  if (!S.qn) { loadQuick().then(() => { if (S.page === 'interact' && target === '#ixText') render(); }); return ''; }
+  return `<div class="qchips">${S.qn.map((q, i) => `<button class="btn sm ghost" data-qn="${i}" data-to="${target}" title="${esc(q.text)}">${esc(q.icon)} ${esc(q.label)}</button>`).join('')}<button class="btn sm ghost" data-qn="edit" title="Thêm, sửa, xóa mẫu">✏ Sửa mẫu</button></div>`;
+}
+async function quickEdit() {
+  const lines = (S.qn || []).map(q => `${q.icon} | ${q.label} | ${q.text}`).join('\n');
+  const v = await modal({title: '✏ Sửa thông báo nhanh', ok: 'Lưu', html: `<p class="muted" style="margin-top:0">Mỗi dòng một mẫu: <b>biểu tượng | tên ngắn | nội dung</b>. Xóa hết các dòng để về mẫu mặc định.</p><textarea id="qnText" rows="12" style="width:100%;box-sizing:border-box;font-size:13px">${esc(lines)}</textarea>`, collect: r => r.querySelector('#qnText').value});
+  if (v === null) return;
+  const items = v.split('\n').map(l => l.split('|').map(x => x.trim())).filter(p => p.length >= 3 || (p.length === 2 && p[0] && p[1])).map(p => p.length >= 3 ? {icon: p[0], label: p[1], text: p.slice(2).join(' | ')} : {icon: '💬', label: p[0], text: p[1]});
+  S.qn = (await api('/api/quick_notes_save', {items})).items; render();
+}
+document.addEventListener('click', async e => {
+  const el = e.target.closest('[data-qn]'); if (!el) return;
+  e.preventDefault();
+  if (el.dataset.qn === 'edit') { try { await quickEdit(); } catch (err) { toast(err.message, 'err'); } return; }
+  const q = (S.qn || [])[+el.dataset.qn], t = $(el.dataset.to); if (!q || !t) return;
+  t.value = q.text; t.focus(); S.ixText = el.dataset.to === '#ixText' ? q.text : S.ixText;
+});

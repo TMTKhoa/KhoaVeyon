@@ -77,6 +77,107 @@ try {
         $f.Activate()
     }
 
+    # ---------- câu đố nhanh ----------
+    $script:quizForm = $null; $script:quizId = ''; $script:quizTimer = $null
+    function Close-Quiz {
+        if ($script:quizTimer) { try { $script:quizTimer.Stop(); $script:quizTimer.Dispose() } catch {}; $script:quizTimer = $null }
+        if ($script:quizForm) { try { $script:quizForm.Close() } catch {}; $script:quizForm = $null }
+    }
+    function Show-Quiz($msg) {
+        Close-Quiz
+        $script:quizId = [string]$msg.id
+        $opts = @($msg.opts)
+        $f = New-Object System.Windows.Forms.Form
+        $f.Text = 'Câu đố nhanh'
+        $f.TopMost = $true; $f.StartPosition = 'CenterScreen'; $f.FormBorderStyle = 'FixedDialog'
+        $f.MinimizeBox = $false; $f.MaximizeBox = $false; $f.ControlBox = $false
+        $f.BackColor = [System.Drawing.Color]::White
+        $h = 120 + 56 * $opts.Count + 40
+        $f.ClientSize = New-Object System.Drawing.Size(600, $h)
+        $lq = New-Object System.Windows.Forms.Label
+        $lq.Text = [string]$msg.q
+        $lq.Font = New-Object System.Drawing.Font('Segoe UI', 15, [System.Drawing.FontStyle]::Bold)
+        $lq.ForeColor = [System.Drawing.Color]::FromArgb(30, 64, 175)
+        $lq.SetBounds(20, 14, 560, 96)
+        $f.Controls.Add($lq)
+        $ls = New-Object System.Windows.Forms.Label
+        $ls.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+        $ls.ForeColor = [System.Drawing.Color]::FromArgb(100, 100, 100)
+        $ls.SetBounds(20, ($h - 36), 560, 26)
+        $f.Controls.Add($ls)
+        $btns = @()
+        for ($i = 0; $i -lt $opts.Count; $i++) {
+            $b = New-Object System.Windows.Forms.Button
+            $b.Text = ([string][char](65 + $i)) + '.  ' + [string]$opts[$i]
+            $b.Font = New-Object System.Drawing.Font('Segoe UI', 13)
+            $b.TextAlign = 'MiddleLeft'
+            $b.FlatStyle = 'Flat'
+            $b.BackColor = [System.Drawing.Color]::FromArgb(239, 246, 255)
+            $b.SetBounds(20, (116 + 56 * $i), 560, 48)
+            $b.Tag = $i
+            $b.Add_Click({ param($s, $e)
+                $idx = [int]$s.Tag
+                Send-Event @{ t = 'quiz'; id = $script:quizId; a = $idx }
+                foreach ($x in $script:quizBtns) { $x.BackColor = [System.Drawing.Color]::FromArgb(239, 246, 255) }
+                $s.BackColor = [System.Drawing.Color]::FromArgb(187, 247, 208)
+                $script:quizLbl.Text = 'Đã gửi đáp án. Bạn có thể đổi đáp án đến khi hết giờ.'
+            })
+            $f.Controls.Add($b); $btns += $b
+        }
+        $script:quizBtns = $btns; $script:quizLbl = $ls
+        $secs = [int]$msg.secs
+        if ($secs -gt 0) {
+            $script:quizEnd = [DateTime]::Now.AddSeconds($secs)
+            $script:quizTimer = New-Object System.Windows.Forms.Timer
+            $script:quizTimer.Interval = 500
+            $script:quizTimer.Add_Tick({
+                $left = [int][Math]::Ceiling(($script:quizEnd - [DateTime]::Now).TotalSeconds)
+                if ($left -le 0) { Close-Quiz } else { if ($script:quizLbl.Text -notlike 'Đã gửi*') { $script:quizLbl.Text = 'Còn ' + $left + ' giây' } }
+            })
+            $script:quizTimer.Start()
+        } else { $ls.Text = 'Chọn một đáp án' }
+        $script:quizForm = $f
+        try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
+        $f.Show(); $f.Activate()
+    }
+    function End-Quiz($msg) {
+        if ([string]$msg.id -ne $script:quizId) { return }
+        Close-Quiz
+        if ($msg.reveal -eq $true -and [int]$msg.correct -ge 0) {
+            $mine = [int]$msg.mine
+            if ($mine -lt 0) { Show-Message 'Kết quả câu đố' ('Đáp án đúng: ' + [string][char](65 + [int]$msg.correct)) 8 }
+            elseif ($mine -eq [int]$msg.correct) { Show-Message 'Chính xác!' ('Đáp án ' + [string][char](65 + $mine) + ' là đúng.') 6 }
+            else { Show-Message 'Chưa đúng' ('Đáp án đúng là ' + [string][char](65 + [int]$msg.correct) + '.') 8 }
+        }
+    }
+
+    # ---------- mở trang web / nhận tài liệu ----------
+    function Open-Url($msg) {
+        $u = [string]$msg.url
+        if ($u -notmatch '^https?://[^\s<>"'']{3,500}$') { return }
+        Start-Process $u
+    }
+    function Receive-Handout($msg) {
+        $id = [string]$msg.id
+        if ($id -notmatch '^[0-9a-f]{10,24}$') { return }
+        $src = Join-Path (Join-Path $Root 'handout') $id
+        if (-not (Test-Path -LiteralPath $src)) { return }
+        $label = ([string]$msg.label) -replace '[\\/:*?"<>|]', ' '
+        if (-not $label.Trim()) { $label = 'Tai lieu cua thay co' }
+        $dst = Join-Path ([Environment]::GetFolderPath('Desktop')) $label.Trim()
+        if (-not (Test-Path -LiteralPath $dst)) { New-Item -ItemType Directory -Path $dst -Force | Out-Null }
+        $first = $null
+        foreach ($n in @($msg.files)) {
+            $n = [System.IO.Path]::GetFileName([string]$n)
+            if (-not $n) { continue }
+            $p = Join-Path $src $n
+            if (Test-Path -LiteralPath $p) { Copy-Item -LiteralPath $p -Destination (Join-Path $dst $n) -Force; if (-not $first) { $first = Join-Path $dst $n } }
+        }
+        Show-Message 'Giáo viên gửi tài liệu' ('Đã chép vào thư mục "' + $label.Trim() + '" trên màn hình nền.') 8
+        if ($msg.open -eq 'first' -and $first) { Start-Process -FilePath $first }
+        elseif ($msg.open -ne 'none') { Start-Process -FilePath 'explorer.exe' -ArgumentList ('"' + $dst + '"') }
+    }
+
     # ---------- khóa màn hình kèm lời nhắn (mềm: chỉ che màn hình, giáo viên gửi lệnh mở để tắt) ----------
     function Show-Block($msg) {
         Close-Block
@@ -498,6 +599,10 @@ try {
                     'wallpaper' { if ($msg.restore -eq $true) { Restore-Wallpaper } else { Show-Wallpaper $msg } }
                     'timer'    { if ($msg.cancel -eq $true) { Stop-Timer } else { Start-Timer ([int]$msg.secs) ([string]$msg.label) } }
                     'reactclear' { Set-React '' }
+                    'quiz'     { Show-Quiz $msg }
+                    'quizend'  { End-Quiz $msg }
+                    'open'     { Open-Url $msg }
+                    'handout'  { Receive-Handout $msg }
                     'handclear' { $script:raised = $false; Update-Pill }
                     'collect'  { Show-Message 'Giáo viên yêu cầu nộp bài' ([string]$msg.text) 0; Submit-Files }
                 }

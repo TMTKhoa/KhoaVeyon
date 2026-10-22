@@ -84,6 +84,13 @@ def handle_events(ip, d):
         if not isinstance(ev, dict):
             continue
         t = ev.get('t')
+        if t == 'quiz':
+            from .classroom import quiz_answer
+            try:
+                quiz_answer(host, str(ev.get('id') or ''), int(ev.get('a')))
+            except (TypeError, ValueError):
+                pass
+            continue
         if t == 'react':
             from .fun import react_put
             react_put(host, str(ev.get('v') or ''))

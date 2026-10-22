@@ -134,3 +134,44 @@ def api_react_clear(b):
     if hosts:
         start_job(send_message, hosts, {'type': 'reactclear'})
     return {'ok': True}
+
+
+# ---------------------------------------------------------------- thông báo nhanh (mẫu lời nhắn cho tin nhắn và màn hình khóa)
+QUICK_DEFAULT = [
+    ('🤫', 'Lớp ổn định', 'Cả lớp giữ trật tự và ổn định chỗ ngồi.'),
+    ('👀', 'Nhìn lên bảng', 'Các em tạm dừng và nhìn lên bảng.'),
+    ('⏳', 'Còn 5 phút', 'Còn 5 phút nữa. Các em hoàn thành và lưu bài.'),
+    ('💾', 'Lưu bài', 'Các em lưu bài làm lại ngay bây giờ.'),
+    ('📤', 'Nộp bài', 'Các em nộp bài theo hướng dẫn của thầy/cô.'),
+    ('🧹', 'Dọn dẹp', 'Các em sắp xếp ghế, dọn rác và để chỗ ngồi gọn gàng.'),
+    ('🔌', 'Tắt máy', 'Các em đóng ứng dụng và tắt máy đúng cách (Start, Shut down).'),
+    ('🎒', 'Được phép ra về', 'Các em được phép ra về. Nhớ tắt máy và dọn chỗ ngồi gọn gàng.'),
+    ('🙋', 'Cần hỗ trợ', 'Em nào cần hỗ trợ xin giơ tay, thầy/cô sẽ đến.'),
+    ('👏', 'Cảm ơn cả lớp', 'Cảm ơn cả lớp. Buổi học hôm nay rất tốt!'),
+]
+
+
+def quick_clean(raw):
+    out = []
+    for x in (raw if isinstance(raw, list) else [])[:20]:
+        if not isinstance(x, dict):
+            continue
+        ic, lb, tx = (str(x.get(k) or '').strip() for k in ('icon', 'label', 'text'))
+        ic, lb, tx = ic[:4], lb[:24], tx[:300]
+        if lb and tx:
+            out.append({'icon': ic or '💬', 'label': lb, 'text': tx})
+    return out
+
+
+def api_quick_notes(_q=None):
+    with SCHOOL_LOCK:
+        cur = quick_clean(SCHOOL.get('quick_notes'))
+    return {'items': cur or [{'icon': i, 'label': l, 'text': t} for i, l, t in QUICK_DEFAULT], 'custom': bool(cur)}
+
+
+def api_quick_notes_save(b):
+    items = quick_clean(b.get('items'))
+    with SCHOOL_LOCK:
+        SCHOOL['quick_notes'] = items or None      # rỗng = về mẫu mặc định
+    school_save()
+    return api_quick_notes()
