@@ -33,6 +33,17 @@ BUILTIN = [
     {'id': 'find', 'title': 'Tìm chữ trong trang', 'keys': 'Ctrl + F',
      'steps': ['Nhấn Ctrl + F, ô tìm kiếm hiện ra.', 'Gõ từ cần tìm.', 'Các chỗ tìm thấy được tô màu, bấm Enter để nhảy tới chỗ kế tiếp.'], 'tip': 'Hữu ích khi đọc trang dài.'},
 ]
+# Bản cho học sinh lớp nhỏ (lớp 1-3): câu ngắn, từ dễ hiểu, "bấm" thay cho "nhấn", chữ to
+KID = {
+    'zoom': {'title': 'Làm chữ TO và NHỎ', 'keys': 'Ctrl + Bánh xe chuột', 'steps': ['Dùng một ngón tay giữ phím Ctrl.', 'Lăn bánh xe chuột LÊN: chữ TO ra.', 'Lăn bánh xe chuột XUỐNG: chữ NHỎ lại.'], 'tip': 'Em thử xem nào!'},
+    'copy': {'title': 'Chép chữ sang chỗ khác', 'keys': 'Ctrl + C, Ctrl + V', 'steps': ['Dùng chuột tô xanh chữ cần chép.', 'Bấm phím Ctrl và phím C cùng lúc.', 'Bấm vào chỗ muốn để chữ.', 'Bấm phím Ctrl và phím V cùng lúc.'], 'tip': 'Không cần viết lại, rất nhanh!'},
+    'undo': {'title': 'Làm nhầm? Quay lại!', 'keys': 'Ctrl + Z', 'steps': ['Em lỡ làm nhầm?', 'Bấm phím Ctrl và phím Z cùng lúc.', 'Mọi thứ quay về như lúc trước.'], 'tip': 'Đừng lo, em sửa được!'},
+    'save': {'title': 'Cất bài làm của em', 'keys': 'Ctrl + S', 'steps': ['Nhìn tên bài: có dấu * là chưa cất.', 'Bấm phím Ctrl và phím S cùng lúc.', 'Dấu * biến mất là bài đã được cất.'], 'tip': 'Nhớ cất bài trước khi tắt máy nhé!'},
+    'alttab': {'title': 'Đổi sang cửa sổ khác', 'keys': 'Alt + Tab', 'steps': ['Giữ phím Alt.', 'Bấm phím Tab một lần.', 'Thả tay ra: cửa sổ mới hiện lên.'], 'tip': 'Bấm Tab nhiều lần để chọn cửa sổ khác.'},
+    'snip': {'title': 'Chụp hình màn hình', 'keys': 'Windows + Shift + S', 'steps': ['Bấm ba phím Windows, Shift và S cùng lúc.', 'Kéo chuột để chọn hình cần chụp.', 'Bấm phím Ctrl và phím V để dán hình vào bài.'], 'tip': 'Chỉ chụp khi cô cho phép nhé!'},
+    'selectall': {'title': 'Chọn hết các chữ', 'keys': 'Ctrl + A', 'steps': ['Bấm vào trong bài viết.', 'Bấm phím Ctrl và phím A cùng lúc.', 'Tất cả chữ được tô xanh.'], 'tip': 'Giờ em có thể chép hết hoặc đổi chữ cho cả bài.'},
+    'find': {'title': 'Tìm chữ trong trang', 'keys': 'Ctrl + F', 'steps': ['Bấm phím Ctrl và phím F cùng lúc.', 'Gõ chữ em muốn tìm.', 'Chữ tìm thấy được tô vàng.'], 'tip': 'Giúp em tìm nhanh trong trang dài.'},
+}
 BUILTIN_BY_ID = {g['id']: g for g in BUILTIN}
 GLOCK = threading.RLock()
 ID_RE = re.compile(r'^[a-z0-9]{2,16}$')
@@ -70,8 +81,18 @@ def _clean_steps(v):
     return [re.sub(r'\s+', ' ', str(x)).strip()[:200] for x in (v or [])][:8] if isinstance(v, list) else []
 
 
+def _kid_of(g, builtin):
+    """Bản cho lớp nhỏ: có sẵn cho hướng dẫn mặc định; hướng dẫn riêng dùng các bước 'kid_steps' nếu giáo viên nhập, không thì dùng bản thường."""
+    if builtin:
+        k = KID.get(g['id'])
+        return dict(k) if k else None
+    ks = _clean_steps(g.get('kid_steps')) if g.get('kid_steps') else []
+    return {'title': g.get('kid_title') or g['title'], 'keys': g.get('keys', ''), 'steps': [x for x in ks if x] or g['steps'], 'tip': g.get('kid_tip') or g.get('tip', '')}
+
+
 def _item_view(g, builtin):
-    return {'id': g['id'], 'title': g['title'], 'keys': g.get('keys', ''), 'steps': g['steps'], 'tip': g.get('tip', ''), 'builtin': builtin,
+    k = _kid_of(g, builtin)
+    return {'id': g['id'], 'title': g['title'], 'keys': g.get('keys', ''), 'steps': g['steps'], 'tip': g.get('tip', ''), 'builtin': builtin, 'kid': k,
             'img': ('/assets/guide-%s.gif' % g['id']) if builtin else (g.get('file') and '/api/guide_img?id=' + g['id'] or '')}
 
 
@@ -99,7 +120,8 @@ def api_guide_save(b):
     if not title or not steps:
         raise ApiError('Cần tiêu đề và ít nhất một bước')
     gid = str(b.get('id') or '')
-    entry = {'title': title, 'steps': steps, 'tip': re.sub(r'\s+', ' ', str(b.get('tip') or '')).strip()[:200], 'keys': re.sub(r'\s+', ' ', str(b.get('keys') or '')).strip()[:60]}
+    entry = {'kid_title': re.sub(r'\s+', ' ', str(b.get('kid_title') or '')).strip()[:80], 'kid_steps': [x for x in _clean_steps(b.get('kid_steps')) if x], 'kid_tip': re.sub(r'\s+', ' ', str(b.get('kid_tip') or '')).strip()[:200],
+             'title': title, 'steps': steps, 'tip': re.sub(r'\s+', ' ', str(b.get('tip') or '')).strip()[:200], 'keys': re.sub(r'\s+', ' ', str(b.get('keys') or '')).strip()[:60]}
     raw = b.get('image')
     data, ext = None, ''
     if raw:
@@ -151,10 +173,12 @@ def api_guide_delete(b):
     return api_guides()
 
 
-def _guide_bytes(gid):
+def _guide_bytes(gid, kidmode=False):
     """(thông tin, nội dung ảnh hoặc b'', phần mở rộng)."""
     if gid in BUILTIN_BY_ID:
-        p = os.path.join(WEB_DIR, 'assets', 'guide-%s.gif' % gid)
+        p = os.path.join(WEB_DIR, 'assets', 'guide-%s%s.gif' % (gid, 'kid' if kidmode else ''))
+        if kidmode and not os.path.isfile(p):
+            p = os.path.join(WEB_DIR, 'assets', 'guide-%s.gif' % gid)
         try:
             with open(p, 'rb') as f:
                 return BUILTIN_BY_ID[gid], f.read(), '.gif'
@@ -196,12 +220,16 @@ def api_guide_send(b):
     gid = str(b.get('id') or '')
     if not ID_RE.match(gid):
         raise ApiError('Hướng dẫn không hợp lệ')
-    g, data, ext = _guide_bytes(gid)
+    kidmode = bool(b.get('kid'))
+    g, data, ext = _guide_bytes(gid, kidmode)
     try:
         secs = max(0, min(900, int(b.get('secs') or 0)))
     except (TypeError, ValueError):
         secs = 0
-    msg = {'type': 'guide', 'gid': gid, 'title': g['title'], 'keys': g.get('keys', ''), 'steps': g['steps'], 'tip': g.get('tip', ''), 'img': (gid + ext) if data else '', 'secs': secs}
+    k = _kid_of(g, gid in BUILTIN_BY_ID) if kidmode else None
+    src = dict(g, **k) if k else g
+    send_gid = (gid + 'kid')[:16] if k else gid       # bản lớp nhỏ lưu riêng trên máy học sinh
+    msg = {'type': 'guide', 'gid': send_gid, 'title': src['title'], 'keys': src.get('keys', ''), 'steps': src['steps'], 'tip': src.get('tip', ''), 'img': (send_gid + ext) if data else '', 'secs': secs, 'kid': bool(k)}
     start_job(job_guide, hosts, msg, data, ext)
     log('📘 Gửi hướng dẫn "%s" tới %d máy' % (g['title'], len(hosts)), 'head')
     return {'ok': True, 'count': len(hosts)}

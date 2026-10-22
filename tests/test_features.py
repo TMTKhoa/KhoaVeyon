@@ -483,7 +483,7 @@ print([r for r in ("/api/startup", "/api/logon_policy") if r not in POST_ROUTES]
 import kv.paths as P
 print(P.VERSION)
 ''')
-        self.assertEqual(out.splitlines(), ['[]', '5.0.0'])
+        self.assertEqual(out.splitlines(), ['[]', '5.1.0'])
 
 
 if __name__ == '__main__':

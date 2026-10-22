@@ -14,12 +14,59 @@ FR = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
 BG, PANEL, INK, MUT, BLUE, GREEN, ORANGE, RED, KEY, KEYSH = '#f1f5f9', '#ffffff', '#0f172a', '#64748b', '#2563eb', '#16a34a', '#ea580c', '#dc2626', '#e2e8f0', '#94a3b8'
 
 
+SC = 2          # vẽ gấp đôi rồi thu nhỏ cho nét mịn
+OUTW, OUTH = 720, 405
+
+
 def font(sz, bold=True):
-    return ImageFont.truetype(FB if bold else FR, sz)
+    return ImageFont.truetype(FB if bold else FR, int(sz * SC))
+
+
+def _s(v):
+    if isinstance(v, (tuple, list)):
+        return tuple(_s(x) for x in v)
+    return v * SC if isinstance(v, (int, float)) else v
+
+
+class Dr:
+    """Bọc ImageDraw: nhận toạ độ logic (560x315) và tự nhân lên SC lần."""
+    def __init__(self, im):
+        self.d = ImageDraw.Draw(im)
+
+    def rounded_rectangle(self, xy, r=0, width=1, **kw):
+        self.d.rounded_rectangle(_s(xy), _s(r), width=int(width * SC) if kw.get('outline') else width, **kw)
+
+    def rectangle(self, xy, width=1, **kw):
+        self.d.rectangle(_s(xy), width=int(width * SC), **kw)
+
+    def ellipse(self, xy, width=1, **kw):
+        self.d.ellipse(_s(xy), width=int(width * SC), **kw)
+
+    def pieslice(self, xy, a, b, **kw):
+        self.d.pieslice(_s(xy), a, b, **kw)
+
+    def line(self, xy, fill=None, width=1):
+        self.d.line(_s(xy), fill=fill, width=int(width * SC))
+
+    def polygon(self, pts, **kw):
+        self.d.polygon(_s(pts), **kw)
+
+    def text(self, xy, s, font=None, fill=None, anchor='la'):
+        self.d.text(_s(xy), s, font=font, fill=fill, anchor=anchor)
 
 
 def txt(d, xy, s, sz=18, fill=INK, bold=True, anchor='la'):
     d.text(xy, s, font=font(sz, bold), fill=fill, anchor=anchor)
+
+
+def gradient():
+    top, bot = (233, 240, 255), (248, 250, 252)
+    im = Image.new('RGB', (W * SC, H * SC))
+    px = ImageDraw.Draw(im)
+    for y in range(H * SC):
+        t = y / (H * SC - 1)
+        px.line((0, y, W * SC, y), fill=tuple(int(top[k] + (bot[k] - top[k]) * t) for k in range(3)))
+    return im
 
 
 def keycap(d, x, y, label, pressed=False, w=None, sz=20):
@@ -70,15 +117,38 @@ def window(d, x, y, w, h, title=''):
         txt(d, (x + w / 2, y + 12), title, 11, MUT, anchor='mm')
 
 
+KID = [False]      # bản cho lớp nhỏ: chữ to, câu ngắn, từ dễ hiểu
+KID_TEXT = {
+    'Phóng to / thu nhỏ': 'Làm chữ TO và NHỎ', 'Sao chép và dán': 'Chép chữ sang chỗ khác', 'Hoàn tác (quay lại bước trước)': 'Làm nhầm? Quay lại!',
+    'Lưu bài': 'Cất bài làm của em', 'Chuyển qua lại giữa các cửa sổ': 'Đổi sang cửa sổ khác', 'Chụp một vùng màn hình': 'Chụp hình màn hình',
+    'Chọn toàn bộ nội dung': 'Chọn hết các chữ', 'Tìm chữ trong trang': 'Tìm chữ trong trang',
+    'Giữ Ctrl + lăn con lăn LÊN: PHÓNG TO': 'Giữ Ctrl, lăn LÊN: chữ TO ra!', 'Giữ Ctrl + lăn con lăn XUỐNG: THU NHỎ': 'Giữ Ctrl, lăn XUỐNG: chữ NHỎ lại!',
+    'Bôi đen nội dung cần chép': 'Tô xanh chữ cần chép', 'Nhấn Ctrl + C (sao chép)': 'Bấm Ctrl và C cùng lúc', 'Bấm vào chỗ cần dán': 'Bấm vào chỗ muốn để chữ',
+    'Nhấn Ctrl + V (dán)': 'Bấm Ctrl và V: xong rồi!',
+    'Lỡ gõ nhầm hoặc xóa nhầm?': 'Em làm nhầm rồi?', 'Nhấn Ctrl + Z: lùi lại một bước': 'Bấm Ctrl và Z: quay lại!', 'Nhấn thêm lần nữa để lùi tiếp': 'Bấm thêm để quay lại nữa',
+    'Dấu * nghĩa là CHƯA lưu': 'Dấu * là chưa cất bài', 'Nhấn Ctrl + S để lưu': 'Bấm Ctrl và S để cất', 'Đã lưu! Nhớ lưu thường xuyên': 'Đã cất bài. Giỏi lắm!',
+    'Giữ phím Alt': 'Giữ phím Alt', 'Gõ Tab để chọn cửa sổ khác': 'Bấm Tab để đổi cửa sổ', 'Thả phím: cửa sổ được chọn hiện lên': 'Thả tay ra: cửa sổ mới hiện lên',
+    'Nhấn Win + Shift + S': 'Bấm Win, Shift và S', 'Kéo chuột chọn vùng cần chụp': 'Kéo chuột chọn hình cần chụp', 'Xong! Nhấn Ctrl + V để dán ảnh vào bài': 'Xong! Bấm Ctrl và V để dán hình',
+    'Nhiều dòng chữ cần chọn hết?': 'Muốn chọn hết các chữ?', 'Nhấn Ctrl + A: chọn tất cả': 'Bấm Ctrl và A: chọn hết!', 'Giờ có thể Ctrl + C để chép hết': 'Giờ em có thể chép hết',
+    'Nhấn Ctrl + F để mở ô tìm kiếm': 'Bấm Ctrl và F cùng lúc', 'Gõ từ cần tìm': 'Gõ chữ cần tìm', 'Các chỗ tìm thấy được tô vàng': 'Chữ tìm thấy được tô vàng!',
+}
+
+
+def kid(s):
+    return KID_TEXT.get(s, s) if KID[0] else s
+
+
 def caption(d, s, color=INK):
-    d.rounded_rectangle((16, H - 44, W - 16, H - 10), 14, fill=color)
-    txt(d, (W / 2, H - 27), s, 17, 'white', anchor='mm')
+    sz = 22 if KID[0] else 17
+    d.rounded_rectangle((12, H - 52, W - 12, H - 8), 22, fill=color)
+    txt(d, (W / 2, H - 30), kid(s), sz, 'white', anchor='mm')
 
 
 def base(title):
-    im = Image.new('RGB', (W, H), BG)
-    d = ImageDraw.Draw(im)
-    txt(d, (20, 14), title, 19, BLUE)
+    im = gradient()
+    d = Dr(im)
+    d.rounded_rectangle((0, 0, W, 44), 0, fill=BLUE)
+    txt(d, (20, 22), kid(title), 21 if KID[0] else 19, 'white', anchor='lm')
     return im, d
 
 
@@ -236,13 +306,16 @@ GUIDES = {'zoom': g_zoom, 'copy': g_copy, 'undo': g_undo, 'save': g_save, 'altta
 
 def main():
     os.makedirs(OUT, exist_ok=True)
-    for name, fn in GUIDES.items():
-        fr = fn()
-        pal = [f.convert('P', palette=Image.ADAPTIVE, colors=64) for f in fr]
-        path = os.path.join(OUT, 'guide-%s.gif' % name)
-        pal[0].save(path, save_all=True, append_images=pal[1:], duration=130, loop=0, optimize=True, disposal=2)
-        fr[len(fr) // 2].save('/tmp/guide-prev-%s.png' % name)
-        print(name, len(fr), os.path.getsize(path) // 1024, 'KB')
+    for kidmode in (False, True):
+        KID[0] = kidmode
+        for name, fn in GUIDES.items():
+            fr = [f.resize((OUTW, OUTH), Image.LANCZOS) for f in fn()]
+            pal = [f.convert('P', palette=Image.ADAPTIVE, colors=96, dither=Image.Dither.NONE) for f in fr]
+            fname = name + ('kid' if kidmode else '')
+            path = os.path.join(OUT, 'guide-%s.gif' % fname)
+            pal[0].save(path, save_all=True, append_images=pal[1:], duration=120 if not kidmode else 150, loop=0, optimize=True, disposal=2)
+            fr[len(fr) // 2].save('/tmp/guide-prev-%s.png' % fname)
+            print(fname, len(fr), os.path.getsize(path) // 1024, 'KB')
 
 
 if __name__ == '__main__':

@@ -229,9 +229,40 @@ try {
     # ---------- hướng dẫn thao tác (ảnh động + các bước), xem lại được từ menu nút nổi ----------
     $script:guideForm = $null; $script:guideMs = $null; $script:guideTimer = $null
     function Close-Guide {
+        try { if ($script:speaker) { $script:speaker.SpeakAsyncCancelAll() } } catch {}
         if ($script:guideTimer) { try { $script:guideTimer.Stop(); $script:guideTimer.Dispose() } catch {}; $script:guideTimer = $null }
         if ($script:guideForm) { try { $script:guideForm.Close() } catch {}; $script:guideForm = $null }
         if ($script:guideMs) { try { $script:guideMs.Dispose() } catch {}; $script:guideMs = $null }
+    }
+    # ---------- đọc to nội dung (chỉ hiện nút nếu máy có giọng tiếng Việt) ----------
+    $script:viVoice = $null; $script:viChecked = $false; $script:speaker = $null
+    function Get-ViVoice {
+        if ($script:viChecked) { return $script:viVoice }
+        $script:viChecked = $true
+        try {
+            Add-Type -AssemblyName System.Speech
+            $script:speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
+            $v = $script:speaker.GetInstalledVoices() | Where-Object { $_.Enabled -and $_.VoiceInfo.Culture.Name -like 'vi*' } | Select-Object -First 1
+            if ($v) { $script:viVoice = $v.VoiceInfo.Name }
+        } catch { }
+        return $script:viVoice
+    }
+    function Speak-Text([string]$text, [string]$voice) {
+        try { $script:speaker.SpeakAsyncCancelAll(); $script:speaker.SelectVoice($voice); $script:speaker.Rate = -1; [void]$script:speaker.SpeakAsync($text) } catch { Log ('speak: ' + $_.Exception.Message) }
+    }
+    function New-Round([System.Windows.Forms.Control]$c, [int]$r) {
+        $gp = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $d = $r * 2
+        $gp.AddArc(0, 0, $d, $d, 180, 90); $gp.AddArc($c.Width - $d, 0, $d, $d, 270, 90)
+        $gp.AddArc($c.Width - $d, $c.Height - $d, $d, $d, 0, 90); $gp.AddArc(0, $c.Height - $d, $d, $d, 90, 90)
+        $gp.CloseFigure(); $c.Region = New-Object System.Drawing.Region($gp)
+    }
+    function Style-Button([System.Windows.Forms.Button]$b, [bool]$primary) {
+        $b.FlatStyle = 'Flat'; $b.FlatAppearance.BorderSize = 0; $b.Cursor = [System.Windows.Forms.Cursors]::Hand
+        $b.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 11)
+        if ($primary) { $b.BackColor = [System.Drawing.Color]::FromArgb(37, 99, 235); $b.ForeColor = [System.Drawing.Color]::White; $b.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(29, 78, 216) }
+        else { $b.BackColor = [System.Drawing.Color]::FromArgb(226, 232, 240); $b.ForeColor = [System.Drawing.Color]::FromArgb(15, 23, 42); $b.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(203, 213, 225) }
+        New-Round $b 10
     }
     function Show-Guide($msg, [bool]$save = $true) {
         $gid = [string]$msg.gid
@@ -240,24 +271,48 @@ try {
         if (-not (Test-Path -LiteralPath $gdir)) { New-Item -ItemType Directory -Path $gdir -Force | Out-Null }
         if ($save) { try { [System.IO.File]::WriteAllText((Join-Path $gdir ($gid + '.json')), ($msg | ConvertTo-Json -Compress -Depth 5), $utf8) } catch {} }
         Close-Guide
+        $K = ($msg.kid -eq $true)      # bản cho học sinh lớp nhỏ: chữ to, nút to
+        $blue = [System.Drawing.Color]::FromArgb(37, 99, 235)
         $f = New-Object System.Windows.Forms.Form
         $f.Text = 'Hướng dẫn thao tác'
-        $f.TopMost = $true; $f.StartPosition = 'CenterScreen'; $f.FormBorderStyle = 'FixedDialog'
+        $f.TopMost = $true; $f.StartPosition = 'CenterScreen'; $f.FormBorderStyle = 'FixedDialog'; $f.ShowIcon = $false
         $f.MinimizeBox = $false; $f.MaximizeBox = $false
-        $f.BackColor = [System.Drawing.Color]::White
-        $y = 12
+        $f.BackColor = $(if ($K) { [System.Drawing.Color]::FromArgb(255, 251, 235) } else { [System.Drawing.Color]::FromArgb(248, 250, 252) })
+        $CW = 700
+        $tSz = $(if ($K) { 24 } else { 17 }); $hH = $(if ($K) { 96 } else { 78 }); $kSz = $(if ($K) { 17 } else { 12 }); $kH = $(if ($K) { 50 } else { 38 })
+        $sSz = $(if ($K) { 18 } else { 12 }); $bD = $(if ($K) { 42 } else { 30 }); $tpSz = $(if ($K) { 14 } else { 11 })
+        # --- thanh tiêu đề màu xanh
+        $hd = New-Object System.Windows.Forms.Panel
+        $hd.SetBounds(0, 0, $CW, $hH); $hd.BackColor = $blue
+        $l0 = New-Object System.Windows.Forms.Label
+        $l0.Text = $(if ($K) { 'CÙNG HỌC NÀO!' } else { 'HƯỚNG DẪN THAO TÁC' }); $l0.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 9)
+        $l0.ForeColor = [System.Drawing.Color]::FromArgb(191, 219, 254); $l0.BackColor = $blue; $l0.SetBounds(24, 10, 640, 20)
         $lt = New-Object System.Windows.Forms.Label
-        $lt.Text = [string]$msg.title
-        $lt.Font = New-Object System.Drawing.Font('Segoe UI', 15, [System.Drawing.FontStyle]::Bold)
-        $lt.ForeColor = [System.Drawing.Color]::FromArgb(30, 64, 175)
-        $lt.SetBounds(20, $y, 580, 56); $f.Controls.Add($lt); $y += 58
-        if ([string]$msg.keys) {
-            $lk = New-Object System.Windows.Forms.Label
-            $lk.Text = 'Phím: ' + [string]$msg.keys
-            $lk.Font = New-Object System.Drawing.Font('Segoe UI', 12, [System.Drawing.FontStyle]::Bold)
-            $lk.ForeColor = [System.Drawing.Color]::FromArgb(234, 88, 12)
-            $lk.SetBounds(20, $y, 580, 26); $f.Controls.Add($lk); $y += 30
+        $lt.Text = [string]$msg.title; $lt.Font = New-Object System.Drawing.Font('Segoe UI', $tSz, [System.Drawing.FontStyle]::Bold)
+        $lt.ForeColor = [System.Drawing.Color]::White; $lt.BackColor = $blue; $lt.SetBounds(24, 30, 650, ($hH - 36))
+        $hd.Controls.AddRange(@($l0, $lt)); $f.Controls.Add($hd)
+        $y = $hH + 18
+        # --- các phím bấm hiện như phím thật
+        $keys = [string]$msg.keys
+        if ($keys) {
+            $x = 28
+            foreach ($tok in ($keys -split '\s*(\+|,)\s*')) {
+                if (-not $tok) { continue }
+                $lc = New-Object System.Windows.Forms.Label
+                if ($tok -eq '+' -or $tok -eq ',') {
+                    $lc.Text = $(if ($tok -eq '+') { '+' } else { 'hoặc' }); $lc.ForeColor = [System.Drawing.Color]::FromArgb(100, 116, 139)
+                    $lc.Font = New-Object System.Drawing.Font('Segoe UI', $kSz, [System.Drawing.FontStyle]::Bold); $lc.TextAlign = 'MiddleCenter'
+                    $w = $(if ($tok -eq '+') { 28 } else { 56 }); $lc.SetBounds($x, $y, $w, $kH)
+                } else {
+                    $lc.Text = $tok; $lc.Font = New-Object System.Drawing.Font('Segoe UI Semibold', $kSz); $lc.TextAlign = 'MiddleCenter'
+                    $lc.BackColor = [System.Drawing.Color]::White; $lc.BorderStyle = 'FixedSingle'; $lc.ForeColor = [System.Drawing.Color]::FromArgb(15, 23, 42)
+                    $w = [Math]::Max(56, [System.Windows.Forms.TextRenderer]::MeasureText($tok, $lc.Font).Width + 28); $lc.SetBounds($x, $y, $w, $kH)
+                }
+                $f.Controls.Add($lc); $x += $w + 4
+            }
+            $y += $kH + 12
         }
+        # --- ảnh động trong khung viền
         $imgName = [string]$msg.img
         if ($imgName -match '^[a-z0-9]{2,16}\.(gif|png|jpg)$') {
             $ip = Join-Path $gdir $imgName
@@ -265,35 +320,62 @@ try {
                 try {
                     $bytes = [System.IO.File]::ReadAllBytes($ip)
                     $script:guideMs = New-Object System.IO.MemoryStream(, $bytes)
+                    $fr = New-Object System.Windows.Forms.Panel
+                    $fr.SetBounds(28, $y, 644, 364); $fr.BackColor = [System.Drawing.Color]::FromArgb(203, 213, 225)
                     $pb = New-Object System.Windows.Forms.PictureBox
                     $pb.Image = [System.Drawing.Image]::FromStream($script:guideMs)
-                    $pb.SizeMode = 'Zoom'; $pb.BackColor = [System.Drawing.Color]::FromArgb(241, 245, 249)
-                    $pb.SetBounds(30, $y, 560, 315); $f.Controls.Add($pb); $y += 325
+                    $pb.SizeMode = 'Zoom'; $pb.BackColor = [System.Drawing.Color]::White
+                    $pb.SetBounds(2, 2, 640, 360); $fr.Controls.Add($pb); $f.Controls.Add($fr); $y += 380
                 } catch { Log ('guide img: ' + $_.Exception.Message) }
             }
         }
-        $lines = @(); $n = 1
-        foreach ($s in @($msg.steps)) { if ([string]$s) { $lines += ([string]$n + '. ' + [string]$s); $n++ } }
-        $stepFont = New-Object System.Drawing.Font('Segoe UI', 12)
-        $ls = New-Object System.Windows.Forms.Label
-        $ls.Text = ($lines -join "`r`n`r`n"); $ls.Font = $stepFont
-        $sz = [System.Windows.Forms.TextRenderer]::MeasureText($ls.Text, $stepFont, (New-Object System.Drawing.Size(570, 3000)), [System.Windows.Forms.TextFormatFlags]::WordBreak)
-        $ls.SetBounds(25, $y, 575, [Math]::Min(420, $sz.Height + 8)); $f.Controls.Add($ls); $y += $ls.Height + 8
+        # --- các bước, đánh số trong vòng tròn
+        $stepFont = New-Object System.Drawing.Font('Segoe UI', $sSz)
+        $n = 1
+        foreach ($s in @($msg.steps)) {
+            $st = [string]$s
+            if (-not $st) { continue }
+            $th = [System.Windows.Forms.TextRenderer]::MeasureText($st, $stepFont, (New-Object System.Drawing.Size((600 - $bD + 30), 3000)), [System.Windows.Forms.TextFormatFlags]::WordBreak).Height
+            $nb = New-Object System.Windows.Forms.Label
+            $nb.Text = [string]$n; $nb.Font = New-Object System.Drawing.Font('Segoe UI', $(if ($K) { 16 } else { 11 }), [System.Drawing.FontStyle]::Bold)
+            $nb.TextAlign = 'MiddleCenter'; $nb.BackColor = $(if ($K) { [System.Drawing.Color]::FromArgb(234, 88, 12) } else { $blue }); $nb.ForeColor = [System.Drawing.Color]::White; $nb.SetBounds(30, $y, $bD, $bD)
+            $gp = New-Object System.Drawing.Drawing2D.GraphicsPath; $gp.AddEllipse(0, 0, $bD, $bD); $nb.Region = New-Object System.Drawing.Region($gp)
+            $lb = New-Object System.Windows.Forms.Label
+            $lb.Text = $st; $lb.Font = $stepFont; $lb.ForeColor = [System.Drawing.Color]::FromArgb(15, 23, 42)
+            $lb.SetBounds((40 + $bD), $y + 3, (672 - 40 - $bD), $th + 4)
+            $f.Controls.Add($nb); $f.Controls.Add($lb)
+            $y += [Math]::Max(($bD + 10), $th + 18); $n++
+        }
+        # --- mẹo
         if ([string]$msg.tip) {
+            $y += 4
             $lp = New-Object System.Windows.Forms.Label
-            $lp.Text = 'Mẹo: ' + [string]$msg.tip
-            $lp.Font = New-Object System.Drawing.Font('Segoe UI', 11, [System.Drawing.FontStyle]::Italic)
-            $lp.ForeColor = [System.Drawing.Color]::FromArgb(21, 128, 61)
-            $lp.SetBounds(25, $y, 575, 40); $f.Controls.Add($lp); $y += 44
+            $lp.Text = [string][char]0x2728 + '  Mẹo: ' + [string]$msg.tip
+            $lp.Font = New-Object System.Drawing.Font('Segoe UI', $tpSz); $lp.ForeColor = [System.Drawing.Color]::FromArgb(21, 128, 61)
+            $lp.BackColor = [System.Drawing.Color]::FromArgb(220, 252, 231); $lp.TextAlign = 'MiddleLeft'
+            $th2 = [System.Windows.Forms.TextRenderer]::MeasureText($lp.Text, $lp.Font, (New-Object System.Drawing.Size(620, 3000)), [System.Windows.Forms.TextFormatFlags]::WordBreak).Height
+            $lp.SetBounds(28, $y, 644, [Math]::Max(40, $th2 + 16)); New-Round $lp 10
+            $f.Controls.Add($lp); $y += $lp.Height + 14
         }
         $b = New-Object System.Windows.Forms.Button
-        $b.Text = 'Đã hiểu'; $b.Font = New-Object System.Drawing.Font('Segoe UI', 11)
-        $b.SetBounds(240, $y, 140, 38); $f.Controls.Add($b); $y += 52
+        $b.Text = $(if ($K) { 'Em hiểu rồi!' } else { 'Đã hiểu' }); $bw = $(if ($K) { 210 } else { 160 }); $bh = $(if ($K) { 58 } else { 44 })
+        $voice = Get-ViVoice
+        if ($voice) {
+            $bs = New-Object System.Windows.Forms.Button
+            $bs.Text = [string][char]0x1F50A + ' Đọc cho em nghe'; $bs.SetBounds((350 - $bw - 10), $y, $bw, $bh); Style-Button $bs $false
+            $b.SetBounds(350 + 10, $y, $bw, $bh)
+            $speakText = ([string]$msg.title + '. ' + ((@($msg.steps) | Where-Object { $_ }) -join '. ') + '. ' + [string]$msg.tip)
+            $bs.Add_Click({ Speak-Text $speakText $voice }.GetNewClosure())
+            $f.Controls.Add($bs)
+        } else { $b.SetBounds((350 - [int]($bw / 2)), $y, $bw, $bh) }
+        Style-Button $b $true
+        if ($K) { $b.Font = New-Object System.Drawing.Font('Segoe UI Semibold', 14) }
+        $f.Controls.Add($b); $y += $bh + 20
         $b.Add_Click({ Close-Guide })
         $f.AcceptButton = $b
         $maxH = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height - 40
-        $f.ClientSize = New-Object System.Drawing.Size(620, [Math]::Min($y, $maxH))
-        if ($y -gt $maxH) { $f.AutoScroll = $true; $f.AutoScrollMinSize = New-Object System.Drawing.Size(600, $y) }
+        $f.ClientSize = New-Object System.Drawing.Size($CW, [Math]::Min($y, $maxH))
+        if ($y -gt $maxH) { $f.AutoScroll = $true; $f.AutoScrollMinSize = New-Object System.Drawing.Size(($CW - 20), $y); $hd.Width = $CW - 20 }
         $script:guideForm = $f
         $secs = 0; try { $secs = [int]$msg.secs } catch { }
         if ($secs -gt 0) {
@@ -313,19 +395,29 @@ try {
             }
         }
         if ($items.Count -eq 0) { Show-Message 'Hướng dẫn thao tác' 'Thầy/cô chưa gửi hướng dẫn nào. Khi có, em sẽ xem lại được ở đây.' 0; return }
+        $blue = [System.Drawing.Color]::FromArgb(37, 99, 235)
         $f = New-Object System.Windows.Forms.Form
-        $f.Text = 'Hướng dẫn thao tác'; $f.TopMost = $true; $f.StartPosition = 'CenterScreen'; $f.FormBorderStyle = 'FixedDialog'
-        $f.MinimizeBox = $false; $f.MaximizeBox = $false; $f.ClientSize = New-Object System.Drawing.Size(460, 340)
+        $f.Text = 'Hướng dẫn thao tác'; $f.TopMost = $true; $f.StartPosition = 'CenterScreen'; $f.FormBorderStyle = 'FixedDialog'; $f.ShowIcon = $false
+        $f.MinimizeBox = $false; $f.MaximizeBox = $false; $f.ClientSize = New-Object System.Drawing.Size(480, 400); $f.BackColor = [System.Drawing.Color]::FromArgb(248, 250, 252)
+        $hd = New-Object System.Windows.Forms.Label
+        $hd.Text = 'Hướng dẫn thầy/cô đã gửi'; $hd.Font = New-Object System.Drawing.Font('Segoe UI', 14, [System.Drawing.FontStyle]::Bold)
+        $hd.ForeColor = [System.Drawing.Color]::White; $hd.BackColor = $blue; $hd.TextAlign = 'MiddleLeft'; $hd.Padding = New-Object System.Windows.Forms.Padding(20, 0, 0, 0); $hd.SetBounds(0, 0, 480, 56)
         $lb = New-Object System.Windows.Forms.ListBox
-        $lb.Font = New-Object System.Drawing.Font('Segoe UI', 12); $lb.SetBounds(15, 15, 430, 260)
+        $lb.Font = New-Object System.Drawing.Font('Segoe UI', 12); $lb.SetBounds(20, 72, 440, 250); $lb.BorderStyle = 'None'; $lb.ItemHeight = 28; $lb.DrawMode = 'OwnerDrawFixed'
+        $lb.Add_DrawItem({ param($s, $e)
+            if ($e.Index -lt 0) { return }
+            $sel = (($e.State -band [System.Windows.Forms.DrawItemState]::Selected) -ne 0)
+            $bg = $(if ($sel) { [System.Drawing.Color]::FromArgb(219, 234, 254) } else { [System.Drawing.Color]::White })
+            $br = New-Object System.Drawing.SolidBrush($bg); $e.Graphics.FillRectangle($br, $e.Bounds); $br.Dispose()
+            [System.Windows.Forms.TextRenderer]::DrawText($e.Graphics, ([string][char]0x25B6 + '  ' + [string]$s.Items[$e.Index]), $s.Font, (New-Object System.Drawing.Point(($e.Bounds.X + 8), ($e.Bounds.Y + 3))), [System.Drawing.Color]::FromArgb(15, 23, 42))
+        })
         foreach ($g in $items) { [void]$lb.Items.Add([string]$g.title) }
         $lb.SelectedIndex = 0
-        $f.Controls.Add($lb)
         $bo = New-Object System.Windows.Forms.Button
-        $bo.Text = 'Xem'; $bo.SetBounds(120, 290, 100, 36); $bo.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+        $bo.Text = 'Xem'; $bo.SetBounds(130, 340, 100, 42); Style-Button $bo $true
         $bc = New-Object System.Windows.Forms.Button
-        $bc.Text = 'Đóng'; $bc.SetBounds(240, 290, 100, 36); $bc.Font = New-Object System.Drawing.Font('Segoe UI', 11)
-        $f.Controls.AddRange(@($bo, $bc))
+        $bc.Text = 'Đóng'; $bc.SetBounds(250, 340, 100, 42); Style-Button $bc $false
+        $f.Controls.AddRange(@($hd, $lb, $bo, $bc))
         $open = { if ($lb.SelectedIndex -ge 0) { Show-Guide $items[$lb.SelectedIndex] $false } }.GetNewClosure()
         $bo.Add_Click($open); $lb.Add_DoubleClick($open); $bc.Add_Click({ $f.Close() }.GetNewClosure())
         $f.AcceptButton = $bo

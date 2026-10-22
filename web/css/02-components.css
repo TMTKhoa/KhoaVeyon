@@ -118,6 +118,19 @@ label.field{display:block;font-weight:600;margin:0 0 6px}
 .mt .mr{position:absolute;bottom:4px;left:7px;font-size:16px}.grpbox{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-top:10px}.grpcard{border:1.5px solid #cfd8ea;border-radius:12px;padding:10px 12px;background:#fff}.grpcard b{display:block;margin-bottom:4px;color:#1e40af}.grpcard div{font-size:13px}
 .qchips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px}
 body.kvview .side{display:none}body.kvview .main,body.kvview .app>main{width:100%}
-.gdgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
-.gdcard{border:1px solid rgba(100,116,139,.3);border-radius:12px;padding:10px;display:grid;gap:6px;align-content:start}
+.gdgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.gdcard{background:var(--card,#fff);border:1px solid rgba(100,116,139,.25);border-radius:16px;padding:10px 10px 12px;display:grid;gap:8px;align-content:start;box-shadow:0 1px 3px rgba(15,23,42,.08);transition:transform .15s,box-shadow .15s}
+.gdcard:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(37,99,235,.18)}
+.gdimg{position:relative;border-radius:10px;overflow:hidden;cursor:zoom-in;background:#eff6ff}
+.gdtag{position:absolute;top:6px;left:6px;background:#16a34a;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
+.gdtitle{font-weight:700;font-size:15px;line-height:1.3;padding:0 4px}
+.gdkeys{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:0 4px;min-height:28px}
+.gdkeys kbd,.gdview kbd{font:600 12px ui-monospace,Consolas,monospace;background:linear-gradient(#fff,#e2e8f0);border:1px solid #94a3b8;border-bottom-width:3px;border-radius:6px;padding:3px 9px;color:#0f172a}
+.gdplus,.gdor{color:#64748b;font-weight:700;font-size:12px}
+.gdact{display:flex;gap:6px;padding:0 4px}.gdact .primary{flex:1}
 .gdnoimg{aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:#f1f5f9;border-radius:8px;color:#94a3b8}
+.gdview{width:540px;max-width:100%}.gdbig{width:100%;border-radius:12px;border:2px solid #cbd5e1;display:block}
+.gdsteps{display:grid;gap:10px;margin-top:12px}.gdstep{display:flex;gap:12px;align-items:flex-start;font-size:15px;line-height:1.4}
+.gdn{flex:0 0 28px;height:28px;border-radius:50%;background:#2563eb;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:14px}
+.gdtip{margin-top:12px;background:#dcfce7;color:#15803d;border-radius:10px;padding:10px 14px;font-size:14px}
+.seg{display:inline-flex;gap:6px;flex-wrap:wrap}

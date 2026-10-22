@@ -611,3 +611,44 @@ class GuidesTest(unittest.TestCase):
         hosts, msg, data, ext = self.jobs[0]
         self.assertEqual(hosts, ['a', 'b']); self.assertEqual((msg['type'], msg['gid'], msg['img'], ext), ('guide', 'zoom', 'zoom.gif', '.gif'))
         self.assertEqual(msg['secs'], 900); self.assertTrue(data.startswith(b'GIF8')); self.assertEqual(len(msg['steps']), 3)
+
+
+class GuidesKidTest(unittest.TestCase):
+    def setUp(self):
+        from kv import guides
+        self.g = guides
+        self.jobs = []
+        mock.patch.object(guides, 'start_job', lambda f, *a: self.jobs.append(a)).start()
+        mock.patch.object(guides, 'log').start()
+        mock.patch.object(guides, 'clean_hosts', lambda h: [x for x in h if x]).start()
+        self.td = tempfile.TemporaryDirectory(); mock.patch.object(guides, 'gdir', lambda: self.td.name).start()
+
+    def tearDown(self):
+        mock.patch.stopall(); self.td.cleanup()
+
+    def test_kid_assets_and_texts(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        for g in self.g.BUILTIN:
+            self.assertTrue(os.path.isfile(os.path.join(root, 'web', 'assets', 'guide-%skid.gif' % g['id'])), g['id'])
+            k = self.g.KID[g['id']]
+            self.assertTrue(k['title'] and k['steps'])
+            self.assertLessEqual(max(len(s) for s in k['steps']), 60)      # câu ngắn
+        items = {x['id']: x for x in self.g.api_guides()['items']}
+        self.assertEqual(items['zoom']['kid']['title'], 'Làm chữ TO và NHỎ')
+
+    def test_send_kid(self):
+        self.g.api_guide_send({'id': 'zoom', 'hosts': ['a'], 'kid': True})
+        hosts, msg, data, ext = self.jobs[0]
+        self.assertEqual((msg['gid'], msg['img'], msg['kid']), ('zoomkid', 'zoomkid.gif', True))
+        self.assertIn('TO', msg['title']); self.assertEqual(len(msg['steps']), 3)
+        self.g.api_guide_send({'id': 'zoom', 'hosts': ['a']})
+        self.assertEqual((self.jobs[1][1]['gid'], self.jobs[1][1]['kid']), ('zoom', False))
+
+    def test_custom_kid_fallback(self):
+        r = self.g.api_guide_save({'title': 'Đổi cỡ chữ', 'steps': ['Bôi đen đoạn văn', 'Chọn cỡ chữ trong thanh công cụ'], 'kid_steps': ['Tô xanh chữ.', 'Chọn số to hơn.']})
+        gid = [x for x in r['items'] if not x['builtin']][0]['id']
+        self.g.api_guide_send({'id': gid, 'hosts': ['a'], 'kid': True})
+        self.assertEqual(self.jobs[0][1]['steps'], ['Tô xanh chữ.', 'Chọn số to hơn.']); self.assertTrue(self.jobs[0][1]['gid'].endswith('kid'))
+        r2 = self.g.api_guide_save({'title': 'B', 'steps': ['x']})
+        gid2 = [x for x in r2['items'] if x['id'] != gid and not x['builtin']][0]['id']
+        self.g.api_guide_send({'id': gid2, 'hosts': ['a'], 'kid': True}); self.assertEqual(self.jobs[1][1]['steps'], ['x'])   # không có bản nhỏ: dùng bản thường

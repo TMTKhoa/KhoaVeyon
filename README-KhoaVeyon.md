@@ -244,7 +244,10 @@ Trang **Tương tác → 📘 Hướng dẫn thao tác cho học sinh** (và nú
 - Chuyển cửa sổ (Alt + Tab) · Chụp một vùng màn hình (Windows + Shift + S) · Chọn tất cả (Ctrl + A) · Tìm chữ (Ctrl + F)
 Bấm **Gửi** để hiện cửa sổ hướng dẫn trên các máy đang chọn (không chọn = tất cả). Cửa sổ không khóa máy; học sinh bấm "Đã hiểu" để đóng. Hướng dẫn đã nhận được lưu trên máy học sinh, xem lại bằng menu nút nổi → **Hướng dẫn thao tác...**
 **Tạo hướng dẫn riêng**: tiêu đề, phím tắt, các bước (mỗi dòng một bước), mẹo, ảnh hoặc GIF của bạn (dưới 3 MB, quay bằng ScreenToGif/Xbox Game Bar...). Hướng dẫn riêng được đưa vào bản sao lưu. Hình động có sẵn tạo bằng `tools/make_guides.py` (cần thư viện Pillow, chỉ để vẽ lại hình; chạy chương trình không cần).
-Từ bản này số phiên bản là 5.0.0 (gộp các tính năng lớp học 4.x: câu đố, chiếu bài, điều khiển bằng điện thoại, quản trị từ laptop, kiểm tra tính năng...).
+**Bản cho học sinh lớp nhỏ (lớp 1–3):** chọn "🧒 Lớp nhỏ" ở đầu mục hướng dẫn (chương trình tự đoán theo lớp đang xem, ví dụ lớp 2A). Khi đó nội dung được viết lại bằng câu ngắn, từ dễ hiểu ("bấm phím Ctrl và phím C cùng lúc", "lăn LÊN: chữ TO ra"), ảnh động có chữ to hơn, cửa sổ trên máy học sinh dùng chữ và nút to, số bước màu cam. Nếu máy học sinh có giọng đọc tiếng Việt của Windows thì hiện thêm nút **🔊 Đọc cho em nghe** (không có giọng thì tự ẩn nút). Hướng dẫn riêng: mở "Bản cho lớp nhỏ" trong hộp tạo để viết bản ngắn gọn; bỏ trống thì dùng bản thường.
+Giao diện đã làm lại: cửa sổ hướng dẫn trên máy học sinh có thanh tiêu đề xanh, phím hiện như phím thật, các bước đánh số trong vòng tròn, khung mẹo; ảnh động vẽ mịn hơn; thư viện bên máy giáo viên là các thẻ có ảnh động, bấm vào để xem lớn.
+
+Số phiên bản từ bản 5.0.0 (hiện 5.1.0) (gộp các tính năng lớp học 4.x: câu đố, chiếu bài, điều khiển bằng điện thoại, quản trị từ laptop, kiểm tra tính năng...).
 
 ## Bản 4.7.2
 
