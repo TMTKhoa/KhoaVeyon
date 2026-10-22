@@ -8,10 +8,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .alerts import (
     alert_beep, alert_collect_host, ALERT_LOCK, ALERT_SEQ, alert_should_beep, ALERTS, HOST_ONLINE,
+    PUSH_CAPABLE, PUSH_FALLBACK_SEC, PUSH_FRESH_SEC,
 )
 from .cleanup import evidence_cleanup
 from .evidence import watch_num
 from .runtime import CFG, CFG_LOCK, log
+
+
+LAST_POLL = {}
 
 
 def alert_loop():
@@ -24,6 +28,12 @@ def alert_loop():
                 cfg = json.loads(json.dumps(CFG))
             wait = watch_num(cfg, 'alert_poll', 3, 2, 60)
             hosts = list(cfg.get('watch_hosts') or [])
+            # Máy đã có script giám sát mới (tự báo "hello" và đẩy ảnh về ngay khi vi phạm) chỉ cần quét dự phòng thưa,
+            # để giảm tải mạng phòng máy; máy chưa báo hello vẫn quét mỗi vài giây như cũ.
+            now_t = time.time()
+            hosts = [h for h in hosts if not (now_t - PUSH_CAPABLE.get(h, 0) < PUSH_FRESH_SEC and now_t - LAST_POLL.get(h, 0) < PUSH_FALLBACK_SEC)]
+            for h in hosts:
+                LAST_POLL[h] = now_t
             if hosts:
                 before = ALERT_SEQ[0]
                 with ThreadPoolExecutor(max_workers=min(16, len(hosts))) as ex:

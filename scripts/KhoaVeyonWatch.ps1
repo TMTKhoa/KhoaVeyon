@@ -141,6 +141,35 @@ function Get-BrowserHost($hwnd) {
     } catch {}
     return $null
 }
+# Nhat ky 5 phut gan nhat (ung dung / tieu de cua so dang o truoc), di kem moi anh vi pham de giao vien biet em vua lam gi. Khong ghi phim go.
+$hist = New-Object System.Collections.ArrayList
+function Note-Active($proc, $title) {
+    $now = Get-Date
+    if ($hist.Count -gt 0 -and $hist[$hist.Count - 1].p -eq $proc -and $hist[$hist.Count - 1].w -eq $title) { $hist[$hist.Count - 1].e = $now }
+    else { [void]$hist.Add([pscustomobject]@{ p = $proc; w = $title; s = $now; e = $now }) }
+    while ($hist.Count -gt 0 -and ($now - $hist[0].e).TotalSeconds -gt 300) { $hist.RemoveAt(0) }
+    if ($hist.Count -gt 200) { $hist.RemoveRange(0, $hist.Count - 200) }
+}
+function Recent-Log {
+    $out = @()
+    $from = $hist.Count - 30; if ($from -lt 0) { $from = 0 }
+    for ($i = $from; $i -lt $hist.Count; $i++) {
+        $x = $hist[$i]
+        $w = [string]$x.w; if ($w.Length -gt 100) { $w = $w.Substring(0, 100) }
+        $out += [ordered]@{ p = $x.p; w = $w; t = $x.s.ToString('HH:mm:ss'); d = [int][Math]::Max(1, ($x.e - $x.s).TotalSeconds) }
+    }
+    return ,$out
+}
+# Bao NGAY cho may giao vien (khong cho den lan hoi tiep theo): tha mot file nho vao hop thu di cua tro ly hoc sinh, dich vu gui trong ~2 giay.
+function Push-Signal($kind, $name) {
+    try {
+        $ob = 'C:\ProgramData\KhoaVeyon\outbox'
+        if (Test-Path -LiteralPath $ob) {
+            $f = Join-Path $ob ('viol-' + [DateTime]::UtcNow.Ticks + '.json')
+            [IO.File]::WriteAllText($f, (@{ t = 'viol'; type = $kind; name = $name } | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding($false)))
+        }
+    } catch {}
+}
 function Take-Shot($kind, $name, $title) {
     try {
         $now = Get-Date
@@ -153,11 +182,12 @@ function Take-Shot($kind, $name, $title) {
         $bmp.Save($file, [System.Drawing.Imaging.ImageFormat]::Jpeg)
         $g.Dispose(); $bmp.Dispose()
         # File .json di kem anh: may giao vien doc file nay de biet ten may, noi dung vi pham, ngay gio (ghi xong anh moi ghi json)
-        $meta = [ordered]@{ pc = $pc; user = $user; type = $kind; name = $name; window = $title; date = $now.ToString('yyyy-MM-dd'); time = $now.ToString('HH:mm:ss'); file = (Split-Path $file -Leaf) }
+        $meta = [ordered]@{ pc = $pc; user = $user; type = $kind; name = $name; window = $title; date = $now.ToString('yyyy-MM-dd'); time = $now.ToString('HH:mm:ss'); file = (Split-Path $file -Leaf); recent = (Recent-Log) }
         $jf = [IO.Path]::ChangeExtension($file, '.json')
         # Ghi thang file .json (khong dung .tmp + doi ten, vi doi ten can quyen xoa ma thu muc nay co the da khoa).
         # Anh luon duoc luu xong truoc, roi moi ghi .json, nen khi may giao vien thay .json thi anh da day du.
-        [IO.File]::WriteAllText($jf, ($meta | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding($true)))
+        [IO.File]::WriteAllText($jf, ($meta | ConvertTo-Json -Compress -Depth 5), (New-Object Text.UTF8Encoding($true)))
+        Push-Signal $kind $name
         return $file
     } catch { Log "Shot failed: $_" }
     return $null
@@ -238,6 +268,8 @@ function Clear-OldReceipts {
 
 Load-Lists
 Log ("Watch STARTED. Sites allowed: {0}; apps allowed: {1} names, {2} paths; AI sites: {3}" -f $allowDomains.Count, $keepNames.Count, $keepPaths.Count, $aiDomains.Count)
+$lastHello = [datetime]::MinValue
+$script:siteKey = ''; $script:siteVal = $null; $script:siteAt = [datetime]::MinValue
 $lastLoad = Get-Date; $curKey = ''; $shots = 0; $lastShot = [datetime]::MinValue
 $aliveFile = Join-Path $Out 'alive.txt'; $lastBeat = [datetime]::MinValue   # tín hiệu "đang chạy" để máy giáo viên biết giám sát còn sống
 while (-not (StopRequested)) {
@@ -252,10 +284,14 @@ while (-not (StopRequested)) {
         $p = Get-Process -Id $procId -ErrorAction SilentlyContinue
         $n = ''; $path = $null
         if ($p) { $n = $p.ProcessName.ToLower(); try { $path = $p.Path } catch {} }
+        if ($n -and ($n -ne 'idle')) { Note-Active $n $title }
         $kind = ''; $name = ''
         if ($n -and ($protect -notcontains $n) -and ($n -ne 'idle')) {
             if ($browsers -contains $n) {
-                $site = Get-BrowserHost $h
+                # doc thanh dia chi (UI Automation) ton thoi gian: chi doc lai khi doi cua so / tieu de, hoac sau 3 giay
+                $bk = "$h|$title"
+                if ($bk -ne $script:siteKey -or ((Get-Date) - $script:siteAt).TotalSeconds -ge 3) { $script:siteVal = Get-BrowserHost $h; $script:siteKey = $bk; $script:siteAt = Get-Date }
+                $site = $script:siteVal
                 if ($site -and (Site-IsAi $site)) { $kind = 'ai'; $name = $site }
                 elseif ($site -and $allowDomains.Count -gt 0 -and -not (Site-Allowed $site)) { $kind = 'site'; $name = $site }
             } elseif ($aiApps -contains $n) {
@@ -277,7 +313,9 @@ while (-not (StopRequested)) {
         } else { $curKey = '' }
         if ($NotifyStudent -and $pending.Count -gt 0) { Process-Receipts }
     } catch { Log "Loop error: $_" }
+    # "hello": bao may giao vien biet script nay tu day anh ve ngay khi co vi pham, nen may giao vien khong can quet lien tuc qua mang
+    if (((Get-Date) - $lastHello).TotalSeconds -ge 240) { Push-Signal 'hello' ''; $lastHello = Get-Date }
     if (((Get-Date) - $lastBeat).TotalSeconds -ge 10) { try { Set-Content -LiteralPath $aliveFile -Value (Get-Date -Format s) } catch {}; $lastBeat = Get-Date }
-    Start-Sleep -Seconds 2
+    Start-Sleep -Milliseconds 500
 }
 Log 'Watch STOPPED'

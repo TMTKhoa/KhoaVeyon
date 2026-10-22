@@ -17,7 +17,7 @@ from .examlock import _safe, _walk_remote
 from .paths import CONFIG_PATH
 from .remote import rfs_read, rfs_remove, rfs_write
 from .runtime import ApiError, CFG, CFG_LOCK, clean_hosts, log, pool_run, split_host_port, start_job
-from .school import school_now
+from .school import _cls_norm, SCHOOL, school_now
 from .seating import school_student_for
 
 STUDENT_ROOT = 'C:\\ProgramData\\KhoaVeyon'
@@ -29,6 +29,7 @@ SUBMIT_MAX_FILES = 250
 ID_RE = re.compile(r'^\d{8}-\d{6}$')
 
 LOCK = threading.RLock()
+ACT = {}          # host -> {'p': tiến trình, 'w': tiêu đề cửa sổ, 'ts'}: máy học sinh báo cửa sổ đang ở trước (trang Monitor)
 HANDS = {}        # host -> {'ts', 'name', 'cls', 'no'}
 SUBMITS = []      # mới nhất ở đầu
 EVENTS = []       # {'seq', 'kind', 'host', 'name', ...}: giao diện hỏi "từ seq nào" để hiện thông báo
@@ -56,10 +57,10 @@ def host_for_ip(ip):
     return nm or ip
 
 
-def who(host):
-    """(tên học sinh ngồi máy này theo sơ đồ lớp hiện tại, lớp, số máy)."""
+def who(host, cls=''):
+    """(tên học sinh ngồi máy này theo sơ đồ của lớp `cls` (mặc định lớp đang có tiết), lớp, số máy)."""
     try:
-        cls = (school_now().get('current') or {}).get('cls', '')
+        cls = cls or (school_now().get('current') or {}).get('cls', '')
     except Exception:  # noqa
         cls = ''
     name, no = school_student_for(host, cls) if cls else ('', 0)
@@ -83,6 +84,20 @@ def handle_events(ip, d):
         if not isinstance(ev, dict):
             continue
         t = ev.get('t')
+        if t == 'act':
+            with LOCK:
+                ACT[host] = {'p': str(ev.get('p') or '')[:60], 'w': re.sub(r'[\x00-\x1f]', ' ', str(ev.get('w') or ''))[:120], 'ts': time.time()}
+            continue
+        if t == 'viol':   # script giám sát vừa chụp ảnh: lấy ngay về, không chờ lượt hỏi định kỳ
+            from .alerts import collect_and_beep, PUSH_CAPABLE
+            if str(ev.get('type') or '') == 'hello':
+                PUSH_CAPABLE[host] = time.time()
+                continue
+            with CFG_LOCK:
+                cfg = json.loads(json.dumps(CFG))
+            if host in (cfg.get('watch_hosts') or []):
+                threading.Thread(target=collect_and_beep, args=(cfg, host), daemon=True).start()
+            continue
         if t == 'hand':
             if ev.get('on'):
                 with LOCK:
@@ -154,7 +169,7 @@ def student_overview(since=0):
         subs = [dict(s) for s in SUBMITS[:60]]
         ev = [dict(e) for e in EVENTS if e['seq'] > since]
         last = SEQ[0]
-    return {'hands': hands, 'submits': subs, 'events': ev, 'last': last, 'root': submissions_root()}
+    return {'hand_enabled': bool(SCHOOL.get('hand_enabled', True)), 'hands': hands, 'submits': subs, 'events': ev, 'last': last, 'root': submissions_root()}
 
 
 def api_student(q):
@@ -195,6 +210,10 @@ def api_student_send(b):
         seconds = max(0, min(600, int(b.get('seconds') or 0)))
     except (TypeError, ValueError):
         seconds = 0
+    if kind == 'block':
+        from .engage import job_block
+        start_job(job_block, hosts, text, _cls_norm(b.get('cls')))
+        return {'ok': True, 'count': len(hosts)}
     msg = {'type': kind, 'title': str(b.get('title') or 'Thầy/cô nhắn')[:80], 'text': text or 'Hãy nộp bài làm của em.', 'seconds': seconds}
     start_job(send_message, hosts, msg)
     return {'ok': True, 'count': len(hosts)}

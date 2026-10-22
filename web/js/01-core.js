@@ -114,6 +114,7 @@ const PAGES = [
   {id:'setup', ic:'🚀', name:'Thiết lập ban đầu', title:'Thiết lập ban đầu', sub:'Một nút để chuẩn bị mọi thứ cần thiết trước khi dùng lần đầu.'},
   {id:'control', ic:'🎛️', name:'Điều khiển lớp', title:'Điều khiển lớp học', sub:'Chọn máy học sinh rồi bấm một nút để khóa máy, chặn web hoặc chặn ứng dụng.'},
   {id:'exam', ic:'📝', name:'Chế độ thi', title:'Chế độ thi', sub:'Một nút bật hết các bước cho giờ kiểm tra: khóa AI, chỉ trang cho phép, giám sát, nhãn chỗ ngồi. Hết giờ một nút để mở lại.'},
+  {id:'monitor', ic:'🖥️', name:'Monitor lớp', title:'Monitor lớp học', sub:'Xem cả lớp theo sơ đồ chỗ ngồi: tên máy, tên học sinh, ai đang giơ tay hay vi phạm; chọn máy rồi khóa, nhắn tin, chặn mạng ngay tại đây.'},
   {id:'status', ic:'📡', name:'Trạng thái máy', title:'Trạng thái máy học sinh', sub:'Máy nào đang bật, ai đăng nhập, bị hạn chế gì; chẩn đoán Veyon, Agent, giờ máy, bản dịch vụ; bật, tắt, cập nhật, xóa máy.'},
   {id:'interact', ic:'🙋', name:'Tương tác', title:'Tương tác với học sinh', sub:'Học sinh giơ tay và nộp bài từ máy của em; bạn nhắn tin, khóa màn hình kèm lời nhắn và xem thống kê dùng máy.'},
   {id:'school', ic:'📅', name:'Lớp & lịch dạy', title:'Lớp và lịch dạy', sub:'Nhập danh sách lớp và thời khóa biểu để chương trình tự biết đang dạy lớp nào và ghi tên lớp vào từng vi phạm.'},

@@ -141,10 +141,17 @@ def mode_steps(name, phase):
 
 
 def auto_transition(old, new):
+    from .engage import transition_extras
     with AUTO_LOCK:
-        if not AUTO['enabled']:
-            return
-        om, nm = auto_mode_for(old) if old else '', auto_mode_for(new) if new else ''
+        enabled = AUTO['enabled']
+        om, nm = (auto_mode_for(old) if old else '', auto_mode_for(new) if new else '') if enabled else ('', '')
+    from .engage import wall_for_mode as _wfm
+    try:
+        transition_extras(old, new, auto_hosts(), bool(enabled and new and nm and _wfm(nm)))
+    except Exception as e:  # noqa
+        log('Lỗi đổi hình nền theo tiết: %s' % e, 'err')
+    if not enabled:
+        return
     keys = []
     if om and om != nm:
         keys += mode_steps(om, 'end')
@@ -163,7 +170,7 @@ def auto_transition(old, new):
         log('Tự động: chưa có máy học sinh nào trong danh sách', 'warn')
         return
     if wall_new:
-        start_job(job_wall_apply, hosts, wall_new)
+        start_job(job_wall_apply, hosts, wall_new, new)
     elif wall_back:
         start_job(job_wall_restore, hosts)
     if not keys:

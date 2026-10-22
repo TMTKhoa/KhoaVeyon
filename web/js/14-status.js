@@ -23,10 +23,23 @@ function healthSummary() {
   const alert = warn.length ? `<div class="note warn" style="margin:0 0 8px">⚠ ${warn.join(' · ')}. Chi tiết ở cột Sức khỏe; <a href="#" data-tl="dgrun">chạy chẩn đoán</a>.</div>` : '';
   return alert + `<span style="color:#16a34a">● <b>${s.green}</b> tốt</span> · <span style="color:#f59e0b">● <b>${s.yellow}</b> cần chú ý</span> · <span style="color:#dc2626">● <b>${s.red}</b> có lỗi</span> · <span style="color:#64748b">● <b>${s.off}</b> tắt</span>${btns ? '<div class="row" style="margin-top:8px;flex-wrap:wrap">' + btns + '</div>' : ''}`;
 }
+const SORT_KEY = 'kvStatusSort';
+function statusSortMode() {
+  if (S.statusSort) return S.statusSort;
+  let v = ''; try { v = localStorage.getItem(SORT_KEY) || ''; } catch (e) { /* bỏ qua */ }
+  return S.statusSort = ['list', 'name', 'ip'].includes(v) ? v : 'name';
+}
+function ipKey(h) { return String(h).split(':')[0].split('.').map(x => String(+x || 0).padStart(3, '0')).join('.'); }
+function statusOrder() {   // thứ tự hiển thị: chỉ đổi cách xếp, chỉ số i vẫn là vị trí thật trong S.hosts
+  const idx = S.hosts.map((h, i) => i), mode = statusSortMode();
+  if (mode === 'name') idx.sort((a, b) => String(hn(S.hosts[a])).localeCompare(String(hn(S.hosts[b])), 'vi', {numeric: true, sensitivity: 'base'}) || ipKey(S.hosts[a]).localeCompare(ipKey(S.hosts[b])));
+  else if (mode === 'ip') idx.sort((a, b) => ipKey(S.hosts[a]).localeCompare(ipKey(S.hosts[b])));
+  return idx;
+}
 function statusRows() {
   const rows = (S.stat && S.stat.hosts) || [];
   const byHost = new Map(rows.map(r => [r.host, r]));
-  return S.hosts.map((h, i) => {
+  return statusOrder().map(i => { const h = S.hosts[i];
     const r = byHost.get(h) || {checked: false};
     const wait = !r.checked;
     const dot = wait ? '<span class="sdot wait"></span>Đang kiểm tra' : r.online ? `<span class="sdot on"></span>Đang bật <span class="muted">· ${esc(ago(r.since))}</span>` : `<span class="sdot off"></span>Tắt <span class="muted">· ${esc(ago(r.since))}</span>`;
@@ -57,6 +70,7 @@ function viewStatus() {
     <p class="sub">Tự cập nhật vài giây một lần khi trang này đang mở. Cột “Đang hạn chế” cho biết lệnh KhoaVeyon đã gửi gần nhất (chưa chắc đã có hiệu lực: bấm “Kiểm tra hiệu lực” để đọc trạng thái thật). Cột AI được đọc thật từ máy.</p>
     <label class="switch" style="margin:4px 0 8px"><input type="checkbox" data-cfg="reapply_on_boot" ${S.st.cfg.reapply_on_boot !== false ? 'checked' : ''}><span class="tr"></span><span>Máy khởi động lại hoặc bật lại thì tự áp lại các hạn chế đang bật (đợi có người đăng nhập; chỉ hoạt động khi KhoaVeyon đang mở)</span></label>
     <label class="switch" style="margin:4px 0 8px"><input type="checkbox" data-cfg="auto_update_students" ${S.st.cfg.auto_update_students !== false ? 'checked' : ''}><span class="tr"></span><span>Tự cập nhật dịch vụ trên máy học sinh khi có bản mới (máy đang kết nối Agent; không chạy khi đang thi)</span></label>
+    <label class="switch" style="margin:4px 0 8px"><input type="checkbox" data-cfg="auto_scan_ip" ${S.st.cfg.auto_scan_ip !== false ? 'checked' : ''}><span class="tr"></span><span>Máy đổi IP (DHCP) thì tự nối lại: khi có máy không thấy, tự quét mạng và chuyển IP cũ sang IP mới theo MAC hoặc tên PC (giữ tên và MAC, xóa IP cũ)</span></label>
     <div class="row" style="flex-wrap:wrap;margin:6px 0 10px"><button class="btn" data-xa="verify" data-fix="0">✔ Kiểm tra hiệu lực</button><button class="btn" data-xa="verify" data-fix="1">✔ Kiểm tra và gửi lại lệnh nếu lệch</button><button class="btn primary" data-tl="dgrun">🩺 Chẩn đoán ngay</button><button class="btn" data-act="selftest">🧪 Tự kiểm tra 1 máy</button><button class="btn" data-xa="updatehs" title="Chép bản KhoaVeyonServices.bat và tệp trợ lý mới nhất trong payload xuống máy học sinh">⬆ Cập nhật máy học sinh</button></div>
     <div id="healthSum" style="margin:6px 0 10px">${healthSummary()}</div>
     <div class="hosttools"><button class="link" data-act="selall">Chọn tất cả</button><button class="link" data-act="selnone">Bỏ chọn</button><span class="muted">Đã chọn ${S.hosts.filter(h => S.sel.has(h)).length}/${S.hosts.length}. Không chọn = tất cả.</span></div>
@@ -67,6 +81,9 @@ function viewStatus() {
       <button class="btn" data-xa="power" data-p="logoff">🚪 Đăng xuất học sinh</button>
       <button class="btn ghost" data-xa="power" data-p="cancel">Hủy lệnh tắt máy</button>
       <button class="btn ghost" data-xa="power" data-p="getmac">Lấy MAC</button>
+      <button class="btn" data-xa="scanip" title="Quét mạng tìm máy Veyon, máy nào đã đổi IP thì tự chuyển sang IP mới, thêm máy mới thấy">🔄 Quét mạng &amp; cập nhật IP</button>
+      <label class="muted" style="display:inline-flex;gap:6px;align-items:center">Xếp theo <select class="xsel" data-xa-sort="1"><option value="name" ${statusSortMode() === 'name' ? 'selected' : ''}>Tên máy (PC name)</option><option value="ip" ${statusSortMode() === 'ip' ? 'selected' : ''}>Địa chỉ IP</option><option value="list" ${statusSortMode() === 'list' ? 'selected' : ''}>Thứ tự trong danh sách</option></select></label>
+      <button class="btn ghost" data-xa="seloff" title="Tick tất cả máy đang tắt hoặc không thấy, rồi bấm Xóa máy đã chọn nếu là IP cũ">☑ Chọn máy đang tắt</button>
       <button class="btn danger" data-xa="rmsel" title="Xóa các máy đã chọn khỏi danh sách (vd. IP cũ do DHCP đổi, máy không còn dùng)">🗑 Xóa máy đã chọn</button>
       <label class="muted" style="display:inline-flex;gap:6px;align-items:center">Chờ <input type="number" id="pwDelay" min="0" max="3600" value="${esc(S.pwDelay ?? 30)}" style="width:70px" class="xsel"> giây trước khi tắt</label>
     </div>
@@ -136,6 +153,22 @@ document.addEventListener('click', async e => {
       await api('/api/health_fix', {fix, hosts: hs});
       openLog(); toast('Đang sửa, xem kết quả ở Nhật ký', 'ok');
       setTimeout(() => pollStatus(true), 8000); setTimeout(() => pollStatus(true), 25000);
+    } else if (a === 'scanip') {
+      toast('Đang quét mạng, mất vài giây...', '');
+      const r = await api('/api/setup_scan', {});
+      S.hosts = r.hosts.slice(); S.st.cfg.hosts = S.hosts.slice();
+      if (r.auto) S.st.cfg.host_auto_names = r.auto;
+      if (r.manual) S.st.cfg.host_names = r.manual;
+      (r.moved || []).forEach(([o, n]) => { S.sel.delete(o); });
+      const mv = (r.moved || []).length;
+      toast(r.found.length ? `Thấy ${r.found.length} máy chạy Veyon · đổi IP ${mv} máy · thêm mới ${r.added}` : 'Không thấy máy nào mở cổng Veyon (11100). Kiểm tra Veyon Service và tường lửa.', r.found.length ? 'ok' : 'warn');
+      if (mv) openLog();
+      render(); pollStatus(true);
+    } else if (a === 'seloff') {
+      const rows = (S.stat && S.stat.hosts) || [];
+      const off = rows.filter(r => r.checked && !r.online).map(r => r.host).filter(h => S.hosts.includes(h));
+      S.sel = new Set(off); render();
+      toast(off.length ? `Đã chọn ${off.length} máy đang tắt. Bấm “Xóa máy đã chọn” nếu là IP cũ.` : 'Không có máy nào đang tắt', off.length ? 'ok' : '');
     } else if (a === 'rmhost' || a === 'rmsel') {
       const hs = a === 'rmhost' ? [el.dataset.h] : S.hosts.filter(h => S.sel.has(h));
       if (!hs.length) { toast('Chọn máy cần xóa trước (tick ở đầu dòng)', 'err'); return; }
@@ -188,3 +221,10 @@ function renderSelftest(d) {
   const head = d.ok != null ? `<p>Kết quả: đạt <b>${d.ok}/${d.total}</b> bước. ✔ đạt · ✘ chưa đạt · ▪ chưa kiểm được.</p>` : '';
   return head + `<table class="tbl"><tbody>${rows}</tbody></table><p class="hint">Bước ✘ hoặc ▪ nào bất ngờ, hãy chép dòng tương ứng trong Nhật ký gửi lại để chỉnh.</p>`;
 }
+
+document.addEventListener('change', e => {
+  const el = e.target.closest('[data-xa-sort]'); if (!el) return;
+  S.statusSort = el.value;
+  try { localStorage.setItem(SORT_KEY, el.value); } catch (err) { /* bỏ qua */ }
+  const b = $('#statusBody'); if (b) b.innerHTML = statusRows();
+});

@@ -41,7 +41,12 @@ def school_student_for(host, cls):
         if not lay:
             return '', 0
         no = school_seat_no(host, lay)
-        return (lay.get('seats') or {}).get(str(no), ''), no
+        # chỗ ngồi thực tế hôm nay (bỏ em vắng, em được chuyển chỗ), giống sơ đồ đang hiện trên màn hình
+        e = SCHOOL['attendance'].get('%s|%s' % (att_today(), cls)) or {}
+        names = list(SCHOOL['classes'].get(cls, []))
+        absent = [n for n in e.get('absent', []) if n in names]
+        seats = seats_effective(lay.get('seats'), absent, dict(e.get('moves', {})))
+        return seats.get(str(no), ''), no
 
 
 # ---------------------------------------------------------------- thông báo chỗ ngồi, điểm danh vắng, tự dồn chỗ

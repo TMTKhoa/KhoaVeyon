@@ -23,7 +23,8 @@ from .autoupdate import api_update_students
 from .health import api_health_fix
 from .backup_api import api_backup_preview, api_backup_restore
 from .diagnose import api_diagnose, api_diagnose_fix
-from .engage import api_draw, api_wall, api_wall_img, api_wall_apply, api_wall_bg, api_wall_preset_delete, api_wall_preset_save, api_wall_restore
+from .board import api_act_option, api_monitor
+from .engage import api_draw, api_hand_option, api_lock_style, api_lock_style_save, api_wall, api_wall_img, api_wall_apply, api_wall_bg, api_wall_preset_delete, api_wall_preset_save, api_wall_restore
 from .student import api_hand_clear, api_student, api_student_send
 from .usage import api_usage
 from .exam import api_exam, api_exam_end, api_exam_start
@@ -46,10 +47,10 @@ from .vcfg import api_vcfg_info, api_vcfg_run, api_vcfg_save
 from .watch import api_watch
 
 
-GET_ROUTES = {'/api/wall': api_wall, '/api/wall_img': api_wall_img, '/api/student': api_student, '/api/update_check': api_update_check, '/api/setup_status': api_setup_status, '/api/state': api_state, '/api/list': api_list_get, '/api/list_variant': api_list_variant_get, '/api/payload': api_payload,
+GET_ROUTES = {'/api/monitor': api_monitor, '/api/lock_style': api_lock_style, '/api/wall': api_wall, '/api/wall_img': api_wall_img, '/api/student': api_student, '/api/update_check': api_update_check, '/api/setup_status': api_setup_status, '/api/state': api_state, '/api/list': api_list_get, '/api/list_variant': api_list_variant_get, '/api/payload': api_payload,
               '/api/log': api_log, '/api/school': api_school, '/api/school_students': api_school_students, '/api/school_attendance': api_school_attendance, '/api/alerts': api_alerts, '/api/report': api_report, '/api/ping': api_ping, '/api/vcfg_info': api_vcfg_info, '/api/status': api_status, '/api/hostnames': api_hostnames, '/api/auto': api_auto, '/api/exam': api_exam, '/api/privacy': api_privacy, '/api/gallery': api_gallery, '/api/applock': api_applock, '/api/agent': api_agent,
               '/api/kq_status': api_kq_status, '/api/kq_rosters_preview': api_kq_rosters_preview, '/api/kq_compare': api_kq_compare, '/api/kq_exams': api_kq_exams, '/api/kq_live': api_kq_live, '/api/selftest_result': api_selftest_result}
-POST_ROUTES = {'/api/draw': api_draw, '/api/wall_apply': api_wall_apply, '/api/wall_restore': api_wall_restore, '/api/wall_bg': api_wall_bg, '/api/wall_preset_save': api_wall_preset_save, '/api/wall_preset_delete': api_wall_preset_delete, '/api/student_send': api_student_send, '/api/hand_clear': api_hand_clear, '/api/usage': api_usage, '/api/diagnose': api_diagnose, '/api/diagnose_fix': api_diagnose_fix, '/api/backup_preview': api_backup_preview, '/api/backup_restore': api_backup_restore, '/api/kq_live_set': api_kq_live_set, '/api/kq_live_open': api_kq_live_open, '/api/kq_link': api_kq_link, '/api/kq_unlink': api_kq_unlink, '/api/kq_rosters_import': api_kq_rosters_import, '/api/kt_export': api_kt_export,
+POST_ROUTES = {'/api/act_option': api_act_option, '/api/lock_style_save': api_lock_style_save, '/api/hand_option': api_hand_option, '/api/draw': api_draw, '/api/wall_apply': api_wall_apply, '/api/wall_restore': api_wall_restore, '/api/wall_bg': api_wall_bg, '/api/wall_preset_save': api_wall_preset_save, '/api/wall_preset_delete': api_wall_preset_delete, '/api/student_send': api_student_send, '/api/hand_clear': api_hand_clear, '/api/usage': api_usage, '/api/diagnose': api_diagnose, '/api/diagnose_fix': api_diagnose_fix, '/api/backup_preview': api_backup_preview, '/api/backup_restore': api_backup_restore, '/api/kq_live_set': api_kq_live_set, '/api/kq_live_open': api_kq_live_open, '/api/kq_link': api_kq_link, '/api/kq_unlink': api_kq_unlink, '/api/kq_rosters_import': api_kq_rosters_import, '/api/kt_export': api_kt_export,
                '/api/school_set': api_school_set, '/api/school_attendance_set': api_school_attendance_set, '/api/school_announce': api_school_announce, '/api/school_layout': api_school_layout, '/api/update_apply': api_update_apply, '/api/setup_run': api_setup_run, '/api/setup_scan': api_setup_scan, '/api/setup_done': api_setup_done,
                '/api/list': api_list_save, '/api/check': api_check, '/api/hosts': api_hosts, '/api/run': api_run,
                '/api/settings': api_settings, '/api/dist': api_dist, '/api/open': api_open,

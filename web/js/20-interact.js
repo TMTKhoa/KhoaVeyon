@@ -53,7 +53,8 @@ function viewInteract() {
       <div class="row" style="margin-top:8px"><button class="btn ghost sm" data-ix="usagecsv">⬇ Xuất CSV</button></div>`;
   }
   return `<div class="stack">
-    <section class="card"><h3>✋ Học sinh giơ tay <span class="badge">${I.hands.length}</span></h3>${hands}</section>
+    <section class="card"><h3>✋ Học sinh giơ tay <span class="badge">${I.hands.length}</span></h3>
+      <label class="switch" style="margin-bottom:8px"><input type="checkbox" data-ev="handopt" ${I.hand_enabled === false ? '' : 'checked'}><span class="tr"></span><span>Cho phép học sinh giơ tay (tắt thì nút “Giơ tay” biến mất trên máy học sinh, chỉ còn “Nộp bài”)</span></label>${hands}</section>
     <section class="card"><h3>Nhắn tin và khóa màn hình</h3>
       <p class="sub">Gửi tới các máy đang chọn (không chọn = tất cả). Tin nhắn hiện giữa màn hình học sinh. “Khóa màn hình” phủ kín màn hình kèm lời nhắn cho đến khi bạn bấm “Mở màn hình”; đây là khóa mềm (học sinh có thể tắt bằng Task Manager), cần khóa chắc thì dùng thêm “Khóa toàn bộ” ở trang Điều khiển.</p>
       <textarea id="ixText" rows="3" style="width:100%;box-sizing:border-box" placeholder="Nội dung, ví dụ: Còn 5 phút, các em lưu bài lại.">${esc(S.ixText || '')}</textarea>
@@ -61,6 +62,7 @@ function viewInteract() {
         <label class="muted">Tự tắt sau <select id="ixSec" class="xsel"><option value="0">khi học sinh bấm Đã hiểu</option><option value="10">10 giây</option><option value="30">30 giây</option><option value="60">1 phút</option></select></label>
         <button class="btn primary" data-ix="msg">💬 Gửi tin nhắn</button>
         <button class="btn danger" data-ix="block">🔒 Khóa màn hình kèm lời nhắn</button>
+        <button class="btn ghost" data-ev="lockstyle" title="Đổi màu, ảnh nền, tiêu đề của màn hình khóa">🎨 Giao diện màn hình khóa</button>
         <button class="btn" data-ix="clear">🔓 Mở màn hình</button>
         <button class="btn" data-ix="collect">📤 Yêu cầu nộp bài</button>
       </div></section>
@@ -86,7 +88,7 @@ document.addEventListener('click', async e => {
       if ((a === 'msg' || a === 'block') && !text.trim()) { toast('Hãy nhập nội dung', 'warn'); return; }
       const hs = await resolveTargets(); if (!hs) return;
       if (a === 'block' && !await modal({title: `Khóa màn hình ${hs.length} máy?`, ok: 'Khóa', danger: true, html: 'Màn hình học sinh bị phủ kín kèm lời nhắn. Bài chưa lưu vẫn còn nguyên. Bấm “Mở màn hình” để mở.'})) return;
-      await api('/api/student_send', {kind: a, hosts: hs, text, seconds: +($('#ixSec') || {value: 0}).value});
+      await api('/api/student_send', {kind: a, hosts: hs, text, cls: S.wcls || '', seconds: +($('#ixSec') || {value: 0}).value});
       openLog(); toast('Đã gửi tới ' + hs.length + ' máy', 'ok');
     }
     else if (a === 'usage') {

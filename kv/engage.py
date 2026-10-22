@@ -161,21 +161,26 @@ def _ensure_bg(host, bg):
         rfs_write(hh, remote, data)
 
 
-def wall_message(host, spec):
-    name, cls, no = who(host)
-    msg = {'type': 'wallpaper', 'title': spec['title'], 'sub': spec['sub'] or (('Lớp ' + cls) if cls else ''), 'c1': spec['c1'], 'c2': spec['c2'],
+def fill_tokens(text, name, cls, no):
+    """{lop} {ten} {may} trong tiêu đề / dòng phụ được thay theo lớp đang có tiết và em ngồi máy đó."""
+    return text.replace('{lop}', cls or '').replace('{ten}', name or '').replace('{may}', str(no) if no else '')
+
+
+def wall_message(host, spec, cls=''):
+    name, cls, no = who(host, cls)
+    msg = {'type': 'wallpaper', 'title': fill_tokens(spec['title'], name, cls, no), 'sub': fill_tokens(spec['sub'], name, cls, no) if spec['sub'] else (('Lớp ' + cls) if cls else ''), 'c1': spec['c1'], 'c2': spec['c2'],
            'bg': spec['bg'], 'dim': spec['dim'], 'lock': spec['lock'], 'name': name if spec['seat'] else '', 'no': no if spec['seat'] else 0}
     return msg
 
 
-def job_wall_apply(hosts, spec):
+def job_wall_apply(hosts, spec, cls=''):
     from .student import _inbox_write
 
     def one(h):
         try:
             if spec['bg']:
                 _ensure_bg(h, spec['bg'])
-            _inbox_write(h, wall_message(h, spec))
+            _inbox_write(h, wall_message(h, spec, cls))
         except Exception as e:  # noqa
             return False, 'không đổi được hình nền (máy tắt hoặc chưa có Agent?): %s' % e
         return True, 'đã gửi hình nền'
@@ -196,7 +201,11 @@ def api_wall_apply(b):
             spec = (SCHOOL.get('wall_presets') or {}).get(str(b['preset']))
         if spec is None:
             raise ApiError('Mẫu hình nền không tồn tại')
-    start_job(job_wall_apply, hosts, clean_wall(spec))
+    spec = clean_wall(spec)
+    start_job(job_wall_apply, hosts, spec, _cls_norm(b.get('cls')))
+    with SCHOOL_LOCK:   # theo tiết: sang lớp khác thì vẽ lại tên lớp, hết tiết thì trả hình nền cũ
+        SCHOOL['wall_follow'] = spec if b.get('follow') else None
+    school_save()
     return {'ok': True, 'count': len(hosts)}
 
 
@@ -205,6 +214,9 @@ def api_wall_restore(b):
     if not hosts:
         raise ApiError('Chưa có máy nào')
     start_job(job_wall_restore, hosts)
+    with SCHOOL_LOCK:
+        SCHOOL['wall_follow'] = None
+    school_save()
     return {'ok': True, 'count': len(hosts)}
 
 
@@ -218,3 +230,78 @@ def wall_for_mode(mode):
     with SCHOOL_LOCK:
         spec = (SCHOOL.get('wall_presets') or {}).get(name)
     return clean_wall(spec) if spec else None
+
+
+def transition_extras(old, new, hosts, mode_wall):
+    """Việc đi kèm mỗi lần đổi tiết, không phụ thuộc chế độ tự động: hình nền "theo tiết" và nút giơ tay."""
+    with SCHOOL_LOCK:
+        follow = SCHOOL.get('wall_follow')
+        hand_on = SCHOOL.get('hand_enabled', True)
+        act_on = SCHOOL.get('act_enabled', True)
+    if not hosts:
+        return
+    if follow and not mode_wall:
+        if new:
+            start_job(job_wall_apply, hosts, follow, new)
+        else:
+            start_job(job_wall_restore, hosts)
+            with SCHOOL_LOCK:
+                SCHOOL['wall_follow'] = None
+            school_save()
+    if not hand_on or not act_on:   # máy bật sau khi giáo viên tắt nút giơ tay / báo cửa sổ vẫn nhận lại cài đặt
+        start_job(send_message, hosts, {'type': 'config', 'hand': hand_on, 'act': act_on})
+
+
+# ---------------------------------------------------------------- nút giơ tay
+def api_hand_option(b):
+    on = bool(b.get('enabled'))
+    with SCHOOL_LOCK:
+        SCHOOL['hand_enabled'] = on
+    school_save()
+    if not on:
+        from .student import HANDS, LOCK
+        with LOCK:
+            HANDS.clear()
+    hosts = clean_hosts(b.get('hosts'))
+    if hosts:
+        start_job(send_message, hosts, {'type': 'config', 'hand': on})
+    return {'ok': True, 'enabled': on, 'count': len(hosts)}
+
+
+# ---------------------------------------------------------------- giao diện màn hình khóa
+def clean_lock(spec):
+    s = spec if isinstance(spec, dict) else {}
+    w = clean_wall(s)
+    ic = str(s.get('icon') if s.get('icon') is not None else '🔒').strip()[:4]
+    return {'title': w['title'] or 'Màn hình đang tạm khóa', 'icon': ic, 'c1': s['c1'] if HEX_RE.match(str(s.get('c1') or '')) else '#0f172a', 'c2': s['c2'] if HEX_RE.match(str(s.get('c2') or '')) else '#1e293b',
+            'bg': w['bg'], 'dim': w['dim'], 'seat': bool(s.get('seat')), 'clock': bool(s.get('clock', True))}
+
+
+def api_lock_style(_q=None):
+    with SCHOOL_LOCK:
+        return {'style': clean_lock(SCHOOL.get('lock_style'))}
+
+
+def api_lock_style_save(b):
+    with SCHOOL_LOCK:
+        SCHOOL['lock_style'] = clean_lock(b.get('spec'))
+    school_save()
+    return api_lock_style()
+
+
+def job_block(hosts, text, cls=''):
+    from .student import _inbox_write
+    st = api_lock_style()['style']
+
+    def one(h):
+        try:
+            if st['bg']:
+                _ensure_bg(h, st['bg'])
+            name, c, no = who(h, cls)
+            msg = dict(st, type='block', text=text, name=name if st['seat'] else '', no=no if st['seat'] else 0)
+            msg['title'] = fill_tokens(st['title'], name, c, no)
+            _inbox_write(h, msg)
+        except Exception as e:  # noqa
+            return False, 'không khóa được (máy tắt hoặc chưa có Agent?): %s' % e
+        return True, 'đã khóa màn hình'
+    pool_run(one, hosts, 'Khóa màn hình học sinh')

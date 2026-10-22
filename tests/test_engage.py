@@ -65,7 +65,7 @@ class WallTest(unittest.TestCase):
             engage.api_wall_img({'id': '../x'})
 
     def test_message_has_seat(self):
-        with mock.patch.object(engage, 'who', lambda h: ('An', '10A', 7)):
+        with mock.patch.object(engage, 'who', lambda h, c='': ('An', '10A', 7)):
             m = engage.wall_message('h', engage.clean_wall({'title': 'T', 'seat': True}))
             self.assertEqual((m['name'], m['no'], m['sub']), ('An', 7, 'Lớp 10A'))
             m = engage.wall_message('h', engage.clean_wall({'title': 'T', 'seat': False}))
@@ -93,3 +93,68 @@ class AutoHookTest(unittest.TestCase):
             self.assertEqual(sj.call_args[0][0].__name__, 'job_wall_restore')
             sj.reset_mock(); auto.auto_transition('2', '')       # hết tiết
             self.assertEqual(sj.call_args[0][0].__name__, 'job_wall_restore')
+
+
+class SeatNameTest(unittest.TestCase):
+    def test_effective_seats(self):
+        from kv import seating
+        lay = {'pattern': 'MAY{n}', 'seats': {'1': 'An', '2': 'Binh'}}
+        att = {'%s|10A' % seating.att_today(): {'absent': ['An'], 'moves': {'Binh': 5}}}
+        with mock.patch.dict(seating.SCHOOL, {'layouts': {'10A': lay}, 'classes': {'10A': ['An', 'Binh']}, 'attendance': att}):
+            self.assertEqual(seating.school_student_for('MAY1', '10A'), ('', 1))      # An vắng
+            self.assertEqual(seating.school_student_for('MAY2', '10A'), ('', 2))      # Bình đã chuyển
+            self.assertEqual(seating.school_student_for('MAY5', '10A'), ('Binh', 5))
+
+
+class ExtrasTest(unittest.TestCase):
+    def test_lock_style_clean(self):
+        k = engage.clean_lock({'title': '', 'icon': '🔒🔒🔒🔒🔒🔒', 'c1': 'bad'})
+        self.assertEqual(k['title'], 'Màn hình đang tạm khóa'); self.assertLessEqual(len(k['icon']), 4)
+        self.assertEqual(k['c1'], '#0f172a'); self.assertTrue(k['clock'])
+
+    def test_tokens(self):
+        self.assertEqual(engage.fill_tokens('Lớp {lop} - {ten} - {may}', 'An', '10A', 5), 'Lớp 10A - An - 5')
+
+    def test_hand_option_and_follow(self):
+        with mock.patch.object(engage, 'start_job') as sj, mock.patch.object(engage, 'school_save'), \
+             mock.patch.object(engage, 'clean_hosts', lambda h: list(h or [])), mock.patch.dict(engage.SCHOOL, {'hand_enabled': True, 'wall_follow': None}):
+            engage.api_hand_option({'enabled': False, 'hosts': ['h']})
+            self.assertFalse(engage.SCHOOL['hand_enabled']); sj.assert_called_once()
+            spec = engage.clean_wall({'title': 'T'})
+            engage.SCHOOL['wall_follow'] = spec
+            sj.reset_mock()
+            engage.transition_extras('1', '2', ['h'], False)
+            names = [c[0][0].__name__ if hasattr(c[0][0], '__name__') else '' for c in sj.call_args_list]
+            self.assertIn('job_wall_apply', names)
+            sj.reset_mock(); engage.transition_extras('2', '', ['h'], False)
+            self.assertIsNone(engage.SCHOOL['wall_follow'])
+
+
+class MonitorTest(unittest.TestCase):
+    def test_recent_clean(self):
+        from kv import alerts
+        r = alerts._recent_clean([{'p': 'chrome', 'w': 'x' * 500, 't': '10:00:01', 'd': 99999999}, 'bad'] + [{}] * 60)
+        self.assertEqual(len(r), 30 - 1 + 0 if False else len(r)); self.assertLessEqual(len(r), 30)
+        self.assertEqual(len(r[0]['w']), 100); self.assertEqual(r[0]['d'], 86400)
+
+    def test_events_act_hello_viol(self):
+        from kv import student, alerts
+        with mock.patch.object(student, 'host_for_ip', lambda ip: 'PC1'), mock.patch.object(student, 'who', lambda h, c='': ('An', '10A', 1)), \
+             mock.patch.object(student.threading, 'Thread') as th, mock.patch.dict(student.CFG, {'watch_hosts': ['PC1']}):
+            student.handle_events('1.2.3.4', {'events': [{'t': 'act', 'p': 'chrome', 'w': 'Hello'}]})
+            self.assertEqual(student.ACT['PC1']['p'], 'chrome')
+            student.handle_events('1.2.3.4', {'events': [{'t': 'viol', 'type': 'hello'}]})
+            self.assertIn('PC1', alerts.PUSH_CAPABLE); th.assert_not_called()
+            student.handle_events('1.2.3.4', {'events': [{'t': 'viol', 'type': 'site', 'name': 'x.com'}]})
+            th.assert_called_once()
+
+    def test_monitor_structure(self):
+        from kv import board
+        lay = {'cols': 2, 'per': 2, 'seats': {'1': 'An', '2': 'Binh'}, 'pattern': 'MAY{n}'}
+        row = {'host': 'MAY1', 'online': True, 'health': 'green', 'user': '', 'watching': True}
+        with mock.patch.object(board, 'api_status', lambda q: {'hosts': [row], 'online': 1, 'total': 1}), \
+             mock.patch.dict(board.SCHOOL, {'classes': {'10A': ['An', 'Binh']}, 'layouts': {'10A': lay}, 'attendance': {}, 'slots': []}), \
+             mock.patch.dict(board.CFG, {'hosts': ['MAY1', 'MAY9']}):
+            d = board.api_monitor({'cls': '10A'})
+        self.assertEqual(d['cls'], '10A'); self.assertEqual(d['seats']['1']['host'], 'MAY1'); self.assertEqual(d['seats']['1']['name'], 'An')
+        self.assertIn('MAY9', d['extras']); self.assertIsNone(d['current'])

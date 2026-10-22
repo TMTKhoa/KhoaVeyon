@@ -89,8 +89,9 @@ async function scanHosts() {
     const r = await api('/api/setup_scan', {});
     S.hosts = r.hosts.slice(); r.found.forEach(h => S.sel.add(h));
     if (r.auto) S.st.cfg.host_auto_names = r.auto;
+    if (r.manual) S.st.cfg.host_names = r.manual;
     S.st.cfg.hosts = S.hosts.slice();
-    toast(r.found.length ? `Thấy ${r.found.length} máy chạy Veyon, thêm mới ${r.added}` : 'Không thấy máy nào mở cổng Veyon (11100). Kiểm tra Veyon Service và tường lửa trên máy học sinh.', r.found.length ? 'ok' : 'warn');
+    toast(r.found.length ? `Thấy ${r.found.length} máy chạy Veyon, thêm mới ${r.added}${(r.moved || []).length ? ', đổi IP ' + r.moved.length : ''}` : 'Không thấy máy nào mở cổng Veyon (11100). Kiểm tra Veyon Service và tường lửa trên máy học sinh.', r.found.length ? 'ok' : 'warn');
     await refreshSetup();
   } catch (e) { toast(e.message, 'err'); }
 }

@@ -17,12 +17,15 @@ function viewEngage() {
         <div style="flex:1;min-width:260px"><canvas id="wallPrev" class="wallprev" width="640" height="360"></canvas></div>
         <div style="flex:1;min-width:260px;display:grid;gap:8px">
           <label class="muted">Mẫu đã lưu <select id="wPreset" class="xsel"><option value="">(chọn để nạp)</option>${names.map(n => `<option>${esc(n)}</option>`).join('')}</select></label>
+          <label class="muted">Lấy tên theo sơ đồ lớp <select id="wCls" class="xsel"><option value="">(lớp đang có tiết)</option>${((S.school || {}).classes || []).map(c => `<option ${c === S.wcls ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
           <input type="text" id="wTitle" placeholder="Tiêu đề, ví dụ: Tin học 10" value="${esc(w.title)}" maxlength="60">
           <input type="text" id="wSub" placeholder="Dòng phụ (để trống = Lớp ...)" value="${esc(w.sub)}" maxlength="80">
           <div class="row">Màu <input type="color" id="wC1" value="${esc(w.c1)}"> → <input type="color" id="wC2" value="${esc(w.c2)}">
             <button class="btn sm ghost" data-ev="wallpic">Chọn ảnh nền...</button>${w.bg ? '<button class="btn sm ghost" data-ev="wallnopic">Bỏ ảnh</button>' : ''}</div>
           <label class="muted">Làm tối ảnh <input type="range" id="wDim" min="0" max="80" value="${w.dim}"></label>
           <label class="switch"><input type="checkbox" id="wSeat" ${w.seat ? 'checked' : ''}><span class="tr"></span><span>In số máy và tên em ngồi</span></label>
+          <label class="switch"><input type="checkbox" id="wFollow" ${S.wfollow ? 'checked' : ''}><span class="tr"></span><span>Tự đổi theo tiết: sang lớp khác thì đổi tên lớp và tên em, hết tiết thì trả hình nền cũ</span></label>
+          <div class="muted" style="font-size:12.5px">Trong tiêu đề / dòng phụ có thể gõ <code>{lop}</code> (lớp đang có tiết), <code>{ten}</code> (tên em), <code>{may}</code> (số máy). Để trống dòng phụ = “Lớp ...” tự đổi theo tiết.</div>
           <label class="switch"><input type="checkbox" id="wLock" ${w.lock ? 'checked' : ''}><span class="tr"></span><span>Khóa, không cho em đổi hình nền</span></label>
         </div></div>
       <div class="row" style="flex-wrap:wrap;margin-top:8px">
@@ -105,11 +108,17 @@ async function doDraw(opts) {
 }
 
 document.addEventListener('click', async e => {
-  const el = e.target.closest('[data-ev]'); if (!el) return;
+  const el = e.target.closest('[data-ev]'); if (!el || el.type === 'checkbox') return;
   e.preventDefault();
   const a = el.dataset.ev;
   try {
     if (a === 'draw') await doDraw();
+    else if (a === 'lockstyle') await lockStyleDialog();
+    else if (a === 'lockpic') {
+      const data = await pickImageDownscaled(); if (!data) return;
+      const r = await api('/api/wall_bg', {data: data.split(',')[1]}); S.lockSpec.bg = r.id; const lb = $('#lkBg'); if (lb) lb.textContent = 'Đã chọn ảnh';
+    }
+    else if (a === 'lockpicclr') { S.lockSpec.bg = ''; const lb = $('#lkBg'); if (lb) lb.textContent = 'Không dùng ảnh'; }
     else if (a === 'wallpic') {
       const data = await pickImageDownscaled(); if (!data) return;
       const r = await api('/api/wall_bg', {data: data.split(',')[1]});
@@ -118,11 +127,12 @@ document.addEventListener('click', async e => {
     else if (a === 'wallnopic') { wallRead(); S.wspec.bg = ''; S.wbgData = ''; render(); }
     else if (a === 'wallapply') {
       const spec = wallRead(), hs = await resolveTargets(); if (!hs) return;
-      await api('/api/wall_apply', {hosts: hs, spec}); openLog(); toast('Đang đổi hình nền ' + hs.length + ' máy', 'ok');
+      S.wfollow = !!($('#wFollow') || {}).checked;
+      await api('/api/wall_apply', {hosts: hs, spec, follow: S.wfollow, cls: ($('#wCls') || {}).value || ''}); openLog(); toast('Đang đổi hình nền ' + hs.length + ' máy', 'ok');
     }
     else if (a === 'wallrestore') {
       const hs = await resolveTargets(); if (!hs) return;
-      await api('/api/wall_restore', {hosts: hs}); openLog(); toast('Đang trả hình nền cũ', 'ok');
+      S.wfollow = false; await api('/api/wall_restore', {hosts: hs}); openLog(); toast('Đang trả hình nền cũ', 'ok');
     }
     else if (a === 'wallsave') {
       const spec = wallRead();
@@ -137,13 +147,37 @@ document.addEventListener('click', async e => {
     }
   } catch (err) { toast(err.message, 'err'); }
 });
-document.addEventListener('change', e => {
+document.addEventListener('change', async e => {
   const t = e.target;
+  if (t.dataset && t.dataset.ev === 'handopt') {
+    const on = t.checked, hs = S.hosts.slice();
+    try { await api('/api/hand_option', {enabled: on, hosts: hs}); if (hs.length) openLog(); S.interact.hand_enabled = on; toast(on ? 'Đã bật nút giơ tay' : 'Đã tắt nút giơ tay trên máy học sinh', 'ok'); } catch (err) { toast(err.message, 'err'); }
+    return;
+  }
   if (t.id === 'wPreset' && t.value) {
     const p = S.wall.presets[t.value]; if (!p) return;
     Object.assign(S.wspec, p); S.wbgData = '';
     if (p.bg) api('/api/wall_img?id=' + p.bg).then(r => { S.wbgData = r.data; wallDraw(); }).catch(() => {});
     render();
-  } else if (['wTitle', 'wSub', 'wC1', 'wC2', 'wDim', 'wSeat', 'wLock'].includes(t.id)) { wallRead(); wallDraw(); }
+  } else if (t.id === 'wCls') { S.wcls = t.value; } else if (['wTitle', 'wSub', 'wC1', 'wC2', 'wDim', 'wSeat', 'wLock'].includes(t.id)) { wallRead(); wallDraw(); }
 });
 document.addEventListener('input', e => { if (['wTitle', 'wSub', 'wC1', 'wC2', 'wDim'].includes(e.target.id)) { wallRead(); wallDraw(); } });
+
+
+/* ---------- Giao diện màn hình khóa ---------- */
+async function lockStyleDialog() {
+  S.lockSpec = (await api('/api/lock_style')).style;
+  const k = S.lockSpec;
+  const v = await modal({title: '🎨 Giao diện màn hình khóa', ok: 'Lưu', html: `<div style="display:grid;gap:8px;min-width:min(420px,80vw)">
+      <div class="row"><input type="text" id="lkIcon" value="${esc(k.icon)}" maxlength="4" style="width:64px;text-align:center"><input type="text" id="lkTitle" value="${esc(k.title)}" maxlength="60" style="flex:1" placeholder="Tiêu đề, có thể dùng {lop}"></div>
+      <div class="row">Màu <input type="color" id="lkC1" value="${esc(k.c1)}"> → <input type="color" id="lkC2" value="${esc(k.c2)}">
+        <button class="btn sm ghost" data-ev="lockpic">Chọn ảnh nền...</button><button class="btn sm ghost" data-ev="lockpicclr">Bỏ ảnh</button><span class="muted" id="lkBg">${k.bg ? 'Đã chọn ảnh' : 'Không dùng ảnh'}</span></div>
+      <label class="muted">Làm tối ảnh <input type="range" id="lkDim" min="0" max="80" value="${k.dim}"></label>
+      <label class="switch"><input type="checkbox" id="lkClock" ${k.clock ? 'checked' : ''}><span class="tr"></span><span>Hiện đồng hồ</span></label>
+      <label class="switch"><input type="checkbox" id="lkSeat" ${k.seat ? 'checked' : ''}><span class="tr"></span><span>Hiện tên em và số máy</span></label>
+      <div class="muted" style="font-size:12.5px">Lời nhắn bạn nhập ở ô “Nhắn tin” hiện ở giữa màn hình. Lưu xong, bấm “Khóa màn hình kèm lời nhắn” để dùng giao diện này.</div></div>`,
+    collect: r => ({icon: r.querySelector('#lkIcon').value, title: r.querySelector('#lkTitle').value, c1: r.querySelector('#lkC1').value, c2: r.querySelector('#lkC2').value,
+      dim: +r.querySelector('#lkDim').value, clock: r.querySelector('#lkClock').checked, seat: r.querySelector('#lkSeat').checked, bg: S.lockSpec.bg})});
+  if (!v) return;
+  await api('/api/lock_style_save', {spec: v}); toast('Đã lưu giao diện màn hình khóa', 'ok');
+}

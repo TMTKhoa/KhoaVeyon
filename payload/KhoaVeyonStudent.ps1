@@ -26,6 +26,7 @@ try {
     $script:StartStamp = (Get-Item -LiteralPath $ScriptPath).LastWriteTimeUtc.Ticks
     $script:raised = $false
     $script:blockForms = @()
+    $script:blockClocks = @()
     $script:allowClose = $false
     $script:lastBeat = [DateTime]::MinValue
     $utf8 = New-Object System.Text.UTF8Encoding($false)
@@ -77,9 +78,12 @@ try {
     }
 
     # ---------- khóa màn hình kèm lời nhắn (mềm: chỉ che màn hình, giáo viên gửi lệnh mở để tắt) ----------
-    function Show-Block([string]$text) {
+    function Show-Block($msg) {
         Close-Block
-        $forms = @()
+        $forms = @(); $clocks = @()
+        $text = [string]$msg.text
+        $styled = ([string]$msg.c1) -ne ''
+        $white = [System.Drawing.Color]::White
         foreach ($s in [System.Windows.Forms.Screen]::AllScreens) {
             $f = New-Object System.Windows.Forms.Form
             $f.FormBorderStyle = 'None'
@@ -88,18 +92,69 @@ try {
             $f.TopMost = $true
             $f.ShowInTaskbar = $false
             $f.BackColor = [System.Drawing.Color]::FromArgb(15, 23, 42)
-            $l = New-Object System.Windows.Forms.Label
-            $l.Text = $text
-            $l.ForeColor = [System.Drawing.Color]::White
-            $l.Font = New-Object System.Drawing.Font('Segoe UI', 32, [System.Drawing.FontStyle]::Bold)
-            $l.TextAlign = 'MiddleCenter'
-            $l.Dock = 'Fill'
-            $f.Controls.Add($l)
+            $W = $s.Bounds.Width; $H = $s.Bounds.Height
+            $u = [Math]::Max(1.0, $H / 1080.0)
+            if ($styled) {
+                # nền (ảnh hoặc màu chuyển sắc) vẽ sẵn, chữ là các nhãn trong suốt phía trên
+                $bmp = New-Object System.Drawing.Bitmap([Math]::Max(1, [int]($W / 2)), [Math]::Max(1, [int]($H / 2)))
+                $g = [System.Drawing.Graphics]::FromImage($bmp)
+                try {
+                    $rect = New-Object System.Drawing.Rectangle(0, 0, $bmp.Width, $bmp.Height)
+                    $bgFile = ''
+                    if ([string]$msg.bg -match '^[0-9a-f]{16}$') { $bgFile = Join-Path (Join-Path $Root 'wall') ([string]$msg.bg + '.jpg') }
+                    if ($bgFile -and (Test-Path -LiteralPath $bgFile)) {
+                        $img = [System.Drawing.Image]::FromFile($bgFile)
+                        try {
+                            $sc = [Math]::Max($bmp.Width / $img.Width, $bmp.Height / $img.Height)
+                            $iw = $img.Width * $sc; $ih = $img.Height * $sc
+                            $g.DrawImage($img, [single](($bmp.Width - $iw) / 2), [single](($bmp.Height - $ih) / 2), [single]$iw, [single]$ih)
+                        } finally { $img.Dispose() }
+                        $a = [int]([Math]::Min(80, [Math]::Max(0, [int]$msg.dim)) * 255 / 100)
+                        $ov = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb($a, 0, 0, 0))
+                        $g.FillRectangle($ov, $rect); $ov.Dispose()
+                    } else {
+                        $lg = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect, (Get-Color ([string]$msg.c1) '#0f172a'), (Get-Color ([string]$msg.c2) '#1e293b'), 45.0)
+                        $g.FillRectangle($lg, $rect); $lg.Dispose()
+                    }
+                } finally { $g.Dispose() }
+                $f.BackgroundImage = $bmp
+                $f.BackgroundImageLayout = 'Stretch'
+            }
+            $mk = {
+                param($txt, $size, $bold, $x, $y, $w, $h)
+                $l = New-Object System.Windows.Forms.Label
+                $l.Text = $txt; $l.ForeColor = $white; $l.BackColor = [System.Drawing.Color]::Transparent
+                $l.Font = New-Object System.Drawing.Font('Segoe UI', [single]($size * $u), $(if ($bold) { [System.Drawing.FontStyle]::Bold } else { [System.Drawing.FontStyle]::Regular }), [System.Drawing.GraphicsUnit]::Pixel)
+                $l.TextAlign = 'MiddleCenter'
+                $l.SetBounds([int]$x, [int]$y, [int]$w, [int]$h)
+                $f.Controls.Add($l)
+                return $l
+            }
+            if ($styled) {
+                $t = ([string]$msg.icon + ' ' + [string]$msg.title).Trim()
+                [void](& $mk $t 64 $true 0 ($H * 0.16) $W (110 * $u))
+                [void](& $mk $text 44 $false ($W * 0.1) ($H * 0.34) ($W * 0.8) ($H * 0.34))
+                if ([string]$msg.name -or [int]$msg.no -gt 0) {
+                    $nm = [string]$msg.name; if ([int]$msg.no -gt 0) { $nm = ($nm + '  ·  Máy số ' + [int]$msg.no).Trim(' ', '·') }
+                    [void](& $mk $nm 36 $true 0 ($H * 0.76) $W (70 * $u))
+                }
+                if ($msg.clock -eq $true) {
+                    $c = & $mk ([DateTime]::Now.ToString('HH:mm')) 48 $true ($W - 260 * $u) (30 * $u) (230 * $u) (80 * $u)
+                    $clocks += $c
+                }
+            } else {
+                $l = New-Object System.Windows.Forms.Label
+                $l.Text = $text; $l.ForeColor = $white
+                $l.Font = New-Object System.Drawing.Font('Segoe UI', 32, [System.Drawing.FontStyle]::Bold)
+                $l.TextAlign = 'MiddleCenter'; $l.Dock = 'Fill'
+                $f.Controls.Add($l)
+            }
             $f.Add_FormClosing({ param($sender, $e) if (-not $script:allowClose) { $e.Cancel = $true } })
             $f.Show()
             $forms += $f
         }
         $script:blockForms = $forms
+        $script:blockClocks = $clocks
     }
     function Close-Block {
         $script:allowClose = $true
@@ -155,11 +210,18 @@ try {
     }
 
     # ---------- giơ tay ----------
+    # cài đặt do giáo viên gửi (hiện chỉ có: cho phép giơ tay hay không), nhớ lại qua lần khởi động
+    $CfgFile = Join-Path $Root 'student.cfg.json'
+    $script:handOn = $true
+    $script:actOn = $true
+    try { if (Test-Path -LiteralPath $CfgFile) { $c0 = Get-Content -LiteralPath $CfgFile -Raw -Encoding UTF8 | ConvertFrom-Json; if ($c0.hand -eq $false) { $script:handOn = $false }; if ($c0.act -eq $false) { $script:actOn = $false } } } catch { }
     function Update-Pill {
+        if (-not $script:handOn) { $script:float.BackColor = [System.Drawing.Color]::FromArgb(37, 99, 235); $script:pill.Text = 'Nộp bài'; return }
         if ($script:raised) { $script:float.BackColor = [System.Drawing.Color]::FromArgb(234, 88, 12); $script:pill.Text = [string][char]0x270B + ' Đang giơ tay' }
         else { $script:float.BackColor = [System.Drawing.Color]::FromArgb(37, 99, 235); $script:pill.Text = [string][char]0x270B + ' Giơ tay' }
     }
     function Toggle-Hand {
+        if (-not $script:handOn) { return }
         $script:raised = -not $script:raised
         Send-Event @{ t = 'hand'; on = $script:raised }
         Update-Pill
@@ -188,6 +250,7 @@ try {
     $miHand = $menu.Items.Add('Giơ tay hỏi thầy/cô')
     $miFiles = $menu.Items.Add('Nộp tệp...')
     $miFolder = $menu.Items.Add('Nộp thư mục...')
+    $miHand.Visible = $script:handOn
     $miHand.Add_Click({ try { Toggle-Hand } catch { Log ('hand: ' + $_.Exception.Message) } })
     $miFiles.Add_Click({ try { Submit-Files } catch { Log ('submit files: ' + $_.Exception.Message) } })
     $miFolder.Add_Click({ try { Submit-Folder } catch { Log ('submit folder: ' + $_.Exception.Message) } })
@@ -301,6 +364,29 @@ try {
         }
     }
 
+    # ---------- báo cửa sổ đang ở trước cho trang Monitor (chỉ khi đổi, tối thiểu 10 giây một lần; máy giáo viên không phải hỏi) ----------
+    Add-Type -Namespace KV -Name Fg -MemberDefinition '[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern System.IntPtr GetForegroundWindow(); [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr h, out uint pid); [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern int GetWindowText(System.IntPtr h, System.Text.StringBuilder s, int n);'
+    $script:lastAct = ''; $script:lastActAt = [DateTime]::MinValue
+    function Report-Activity {
+        if (-not $script:actOn) { return }
+        $now = [DateTime]::Now
+        if (($now - $script:lastActAt).TotalSeconds -lt 10) { return }
+        $h = [KV.Fg]::GetForegroundWindow()
+        $sb = New-Object System.Text.StringBuilder 256
+        [void][KV.Fg]::GetWindowText($h, $sb, 256)
+        $procId = 0
+        [void][KV.Fg]::GetWindowThreadProcessId($h, [ref]$procId)
+        $pn = ''
+        try { $pn = (Get-Process -Id $procId -ErrorAction Stop).ProcessName.ToLower() } catch { }
+        if (-not $pn -or $pn -eq 'idle') { return }
+        $w = $sb.ToString(); if ($w.Length -gt 100) { $w = $w.Substring(0, 100) }
+        $key = $pn + '|' + $w
+        if ($key -ne $script:lastAct -or ($now - $script:lastActAt).TotalSeconds -ge 90) {
+            Send-Event @{ t = 'act'; p = $pn; w = $w }
+            $script:lastAct = $key; $script:lastActAt = $now
+        }
+    }
+
     # ---------- đọc hộp thư đến mỗi 1,5 giây ----------
     function Read-Inbox {
         foreach ($f in (Get-ChildItem -LiteralPath $Inbox -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object Name)) {
@@ -314,7 +400,17 @@ try {
             try {
                 switch ([string]$msg.type) {
                     'msg'      { Show-Message ([string]$msg.title) ([string]$msg.text) ([int]$msg.seconds) }
-                    'block'    { Show-Block ([string]$msg.text) }
+                    'block'    { Show-Block $msg }
+                    'config'   {
+                        if ($msg.act -ne $null) { $script:actOn = ($msg.act -eq $true) }
+                        if ($msg.hand -ne $null -or $msg.act -ne $null) {
+                            if ($msg.hand -ne $null) { $script:handOn = ($msg.hand -eq $true) }
+                            [System.IO.File]::WriteAllText($CfgFile, (@{ hand = $script:handOn; act = $script:actOn } | ConvertTo-Json -Compress), $utf8)
+                            $miHand.Visible = $script:handOn
+                            if (-not $script:handOn -and $script:raised) { $script:raised = $false; Send-Event @{ t = 'hand'; on = $false } }
+                            Update-Pill
+                        }
+                    }
                     'clear'    { Close-Block }
                     'wallpaper' { if ($msg.restore -eq $true) { Restore-Wallpaper } else { Show-Wallpaper $msg } }
                     'handclear' { $script:raised = $false; Update-Pill }
@@ -335,7 +431,9 @@ try {
                 if ((Get-Item -LiteralPath $ScriptPath).LastWriteTimeUtc.Ticks -ne $script:StartStamp) { [System.Windows.Forms.Application]::Exit(); return }
             }
             Read-Inbox
+            try { Report-Activity } catch { }
             foreach ($f in $script:blockForms) { try { $f.TopMost = $true; $f.Activate() } catch {} }
+            foreach ($c in $script:blockClocks) { try { $c.Text = $now.ToString('HH:mm') } catch {} }
         } catch { Log ('tick: ' + $_.Exception.Message) }
     })
     $timer.Start()

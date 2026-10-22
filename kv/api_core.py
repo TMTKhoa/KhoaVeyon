@@ -269,29 +269,23 @@ def api_setup_run(b):
 
 
 def api_setup_scan(_b=None):
-    found, names, err = scan_veyon_hosts()
-    if err:
-        raise ApiError(err)
-    added = 0
-    with CFG_LOCK:
-        for ip in found:
-            # máy đã có trong danh sách bằng tên PC (cùng tên dò được) thì không thêm trùng bằng IP
-            have_name = names.get(ip) and any(str(h).strip().upper() == names[ip] for h in CFG['hosts'])
-            if ip not in CFG['hosts'] and not have_name:
-                CFG['hosts'].append(ip)
-                added += 1
-            if names.get(ip):
-                CFG.setdefault('host_auto_names', {})[ip] = names[ip]   # giao diện hiện tên PC thay cho IP
-        save_config(CFG)
-        hosts = list(CFG['hosts'])
-        auto = dict(CFG.get('host_auto_names') or {})
+    from .hostsync import scan_and_reconcile, _SCAN_LOCK
+    if not _SCAN_LOCK.acquire(blocking=False):
+        raise ApiError('Đang quét mạng, đợi vài giây rồi thử lại')
+    try:
+        r = scan_and_reconcile()
+    finally:
+        _SCAN_LOCK.release()
+    if r.get('error'):
+        raise ApiError(r['error'])
     try:
         from .setup import refresh_agent_cfg
         refresh_agent_cfg()   # IP máy giáo viên trong agent.cfg khớp dải mạng của các máy vừa quét
     except Exception:  # noqa
         pass
-    log('Quét mạng: thấy %d máy chạy Veyon (%d máy có tên PC), thêm mới %d' % (len(found), len(names), added), 'ok' if found else 'warn')
-    return {'found': found, 'added': added, 'hosts': hosts, 'auto': auto}
+    log('Quét mạng: thấy %d máy chạy Veyon (%d máy có tên PC), thêm mới %d, đổi IP %d' % (len(r['found']), len(r['names']), r['added'], len(r['moves'])), 'ok' if r['found'] else 'warn')
+    return {'found': r['found'], 'added': r['added'], 'hosts': r['hosts'], 'auto': r['auto'], 'manual': r['manual'],
+            'macs': r['macs'], 'moved': [list(m) for m in r['moves']]}
 
 
 def api_setup_done(b):

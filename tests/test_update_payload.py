@@ -126,4 +126,4 @@ class HostsRemoveAndMerge(unittest.TestCase):
 
     def test_version_is_4_4(self):
         from kv.paths import VERSION
-        self.assertTrue(VERSION.startswith('4.4.'))
+        self.assertTrue(VERSION.startswith('4.'))

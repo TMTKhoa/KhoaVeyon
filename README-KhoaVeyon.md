@@ -237,6 +237,35 @@ Thao tác nào quá 0,7 giây chưa xong (quét mạng, hỏi Veyon, kết nối
 
 **Chưa kiểm chứng trên Windows và Veyon thật:** tên khóa `websiteUrls` của Veyon Open website (đã có phương án dự phòng `explorer.exe`), việc trang KhoaQuiz tải đủ khi bật "chỉ trang cho phép" (lệnh này chặn theo IP, trang dùng CDN có thể thiếu: hãy thử trên một máy trước giờ thi). Logic, giao diện và luồng gọi KhoaQuiz đã thử bằng KhoaQuiz giả lập (kiểm thử `tests/test_khoalink.py` và thử giao diện bằng trình duyệt).
 
+## Bản 4.6.0
+
+- **Chụp vi phạm gần như tức thì**: script giám sát trên máy học sinh quét 0,5 giây/lần (trước là 2 giây), chụp ngay khi mở ứng dụng/trang vi phạm, rồi tự báo về máy giáo viên. Máy giáo viên nhận ảnh ngay, không chờ lượt hỏi.
+- **Quét chạy trên máy học sinh, không tải mạng phòng máy**: máy đã chạy script mới chỉ bị máy giáo viên quét dự phòng 60 giây/lần (máy cũ vẫn quét như trước cho tới khi bật lại giám sát để cập nhật script).
+- **Log dùng máy 5 phút** (ứng dụng, tiêu đề cửa sổ, giờ, thời lượng) đính kèm mỗi vi phạm, xem ở trang Vi phạm bằng mục "Em đã làm gì trong 5 phút trước". Không ghi phím.
+- **Trang Monitor lớp**: sơ đồ theo phòng của lớp (tên PC, tên học sinh, trạng thái, ứng dụng đang mở, giơ tay, số vi phạm hôm nay), banner "Đang là tiết N của lớp X", chọn 1 / nhiều / tất cả máy rồi khóa màn hình, nhắn tin, khóa/mở khóa toàn bộ, chặn internet, tắt tiếng, chụp màn hình, hạ tay, tắt máy. Ứng dụng đang mở do máy học sinh tự báo khi đổi (công tắc tắt được).
+- Cần bật lại giám sát một lần (nút Bật giám sát) để máy học sinh nhận script mới; phần PowerShell chưa thử trên Windows thật.
+
+## Bản 4.5.0
+
+- **Tắt nút giơ tay** trên máy học sinh: công tắc ở trang Tương tác. Tắt thì nút nổi chỉ còn "Nộp bài"; cài đặt được nhớ trên máy học sinh và gửi lại mỗi lần đổi tiết.
+- **Hình nền tự đổi theo tiết**: tick "Tự đổi theo tiết" khi bấm Đổi hình nền; sang lớp khác thì vẽ lại tên lớp và tên em, hết tiết thì trả hình nền cũ. Tiêu đề / dòng phụ dùng được `{lop}` `{ten}` `{may}`.
+- **Giao diện màn hình khóa tùy chỉnh** (nút 🎨 ở trang Tương tác): biểu tượng, tiêu đề, màu hoặc ảnh nền, đồng hồ, tên em và số máy.
+- Phần PowerShell mới chưa thử trên Windows thật: thử một máy trước.
+
+## Bản 4.4.3
+
+- Sửa tên em in trên hình nền máy học sinh bị lệch so với sơ đồ: nay lấy đúng chỗ ngồi thực tế hôm nay (em vắng, em được chuyển chỗ), và có ô chọn lớp để lấy tên theo sơ đồ của lớp bất kỳ thay vì chỉ lớp đang có tiết. Tự động theo tiết dùng đúng lớp của tiết mới.
+
+## 4.4.2
+
+- Trang **Trạng thái máy** có ô **Xếp theo**: *Tên máy (PC name)* (mặc định, xếp tự nhiên nên PC2 đứng trước PC10), *Địa chỉ IP* (theo số, không theo chữ), hoặc *Thứ tự trong danh sách*. Lựa chọn được nhớ cho lần mở sau. Chỉ đổi cách hiển thị, không đổi danh sách máy.
+
+## 4.4.1
+
+- **Máy đổi IP do DHCP thì tự nối lại, không phải dò lại.** Chương trình nhớ MAC của từng máy (đọc lúc quét hoặc lúc máy đang bật). Khi quét mạng, máy nào có IP cũ không còn thấy mà MAC (hoặc tên PC, nếu duy nhất) trùng với một IP mới thì IP cũ được **chuyển sang IP mới**: giữ tên hiển thị và MAC, xóa IP cũ khỏi danh sách. Máy chỉ đang tắt (không trùng IP mới nào) thì giữ nguyên. Hai máy hoán đổi IP cho nhau thì tên đi theo máy (theo MAC).
+- Nút **🔄 Quét mạng & cập nhật IP** ở trang Trạng thái máy; công tắc **tự nối lại** (mặc định bật): khi có máy không thấy, chương trình tự quét nền mỗi 10 phút (không chạy khi đang thi) và chuyển IP. Nút **☑ Chọn máy đang tắt** giúp chọn nhanh rồi **🗑 Xóa máy đã chọn** các IP cũ còn sót.
+- Cách dứt điểm là nhờ quản trị mạng của trường **đặt DHCP reservation (cấp IP cố định theo MAC)** cho các máy phòng học; chương trình không thay thế được việc này nhưng giảm hẳn công dò lại.
+
 ## 4.4.0
 
 - **Gộp Chẩn đoán vào Trạng thái máy.** Hai trang giống nhau nên trang *Chẩn đoán* không còn trong menu. Ở trang **Trạng thái máy**: nút **🩺 Chẩn đoán ngay** thêm cột *Chẩn đoán* (Agent, giờ máy, dịch vụ, kèm nút Sửa), các nút sửa hàng loạt và bảng kiểm tra máy giáo viên (tường lửa) hiện ngay bên dưới bảng.

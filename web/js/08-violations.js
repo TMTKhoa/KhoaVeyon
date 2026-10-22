@@ -99,7 +99,7 @@ function viewViol() {
       ${thumbs}
       <div class="vb">${e.img ? `<button class="btn ghost sm vopen" data-act="evopen" data-img="${esc(e.img)}" title="Mở thư mục chứa ảnh này (chọn sẵn ảnh)">📂</button>` : ''}<div class="pc">🖥 ${esc(hn(e.host))}<span class="tag ${esc(e.type)}">${kindLabel(e)}</span>${e.cls ? `<span class="tag" style="background:#e7f8ef;color:#15803d">Lớp ${esc(e.cls)}</span>` : ''}${n > 1 ? `<span class="cnt">${n} ảnh</span>` : ''}</div>
         <div class="what">${esc(e.text)}</div>
-        <div class="meta">🕒 ${esc(e.time)} · ${esc(e.date)}${n > 1 ? ` (kéo dài ${secs < 60 ? secs + ' giây' : Math.round(secs / 60) + ' phút'})` : ''}${e.student ? `<br>🎓 <b>${esc(e.student)}</b> (máy ${e.seat})` : ''}${e.user ? '<br>👤 ' + esc(e.user) : ''}${e.window ? '<br>🪟 ' + esc(e.window) : ''}</div></div></div>`;
+        <div class="meta">🕒 ${esc(e.time)} · ${esc(e.date)}${n > 1 ? ` (kéo dài ${secs < 60 ? secs + ' giây' : Math.round(secs / 60) + ' phút'})` : ''}${e.student ? `<br>🎓 <b>${esc(e.student)}</b> (máy ${e.seat})` : ''}${e.user ? '<br>👤 ' + esc(e.user) : ''}${e.window ? '<br>🪟 ' + esc(e.window) : ''}${recentLog(e)}</div></div></div>`;
   }).join('');
   return `${violTabs()}<div class="stack" style="margin-top:12px">
     <section class="card">
@@ -203,4 +203,12 @@ function privacyRow() {
     ${pr.pin_set ? (pr.blocked ? '<button class="btn primary" data-act="pinunlock">Nhập mã để xem ảnh</button>' : '<button class="btn" data-act="pinlock">Khóa ảnh ngay</button>') : ''}
     <button class="btn ghost" data-act="pinset">${pr.pin_set ? 'Đổi mã' : 'Đặt mã xem ảnh'}</button>${pr.pin_set ? '<button class="btn ghost" data-act="pinclear">Bỏ mã</button>' : ''}
     ${pr.windows ? `<button class="btn ghost" data-act="privacyacl" data-on="${pr.acl ? '0' : '1'}" title="Chỉ tài khoản Windows đang chạy chương trình, quản trị viên và SYSTEM đọc được thư mục data\\evidence">${pr.acl ? '✔ Đang giới hạn quyền đọc thư mục ảnh (bấm để bỏ)' : 'Giới hạn quyền đọc thư mục ảnh'}</button>` : ''}`;
+}
+
+
+/* Nhật ký dùng máy trong ~5 phút trước và lúc vi phạm (do script giám sát trên máy học sinh ghi kèm ảnh) */
+function recentLog(e) {
+  const r = e.recent || []; if (!r.length) return '';
+  const fd = d => d < 60 ? d + 's' : Math.round(d / 60) + ' phút';
+  return `<details class="rlog"><summary>🕘 Em đã làm gì trong 5 phút trước (${r.length} mục)</summary><table class="tbl"><tbody>${r.slice().reverse().map(x => `<tr><td>${esc(x.t)}</td><td><b>${esc(x.p)}</b></td><td>${esc(x.w)}</td><td class="muted">${esc(fd(x.d))}</td></tr>`).join('')}</tbody></table></details>`;
 }

@@ -28,6 +28,9 @@ ALERT_LOCK = threading.Lock()
 ALERT_SEQ = [0]
 ALERT_SEEN = set()          # (máy, tên file) đã xử lý, tránh báo trùng
 HOST_ONLINE = {}
+PUSH_CAPABLE = {}           # máy -> lúc nhận tín hiệu "hello" gần nhất từ script giám sát (máy đó tự đẩy ảnh về, máy giáo viên chỉ cần quét thưa)
+PUSH_FRESH_SEC = 600
+PUSH_FALLBACK_SEC = 60
 ALERT_FILE = 'alerts.jsonl'
 ALERT_CSV = 'violations.csv'
 ALERT_MAX = 500
@@ -128,7 +131,46 @@ def _rrm(host, name):
         pass
 
 
+_COLLECT_LOCKS = {}
+_COLLECT_GUARD = threading.Lock()
+
+
 def alert_collect_host(cfg, host):
+    """Mỗi máy chỉ một luồng nhận ảnh cùng lúc (vòng nền và tín hiệu đẩy từ máy học sinh có thể trùng nhau)."""
+    with _COLLECT_GUARD:
+        lk = _COLLECT_LOCKS.setdefault(host, threading.Lock())
+    with lk:
+        return _alert_collect_host(cfg, host)
+
+
+def collect_and_beep(cfg, host):
+    """Nhận ảnh ngay khi máy học sinh báo (đẩy), rồi bíp như vòng quét nền."""
+    before = ALERT_SEQ[0]
+    alert_collect_host(cfg, host)
+    with ALERT_LOCK:
+        fresh = [e for e in ALERTS if e['id'] > before]
+    try:
+        gap = int(cfg.get('alert_group_sec') or 60)
+    except (TypeError, ValueError):
+        gap = 60
+    if fresh and alert_should_beep(fresh, max(10, min(3600, gap))):
+        alert_beep()
+
+
+def _recent_clean(v):
+    """Nhật ký 5 phút do máy học sinh gửi kèm: chỉ giữ dạng danh sách ngắn, chuỗi đã cắt độ dài."""
+    out = []
+    for x in (v if isinstance(v, list) else [])[:30]:
+        if isinstance(x, dict):
+            try:
+                d = max(0, min(86400, int(x.get('d') or 0)))
+            except (TypeError, ValueError):
+                d = 0
+            out.append({'p': _clip(x.get('p'), 40), 'w': _clip(x.get('w'), 100), 't': _clip(x.get('t'), 8), 'd': d})
+    return out
+
+
+def _alert_collect_host(cfg, host):
     """Lấy ảnh vi phạm mới từ máy học sinh về máy giáo viên rồi tạo báo động. Trả về (ok, mô tả, số vi phạm mới)."""
     if not rfs_reachable(host, tcp_open):
         return False, 'không kết nối được (máy tắt hoặc mạng lỗi)', 0
@@ -200,7 +242,8 @@ def alert_collect_host(cfg, host):
             continue  # chưa chép được, lần sau thử lại
         alert_push({'host': host, 'pc': _clip(m.get('pc'), 64), 'user': _clip(m.get('user'), 64), 'type': kind,
                     'name': name, 'window': _clip(m.get('window'), 300), 'date': date, 'time': tm, 'ts': ts,
-                    'file': jpg, 'img': img, 'text': alert_text(kind, name), 'cls': cls_now, 'student': stu, 'seat': seat})
+                    'file': jpg, 'img': img, 'text': alert_text(kind, name), 'cls': cls_now, 'student': stu, 'seat': seat,
+                    'recent': _recent_clean(m.get('recent'))})
         for x in extra + [jpg]:
             _rrm(host, x)
         if cfg.get('watch_notify_student', True):

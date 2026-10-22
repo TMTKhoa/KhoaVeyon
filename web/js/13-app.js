@@ -20,12 +20,13 @@ async function go(id) {
     if (id === 'report') await loadReport();
     if (id === 'school' || id === 'seats') await loadSchool();
     if (id === 'auto') await loadAuto();
+    if (id === 'monitor') { await loadSchool(); await loadMonitor(); }
     if (id === 'settings') S.startup = await api('/api/startup', {});
     if (id === 'exam') { await loadExam(); await examReload(); }
   } catch (e) { toast(e.message, 'err'); }
   clearTimeout(ph);
   if (S.page !== id) return;   // đã bấm sang trang khác trong lúc chờ
-  if (id === 'seats' && S.logOpen && typeof toggleLog === 'function') toggleLog();   // thu gọn nhật ký để sơ đồ có đủ chỗ
+  if ((id === 'seats' || id === 'monitor') && S.logOpen && typeof toggleLog === 'function') toggleLog();   // thu gọn nhật ký để sơ đồ có đủ chỗ
   buildNav(); render(true);
   if (id === 'status') pollStatus(true);
 }
@@ -39,6 +40,7 @@ function render(top) {
   const v = $('#view');
   if (S.page === 'setup') v.innerHTML = viewSetup();
   else if (S.page === 'control') v.innerHTML = viewControl();
+  else if (S.page === 'monitor') v.innerHTML = viewMonitor();
   else if (S.page === 'status') v.innerHTML = viewStatus();
   else if (S.page === 'auto') v.innerHTML = viewAuto();
   else if (S.page === 'exam') v.innerHTML = viewExam();
