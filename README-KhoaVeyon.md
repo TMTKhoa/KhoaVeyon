@@ -241,6 +241,10 @@ Thao tác nào quá 0,7 giây chưa xong (quét mạng, hỏi Veyon, kết nối
 
 - **PC cố định theo vị trí**: mặc định số cuối tên PC là số vị trí (PC1 luôn ở vị trí 1, PC12 ở vị trí 12). Chỉ học sinh đổi chỗ, máy không đổi. Thứ tự ưu tiên: bảng "Gán máy vào vị trí" (nếu có), Tên máy mẫu, số cuối tên PC, thứ tự danh sách. Máy thêm bằng IP dùng tên PC tự dò được; chưa dò được tên thì tạm theo thứ tự danh sách.
 
+## Bản 4.9.0 - Tùy chỉnh giao diện
+
+Trang Cài đặt có thẻ "🎨 Giao diện" (đổi ngay, tự lưu, đi theo file sao lưu): chế độ sáng / tối / theo hệ thống (có nút 🌓 nhanh ở thanh bên), màu chủ đạo (8 màu mẫu hoặc tự chọn), màu thanh bên, bo góc, cỡ chữ, thu phóng toàn giao diện, thu gọn menu, hiển thị gọn, tắt hiệu ứng, đổi tên hiển thị góc trên trái, cỡ ô máy ở Monitor, ẩn các trang ít dùng khỏi menu.
+
 ## Bản 4.8.0 - Vui lớp học
 
 - **⭐ Tặng sao**: ở trang Monitor chọn máy rồi bấm "Tặng sao"; lời khen hiện trên máy em đó, bảng sao theo lớp ở trang Tương tác.

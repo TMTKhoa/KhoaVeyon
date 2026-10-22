@@ -6,6 +6,7 @@
   } catch (e) {
     $('#view').innerHTML = `<div class="note warn">${esc(e.message)}</div>`; return;
   }
+  try { applyUi((await api('/api/ui_prefs', undefined, {quiet: true})).prefs); } catch (e) { /* dùng bản lưu trong trình duyệt */ }
   S.hosts = S.st.cfg.hosts.slice();
   S.page = S.st.cfg.setup_done ? 'control' : 'setup';
   if (S.page === 'setup') { try { await loadSetup(); } catch (e) { toast(e.message, 'err'); } }

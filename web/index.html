@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="/css/04-log-dialogs.css">
 <link rel="stylesheet" href="/css/05-violations.css">
 <link rel="stylesheet" href="/css/06-status-auto.css">
+<link rel="stylesheet" href="/css/07-theme.css">
 </head>
 <body>
 <div class="app">
@@ -24,6 +25,7 @@
     <div class="side-foot">
       <div class="verbox"><span class="vtxt">Phiên bản <b id="verNum">…</b></span><button class="updbtn" id="sideUpd" data-act="checkupd" title="Kiểm tra phiên bản mới trên GitHub">⟳ <span>Kiểm tra cập nhật</span></button></div>
       <div class="status" id="status" title=""><span class="dot" id="statusDot"></span><span id="statusTxt">Đang kiểm tra...</span></div>
+      <button class="quit" id="themeBtn" title="Đổi giao diện sáng / tối">🌓 <span>Sáng / Tối</span></button>
       <button class="quit" id="quitBtn">⏻ <span>Thoát chương trình</span></button>
     </div>
   </aside>
@@ -50,6 +52,7 @@
 <div id="modalroot"></div>
 
 <script>const TOKEN = '__TOKEN__';</script>
+<script src="/js/00-ui.js"></script>
 <script src="/js/01-core.js"></script>
 <script src="/js/02-setup.js"></script>
 <script src="/js/03-control.js"></script>

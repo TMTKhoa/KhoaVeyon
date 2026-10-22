@@ -215,3 +215,11 @@ class FunTest(unittest.TestCase):
             sj.reset_mock(); fun.api_countdown({'hosts': ['h'], 'minutes': '2.5'}); self.assertEqual(sj.call_args[0][2]['secs'], 150)
         fun.react_put('PC1', 'lost'); fun.react_put('PC2', 'bad')
         self.assertEqual(fun.react_snapshot(), {'PC1': 'lost'})
+
+
+class UiPrefsTest(unittest.TestCase):
+    def test_clean(self):
+        from kv import uiprefs
+        p = uiprefs.ui_clean({'theme': 'neon', 'accent': 'red', 'font': 9999, 'zoom': 'x', 'hidden_pages': ['viol', 'settings', 'control', '../x', 'viol'], 'brand': '<b>Lab</b>', 'tile': 'large', 'anim': 0})
+        self.assertEqual((p['theme'], p['accent'], p['font'], p['zoom']), ('light', '#2563eb', 140, 100))
+        self.assertEqual(p['hidden_pages'], ['viol']); self.assertNotIn('<', p['brand']); self.assertEqual(p['tile'], 'large'); self.assertFalse(p['anim'])

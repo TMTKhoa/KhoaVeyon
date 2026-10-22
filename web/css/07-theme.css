@@ -1,0 +1,10 @@
+/* KhoaVeyon - Giao diện tối, thu gọn menu, mật độ, tắt hiệu ứng (bật bằng thuộc tính / lớp trên <html>, xem js/00-ui.js) */
+html[data-theme=dark]{background:#fff;filter:invert(1) hue-rotate(180deg)}
+html[data-theme=dark] img,html[data-theme=dark] video,html[data-theme=dark] canvas,html[data-theme=dark] .side,html[data-theme=dark] .logdock,
+html[data-theme=dark] .mthumb,html[data-theme=dark] .drawbg,html[data-theme=dark] .cmdchip,html[data-theme=dark] .toast{filter:invert(1) hue-rotate(180deg)}
+html.noanim *{animation:none!important;transition:none!important}
+html.mini .side{padding-left:8px;padding-right:8px}
+html.mini .brand div:last-child,html.mini .nav .tx,html.mini .nav .grp,html.mini .verbox,html.mini #statusTxt,html.mini .quit span,html.mini .nbadge{display:none}
+html.mini .brand{justify-content:center;padding-left:0;padding-right:0}html.mini .nav button{justify-content:center;padding:11px 6px}html.mini .quit{padding:10px 0}
+html.dense .card{padding:12px 14px!important}html.dense .btn{padding-top:5px;padding-bottom:5px}html.dense .tbl td,html.dense .tbl th{padding-top:5px;padding-bottom:5px}html.dense .stack,html.dense .steps{gap:10px}
+.mgrid{--mtw:140px}

@@ -73,7 +73,7 @@ function viewMonitor() {
     const head = num[0].map((_, c) => `<div class="dayhead">Dãy ${dayNo(c)}</div>`).join('');
     const cells = num.map(row => row.map(n => { const s = M.seats[n] || {}; return monTile(s.host ? M.machines[s.host] : null, s, n); }).join('')).join('');
     const extras = (M.extras || []).map(h => M.machines[h]).filter(Boolean);
-    board = `<div class="monwrap">${M.lay.flipv ? '' : front}<div class="mgrid" style="grid-template-columns:repeat(${cols},minmax(140px,1fr))">${head}${cells}</div>${M.lay.flipv ? front : ''}</div>
+    board = `<div class="monwrap">${M.lay.flipv ? '' : front}<div class="mgrid" style="grid-template-columns:repeat(${cols},minmax(var(--mtw,140px),1fr))">${head}${cells}</div>${M.lay.flipv ? front : ''}</div>
       ${extras.length ? `<h4 style="margin:14px 0 6px">Máy ngoài sơ đồ</h4><div class="mgrid flat">${extras.map(m => monTile(m, null, '·')).join('')}</div>` : ''}`;
   } else {
     board = `<div class="note" style="margin-bottom:8px">${shown ? `Lớp ${esc(shown)} chưa có sơ đồ chỗ ngồi` : 'Chưa có lớp nào'}: hiện theo danh sách máy. Vào “Sơ đồ lớp học” để xếp chỗ thì Monitor tự bố trí theo phòng.</div>

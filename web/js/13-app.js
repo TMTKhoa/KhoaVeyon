@@ -1,7 +1,9 @@
 // KhoaVeyon - Khung ứng dụng: menu, chuyển trang, xử lý bấm/nhập, nhật ký
 /* ---------- điều hướng và vẽ lại ---------- */
 function buildNav() {
-  $('#nav').innerHTML = PAGES.map(p => p.grp ? `<div class="grp">${p.grp}</div>`
+  const hid = new Set((typeof UI !== 'undefined' && UI.hidden_pages) || []);
+  const vis = PAGES.filter(p => p.grp || !hid.has(p.id)), pg = vis.filter((p, i) => !p.grp || (vis[i + 1] && !vis[i + 1].grp));
+  $('#nav').innerHTML = pg.map(p => p.grp ? `<div class="grp">${p.grp}</div>`
     : `<button data-page="${p.id}" class="${S.page === p.id ? 'on' : ''}${p.id === 'viol' && S.unseen ? ' alerting' : ''}"><span class="ic">${p.ic}</span><span class="tx">${esc(p.name)}</span>${p.id === 'viol' && S.unseen ? `<span class="nbadge">${S.unseen > 99 ? '99+' : S.unseen}</span>` : ''}${p.id === 'interact' && S.handCount ? `<span class="nbadge">✋${S.handCount}</span>` : ''}</button>`).join('');
 }
 

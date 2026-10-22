@@ -67,6 +67,7 @@ DEFAULT_CONFIG = {
     'host_names': {},     # tên hiển thị do giáo viên đặt cho từng máy: {IP hoặc tên máy: tên hiển thị}; chỉ để nhìn, không đổi tên thật của máy
     'host_auto_names': {},  # tên PC tự dò được từ IP (DNS hoặc NetBIOS): {IP: tên PC}; tên giáo viên đặt (host_names) được ưu tiên
     'macs': {},           # địa chỉ MAC từng máy để bật máy bằng Wake-on-LAN (tự đọc khi máy đang bật)
+    'ui_prefs': {},       # tùy chỉnh giao diện (màu, chữ, chế độ tối, ẩn trang...), xem kv/uiprefs.py
     'setup_done': False,  # đã chạy thiết lập ban đầu chưa (chưa thì mở trang Thiết lập khi khởi động)
     'features': {a[0]: a[3] for a in ACTIONS},
 }

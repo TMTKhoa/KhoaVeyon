@@ -5,6 +5,7 @@ function viewSettings() {
   const f = (k, label, hint) => `<div><label class="field">${label}</label><input type="text" data-set="${k}" value="${esc(c[k])}">${hint ? `<div class="hint" style="margin-top:5px">${hint}</div>` : ''}</div>`;
   const feats = S.st.actions.map(a => `<tr><td style="width:46%">${a.icon} ${esc(a.label)}</td><td><input type="text" class="cell" style="border:1px solid #d3dae8!important" data-feat="${esc(a.key)}" value="${esc(c.features[a.key] || '')}"></td></tr>`).join('');
   return `<div class="steps">
+    ${uiCard()}
     ${backupCard()}
     <section class="card"><h3>Đường dẫn</h3><div class="formgrid">
       ${f('list_dir', 'Thư mục chứa 4 file Excel', 'Có thể ghi đường dẫn tương đối (ví dụ lists) hoặc đầy đủ (ví dụ C:\\cmd).')}
@@ -127,4 +128,54 @@ document.addEventListener('change', async e => {
   if (!t.dataset || !t.dataset.startup || S.page !== 'settings') return;
   try { S.startup = await api('/api/startup', {action: 'set', on: t.checked}); toast(S.startup.on ? 'Đã bật tự chạy khi đăng nhập Windows' : 'Đã tắt tự chạy', 'ok'); }
   catch (err) { toast(err.message, 'err'); t.checked = !t.checked; }
+});
+
+/* ---------- Tùy chỉnh giao diện ---------- */
+function uiCard() {
+  const p = UI, opt = (v, cur, t) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${t}</option>`;
+  const hid = new Set(p.hidden_pages || []);
+  const pages = PAGES.filter(x => x.id && !['settings', 'control'].includes(x.id)).map(x => `<label class="chk" style="display:inline-flex;gap:6px;align-items:center;margin:3px 12px 3px 0"><input type="checkbox" data-ui="page" data-id="${x.id}" ${hid.has(x.id) ? '' : 'checked'}> ${x.ic} ${esc(x.name)}</label>`).join('');
+  return `<section class="card"><h3>🎨 Giao diện</h3>
+    <p class="sub">Đổi ngay khi chọn, tự lưu và đi theo file sao lưu.</p>
+    <div class="formgrid">
+      <div><label class="field">Chế độ</label><select data-ui="theme">${opt('light', p.theme, '☀️ Sáng')}${opt('dark', p.theme, '🌙 Tối')}${opt('auto', p.theme, '🖥 Theo hệ thống')}</select></div>
+      <div><label class="field">Màu thanh bên</label><select data-ui="side">${Object.entries(UI_SIDES).map(([k, v]) => opt(k, p.side, v[2])).join('')}</select></div>
+      <div><label class="field">Bo góc</label><select data-ui="radius">${opt('sharp', p.radius, 'Vuông')}${opt('normal', p.radius, 'Vừa')}${opt('round', p.radius, 'Tròn')}</select></div>
+      <div><label class="field">Cỡ ô máy ở trang Monitor</label><select data-ui="tile">${opt('small', p.tile, 'Nhỏ')}${opt('normal', p.tile, 'Vừa')}${opt('large', p.tile, 'Lớn')}</select></div>
+      <div><label class="field">Cỡ chữ: <b id="uiFontV">${p.font}%</b></label><input type="range" min="80" max="140" step="5" value="${p.font}" data-ui="font"></div>
+      <div><label class="field">Thu phóng toàn giao diện: <b id="uiZoomV">${p.zoom}%</b></label><input type="range" min="70" max="150" step="5" value="${p.zoom}" data-ui="zoom"></div>
+      <div style="grid-column:1/-1"><label class="field">Màu chủ đạo</label><div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">${UI_ACCENTS.map(c => `<button class="btn sm" data-ui="accent" data-c="${c}" title="${c}" style="background:${c};border-color:${c};width:30px;height:30px;padding:0;${p.accent === c ? 'outline:3px solid rgba(0,0,0,.35);outline-offset:2px' : ''}"></button>`).join('')}<input type="color" data-ui="accentpick" value="${p.accent}" title="Màu tự chọn"></div></div>
+      <div><label class="field">Tên hiển thị góc trên bên trái</label><input type="text" data-ui="brand" maxlength="24" value="${esc(p.brand)}" placeholder="KhoaVeyon"></div>
+    </div>
+    <div class="row" style="flex-wrap:wrap;gap:18px;margin-top:12px">
+      <label class="switch"><input type="checkbox" data-ui="compact_nav" ${p.compact_nav ? 'checked' : ''}><span class="tr"></span><span>Thu gọn menu (chỉ hiện biểu tượng)</span></label>
+      <label class="switch"><input type="checkbox" data-ui="dense" ${p.dense ? 'checked' : ''}><span class="tr"></span><span>Hiển thị gọn (khoảng cách nhỏ hơn)</span></label>
+      <label class="switch"><input type="checkbox" data-ui="anim" ${p.anim ? 'checked' : ''}><span class="tr"></span><span>Hiệu ứng chuyển động</span></label></div>
+    <div style="margin-top:12px"><label class="field">Trang hiện trong menu <span class="muted">(bỏ tick để ẩn trang ít dùng; “Điều khiển lớp” và “Cài đặt” luôn hiện)</span></label>${pages}</div>
+    <div class="row" style="margin-top:12px"><button class="btn ghost" data-ui="reset">↺ Về mặc định</button></div></section>`;
+}
+let uiSaveT = 0;
+function uiCommit(patch, rerender) {
+  applyUi(Object.assign({}, UI, patch));
+  clearTimeout(uiSaveT);
+  uiSaveT = setTimeout(() => { api('/api/ui_prefs_save', {prefs: UI}, {quiet: true}).catch(() => {}); }, 500);
+  buildNav(); if (rerender) render();
+}
+document.addEventListener('input', e => {
+  const t = e.target; if (!t.dataset || !['font', 'zoom'].includes(t.dataset.ui)) return;
+  const v = $('#ui' + (t.dataset.ui === 'font' ? 'Font' : 'Zoom') + 'V'); if (v) v.textContent = t.value + '%';
+  uiCommit({[t.dataset.ui]: +t.value}, false);
+});
+document.addEventListener('change', e => {
+  const t = e.target, k = t.dataset && t.dataset.ui; if (!k || ['font', 'zoom', 'accent', 'reset'].includes(k)) return;
+  if (k === 'page') { const h = new Set(UI.hidden_pages || []); t.checked ? h.delete(t.dataset.id) : h.add(t.dataset.id); uiCommit({hidden_pages: [...h]}, false); }
+  else if (k === 'accentpick') uiCommit({accent: t.value}, true);
+  else if (k === 'brand') uiCommit({brand: t.value.trim()}, false);
+  else if (['compact_nav', 'dense', 'anim'].includes(k)) uiCommit({[k]: t.checked}, false);
+  else uiCommit({[k]: t.value}, false);
+});
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-ui]'); if (t && t.dataset.ui === 'accent') { e.preventDefault(); uiCommit({accent: t.dataset.c}, true); }
+  else if (t && t.dataset.ui === 'reset') { e.preventDefault(); uiCommit(Object.assign({}, UI_DEF), true); }
+  else if (e.target.closest('#themeBtn')) uiCommit({theme: document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'}, false);
 });
