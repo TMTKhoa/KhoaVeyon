@@ -6,6 +6,7 @@ function buildNav() {
 }
 
 async function go(id) {
+  if (id === 'diag') id = 'status';   // trang Chẩn đoán đã gộp vào Trạng thái máy
   S.page = id;
   if (id === 'viol') { S.unseen = 0; S.freshFrom = S.seenSeq || 0; S.seenSeq = S.alertSeq; }
   const p = PAGES.find(x => x.id === id);
@@ -44,7 +45,6 @@ function render(top) {
   else if (S.page === 'dist') v.innerHTML = viewDist();
   else if (S.page === 'vcfg') v.innerHTML = viewVcfg();
   else if (S.page === 'viol') v.innerHTML = viewViol();
-  else if (S.page === 'diag') v.innerHTML = viewDiag();
   else if (S.page === 'interact') v.innerHTML = viewInteract();
   else if (S.page === 'school') v.innerHTML = viewSchool();
   else if (S.page === 'seats') v.innerHTML = viewSeatsPage();

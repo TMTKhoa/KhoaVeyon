@@ -62,30 +62,26 @@ function schoolTemplateCard(sc) {
 
 /* ---------- Chẩn đoán ---------- */
 const DG_ST = {ok: ['#16a34a', '●', 'Tốt'], warn: ['#f59e0b', '●', 'Chú ý'], bad: ['#dc2626', '●', 'Lỗi'], na: ['#94a3b8', '○', 'Chưa rõ']};
-function viewDiag() {
-  const d = S.diag;
+function diagCell(h) {
+  const m = S.diag && S.diag.machines.find(x => x.host === h);
+  if (!m) return '<span class="muted">—</span>';
+  const names = {agent: 'Agent', clock: 'Giờ', service: 'Dịch vụ'};
+  return m.rows.filter(r => names[r.id]).map(r => {
+    const [c, ic] = DG_ST[r.state] || DG_ST.na;
+    return `<span title="${esc(names[r.id] + ': ' + r.detail)}" style="color:${c};margin-right:6px;white-space:nowrap">${ic} <span style="font-size:12px;color:inherit">${names[r.id]}</span>${r.fix && r.fix !== 'firewall' ? ` <button class="link" data-tl="dgfix" data-fix="${esc(r.fix)}" data-hs="${esc(JSON.stringify([h]))}">Sửa</button>` : ''}</span>`;
+  }).join('');
+}
+function diagExtraHtml() {   // phần chẩn đoán hiện bên dưới bảng trạng thái: nút sửa hàng loạt + kiểm tra máy giáo viên
+  const d = S.diag; if (!d) return '';
   const dot = st => { const [c, ic] = DG_ST[st] || DG_ST.na; return `<span style="color:${c};font-size:16px">${ic}</span>`; };
-  const t = d ? d.teacher.map(r => `<tr><td>${dot(r.state)}</td><td><b>${esc(r.label)}</b></td><td class="muted">${esc(r.detail)}</td><td>${r.fix ? `<button class="btn sm" data-tl="dgfix" data-fix="${esc(r.fix)}">🔧 Mở cổng tường lửa</button>` : ''}</td></tr>`).join('') : '';
-  let body = '';
-  if (d) {
-    const cols = ['veyon', 'agent', 'clock', 'service'], names = {veyon: 'Veyon', agent: 'Agent', clock: 'Giờ máy', service: 'Dịch vụ'};
-    const fixes = {};
-    d.machines.forEach(m => m.rows.forEach(r => { if (r.fix && r.fix !== 'firewall') (fixes[r.fix] = fixes[r.fix] || []).push(m.host); }));
-    const fname = {time: 'Đồng bộ giờ', service: 'Cài lại dịch vụ'};
-    const bulk = Object.entries(fixes).map(([k, hs]) => `<button class="btn sm" data-tl="dgfix" data-fix="${esc(k)}" data-hs="${esc(JSON.stringify(hs))}">🔧 ${fname[k]} (${hs.length} máy)</button>`).join(' ');
-    const rows = d.machines.map(m => {
-      const by = Object.fromEntries(m.rows.map(r => [r.id, r]));
-      const cells = cols.map(c => { const r = by[c] || {state: 'na', detail: ''}; return `<td title="${esc(r.detail)}">${dot(r.state)}${r.state !== 'ok' && r.state !== 'na' ? ` <span style="font-size:12px">${esc(r.detail)}</span>` : ''}${r.fix ? ` <button class="link" data-tl="dgfix" data-fix="${esc(r.fix)}" data-hs="${esc(JSON.stringify([m.host]))}">Sửa</button>` : ''}</td>`; }).join('');
-      return `<tr><td><b>${hnLabel(m.host)}</b></td>${cells}</tr>`;
-    }).join('');
-    const ok = d.machines.filter(m => m.rows.every(r => r.state === 'ok')).length;
-    body = `<div style="margin:8px 0"><b>${ok}</b>/${d.machines.length} máy đạt đủ.${bulk ? '<div class="row" style="margin-top:8px;flex-wrap:wrap">' + bulk + '</div>' : ''}</div>
-      <table class="tbl"><thead><tr><th>Máy</th>${cols.map(c => `<th>${names[c]}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>
-      <h4 style="margin:18px 0 6px">Máy giáo viên</h4><table class="tbl"><tbody>${t}</tbody></table>`;
-  }
-  return `<section class="card"><h3>Chẩn đoán</h3>
-    <p class="sub">Bảng xanh/đỏ cho từng máy: Veyon, Agent, giờ máy, bản dịch vụ; tường lửa kiểm ở máy giáo viên. Rê chuột vào ô để xem chi tiết. Máy chưa chọn thì kiểm tất cả.</p>
-    <div class="row"><button class="btn primary" data-tl="dgrun">🩺 Chẩn đoán ngay</button><span class="muted">${S.diagAt ? 'Lần cuối: ' + esc(S.diagAt) : ''}</span></div>${body}</section>`;
+  const fixes = {};
+  d.machines.forEach(m => m.rows.forEach(r => { if (r.fix && r.fix !== 'firewall') (fixes[r.fix] = fixes[r.fix] || []).push(m.host); }));
+  const fname = {time: 'Đồng bộ giờ', service: 'Cài lại dịch vụ'};
+  const bulk = Object.entries(fixes).map(([k, hs]) => `<button class="btn sm" data-tl="dgfix" data-fix="${esc(k)}" data-hs="${esc(JSON.stringify(hs))}">🔧 ${fname[k] || k} (${hs.length} máy)</button>`).join(' ');
+  const t = d.teacher.map(r => `<tr><td>${dot(r.state)}</td><td><b>${esc(r.label)}</b></td><td class="muted">${esc(r.detail)}</td><td>${r.fix ? `<button class="btn sm" data-tl="dgfix" data-fix="${esc(r.fix)}">🔧 Mở cổng tường lửa</button>` : ''}</td></tr>`).join('');
+  const ok = d.machines.filter(m => m.rows.every(r => r.state === 'ok')).length;
+  return `<div style="margin:12px 0 6px"><b>🩺 Chẩn đoán:</b> <b>${ok}</b>/${d.machines.length} máy đạt đủ${S.diagAt ? ' <span class="muted">(lúc ' + esc(S.diagAt) + ')</span>' : ''}.${bulk ? '<div class="row" style="margin-top:8px;flex-wrap:wrap">' + bulk + '</div>' : ''}</div>
+    <h4 style="margin:14px 0 6px">Máy giáo viên</h4><table class="tbl"><tbody>${t}</tbody></table>`;
 }
 async function runDiag() {
   const hs = S.hosts.filter(h => S.sel.has(h)); const hosts = hs.length ? hs : S.hosts;

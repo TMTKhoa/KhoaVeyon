@@ -20,7 +20,7 @@ function healthSummary() {
   if (s.agent_lost) warn.push(`<b>${s.agent_lost}</b> máy mất Agent`);
   if (s.agent_clock) warn.push(`<b>${s.agent_clock}</b> máy lệch giờ`);
   if (s.agent_badkey) warn.push(`<b>${s.agent_badkey}</b> máy sai khóa Agent`);
-  const alert = warn.length ? `<div class="note warn" style="margin:0 0 8px">⚠ ${warn.join(' · ')}. Chi tiết ở cột Sức khỏe; <a href="#" data-page="diag">mở trang Chẩn đoán</a>.</div>` : '';
+  const alert = warn.length ? `<div class="note warn" style="margin:0 0 8px">⚠ ${warn.join(' · ')}. Chi tiết ở cột Sức khỏe; <a href="#" data-tl="dgrun">chạy chẩn đoán</a>.</div>` : '';
   return alert + `<span style="color:#16a34a">● <b>${s.green}</b> tốt</span> · <span style="color:#f59e0b">● <b>${s.yellow}</b> cần chú ý</span> · <span style="color:#dc2626">● <b>${s.red}</b> có lỗi</span> · <span style="color:#64748b">● <b>${s.off}</b> tắt</span>${btns ? '<div class="row" style="margin-top:8px;flex-wrap:wrap">' + btns + '</div>' : ''}`;
 }
 function statusRows() {
@@ -39,7 +39,9 @@ function statusRows() {
       <td>${r.online ? (r.veyon ? '<span class="rchip ok">Veyon</span>' : '<span class="rchip">Chưa có Veyon</span>') : ''}</td>
       <td>${r.online ? (r.user ? esc(r.user) : '<span class="muted">chưa ai đăng nhập</span>') : ''}</td>
       <td>${rs}</td><td>${ai}</td><td>${r.watching ? '👁' : ''}</td>
-      <td><a href="#" data-xa="editmac" data-i="${i}" title="Bấm để nhập MAC tay">${mac}</a></td></tr>`;
+      <td>${diagCell(h)}</td>
+      <td><a href="#" data-xa="editmac" data-i="${i}" title="Bấm để nhập MAC tay">${mac}</a></td>
+      <td><button class="link" data-xa="rmhost" data-h="${esc(h)}" title="Xóa máy này khỏi danh sách (vd. IP cũ do DHCP đổi)">🗑</button></td></tr>`;
   }).join('');
 }
 function statusSummary() {
@@ -55,7 +57,7 @@ function viewStatus() {
     <p class="sub">Tự cập nhật vài giây một lần khi trang này đang mở. Cột “Đang hạn chế” cho biết lệnh KhoaVeyon đã gửi gần nhất (chưa chắc đã có hiệu lực: bấm “Kiểm tra hiệu lực” để đọc trạng thái thật). Cột AI được đọc thật từ máy.</p>
     <label class="switch" style="margin:4px 0 8px"><input type="checkbox" data-cfg="reapply_on_boot" ${S.st.cfg.reapply_on_boot !== false ? 'checked' : ''}><span class="tr"></span><span>Máy khởi động lại hoặc bật lại thì tự áp lại các hạn chế đang bật (đợi có người đăng nhập; chỉ hoạt động khi KhoaVeyon đang mở)</span></label>
     <label class="switch" style="margin:4px 0 8px"><input type="checkbox" data-cfg="auto_update_students" ${S.st.cfg.auto_update_students !== false ? 'checked' : ''}><span class="tr"></span><span>Tự cập nhật dịch vụ trên máy học sinh khi có bản mới (máy đang kết nối Agent; không chạy khi đang thi)</span></label>
-    <div class="row" style="flex-wrap:wrap;margin:6px 0 10px"><button class="btn" data-xa="verify" data-fix="0">✔ Kiểm tra hiệu lực</button><button class="btn" data-xa="verify" data-fix="1">✔ Kiểm tra và gửi lại lệnh nếu lệch</button><button class="btn" data-act="selftest">🧪 Tự kiểm tra 1 máy</button></div>
+    <div class="row" style="flex-wrap:wrap;margin:6px 0 10px"><button class="btn" data-xa="verify" data-fix="0">✔ Kiểm tra hiệu lực</button><button class="btn" data-xa="verify" data-fix="1">✔ Kiểm tra và gửi lại lệnh nếu lệch</button><button class="btn primary" data-tl="dgrun">🩺 Chẩn đoán ngay</button><button class="btn" data-act="selftest">🧪 Tự kiểm tra 1 máy</button><button class="btn" data-xa="updatehs" title="Chép bản KhoaVeyonServices.bat và tệp trợ lý mới nhất trong payload xuống máy học sinh">⬆ Cập nhật máy học sinh</button></div>
     <div id="healthSum" style="margin:6px 0 10px">${healthSummary()}</div>
     <div class="hosttools"><button class="link" data-act="selall">Chọn tất cả</button><button class="link" data-act="selnone">Bỏ chọn</button><span class="muted">Đã chọn ${S.hosts.filter(h => S.sel.has(h)).length}/${S.hosts.length}. Không chọn = tất cả.</span></div>
     <div class="row" style="flex-wrap:wrap;margin:10px 0 14px">
@@ -65,10 +67,12 @@ function viewStatus() {
       <button class="btn" data-xa="power" data-p="logoff">🚪 Đăng xuất học sinh</button>
       <button class="btn ghost" data-xa="power" data-p="cancel">Hủy lệnh tắt máy</button>
       <button class="btn ghost" data-xa="power" data-p="getmac">Lấy MAC</button>
+      <button class="btn danger" data-xa="rmsel" title="Xóa các máy đã chọn khỏi danh sách (vd. IP cũ do DHCP đổi, máy không còn dùng)">🗑 Xóa máy đã chọn</button>
       <label class="muted" style="display:inline-flex;gap:6px;align-items:center">Chờ <input type="number" id="pwDelay" min="0" max="3600" value="${esc(S.pwDelay ?? 30)}" style="width:70px" class="xsel"> giây trước khi tắt</label>
     </div>
-    ${S.hosts.length ? `<table class="tbl stbl"><thead><tr><th></th><th>Sức khỏe</th><th>Máy</th><th>Trạng thái</th><th>Veyon</th><th>Người đăng nhập</th><th>Đang hạn chế</th><th>Khóa AI</th><th>Giám sát</th><th>MAC</th></tr></thead><tbody id="statusBody">${statusRows()}</tbody></table>`
+    ${S.hosts.length ? `<table class="tbl stbl"><thead><tr><th></th><th>Sức khỏe</th><th>Máy</th><th>Trạng thái</th><th>Veyon</th><th>Người đăng nhập</th><th>Đang hạn chế</th><th>Khóa AI</th><th>Giám sát</th><th>Chẩn đoán</th><th>MAC</th><th></th></tr></thead><tbody id="statusBody">${statusRows()}</tbody></table>`
       : '<div class="empty">Chưa có máy nào. Thêm máy ở trang “Điều khiển lớp”.</div>'}
+    ${diagExtraHtml()}
     <p class="hint" style="margin-bottom:0">Bật máy cần <b>Wake-on-LAN</b> được bật trong BIOS và card mạng, và máy giáo viên cùng mạng LAN. MAC tự được nhớ khi máy đang bật (${noMac ? noMac + ' máy chưa có MAC' : 'đã đủ MAC'}). Tắt máy, khởi động lại, đăng xuất cần quyền quản trị trên máy học sinh, giống các lệnh khác của chương trình.</p>
   </section>`;
 }
@@ -114,6 +118,15 @@ document.addEventListener('click', async e => {
       await api('/api/verify', {hosts: hs, fix});
       openLog(); L.pending++; updBusy(); pollSoon(); setTimeout(() => { L.pending = Math.max(0, L.pending - 1); updBusy(); }, 4000);
       toast(`Đang kiểm tra ${hs.length} máy, xem kết quả ở Nhật ký`, 'ok');
+    } else if (a === 'updatehs') {
+      const hs = await resolveTargets(); if (!hs) return;
+      const ok = await modal({title: `Cập nhật ${hs.length} máy học sinh?`, ok: 'Cập nhật',
+        html: 'Máy nào đang chạy dịch vụ cũ sẽ được chép <code>KhoaVeyonServices.bat</code> và <code>KhoaVeyonStudent.ps1</code> mới nhất từ thư mục payload rồi cài lại dịch vụ. Máy đã là bản mới thì bỏ qua. Máy tắt hoặc chưa kết nối Agent không cập nhật được. Không dùng được khi đang thi.'});
+      if (!ok) return;
+      await api('/api/update_students', {hosts: hs});
+      openLog(); L.pending++; updBusy(); pollSoon(); setTimeout(() => { L.pending = Math.max(0, L.pending - 1); updBusy(); }, 4000);
+      toast(`Đang cập nhật ${hs.length} máy, xem kết quả ở Nhật ký`, 'ok');
+      setTimeout(() => pollStatus(true), 8000); setTimeout(() => pollStatus(true), 25000);
     } else if (a === 'healthfix') {
       const fix = el.dataset.fix, hs = el.dataset.hs ? JSON.parse(el.dataset.hs) : [el.dataset.h];
       const names = {svc: 'Cài lại dịch vụ KhoaVeyon', watch: 'Bật lại giám sát', blockai: 'Khóa công cụ AI', time: 'Đồng bộ giờ'};
@@ -123,6 +136,16 @@ document.addEventListener('click', async e => {
       await api('/api/health_fix', {fix, hosts: hs});
       openLog(); toast('Đang sửa, xem kết quả ở Nhật ký', 'ok');
       setTimeout(() => pollStatus(true), 8000); setTimeout(() => pollStatus(true), 25000);
+    } else if (a === 'rmhost' || a === 'rmsel') {
+      const hs = a === 'rmhost' ? [el.dataset.h] : S.hosts.filter(h => S.sel.has(h));
+      if (!hs.length) { toast('Chọn máy cần xóa trước (tick ở đầu dòng)', 'err'); return; }
+      const ok = await modal({title: `Xóa ${hs.length} máy khỏi danh sách?`, ok: 'Xóa', danger: true,
+        html: (hs.length <= 6 ? '<b>' + hs.map(esc).join(', ') + '</b><br>' : '') + 'Chỉ xóa khỏi danh sách của KhoaVeyon (và MAC, tên đã nhớ). Không gỡ gì trên máy học sinh. Máy vẫn tự được thêm lại nếu bạn quét mạng.'});
+      if (!ok) return;
+      S.hosts = S.hosts.filter(h => !hs.includes(h)); hs.forEach(h => S.sel.delete(h));
+      if (S.diag) S.diag.machines = S.diag.machines.filter(m => !hs.includes(m.host));
+      await api('/api/hosts', {hosts: S.hosts});
+      toast(`Đã xóa ${hs.length} máy`, 'ok'); render(); pollStatus(true);
     } else if (a === 'editname') {
       await editHostName(el.dataset.h);
     } else if (a === 'editmac') {

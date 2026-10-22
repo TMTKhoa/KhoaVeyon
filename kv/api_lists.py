@@ -150,6 +150,21 @@ def api_list_save(b):
 
 def api_hosts(b):
     with CFG_LOCK:
+        old = list(CFG.get('hosts') or [])
         CFG['hosts'] = clean_hosts(b.get('hosts'))
+        gone = [h for h in old if h not in CFG['hosts']]
+        for key in ('macs', 'host_names', 'host_auto_names'):   # máy đã xóa (vd. IP cũ do DHCP đổi) thì bỏ luôn MAC và tên đã nhớ
+            d = CFG.get(key)
+            if isinstance(d, dict):
+                for h in gone:
+                    d.pop(h, None)
+                    d.pop(h.rsplit(':', 1)[0] if h.count(':') == 1 else h, None)
         save_config(CFG)
-    return {'ok': True}
+    try:
+        from .status import STATUS, STATUS_LOCK
+        with STATUS_LOCK:
+            for h in gone:
+                STATUS.pop(h, None)
+    except Exception:  # noqa
+        pass
+    return {'ok': True, 'removed': len(gone)}

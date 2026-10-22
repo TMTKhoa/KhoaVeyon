@@ -11,7 +11,7 @@ import os
 from .agent import agent_online
 from .health import exam_snapshot, health_probe, job_fix_service
 from .remote import rfs_sha, rfs_write
-from .runtime import CFG, CFG_LOCK, log, PAYLOAD_DIR, split_host_port
+from .runtime import ApiError, CFG, CFG_LOCK, clean_hosts, log, PAYLOAD_DIR, pool_run, split_host_port, start_job
 
 CHECK_EVERY = 600      # giây giữa hai lần kiểm tra bản của một máy
 RETRY_AFTER = 1800     # giây: máy đã thử cập nhật mà vẫn cũ thì chờ chừng này mới thử lại
@@ -84,3 +84,34 @@ def autoupdate_loop():
         except Exception as e:  # noqa
             log('Lỗi tự cập nhật dịch vụ: %s' % e, 'err')
         time.sleep(60)
+
+
+def update_one(host):
+    """Cập nhật thủ công một máy: chép tệp phụ, nếu dịch vụ cũ/chưa có thì chép bản mới và chạy -install."""
+    hh, _ = split_host_port(host)
+    if not agent_online(hh):
+        return False, 'máy tắt hoặc chưa kết nối Agent nên chưa cập nhật được'
+    extra = sync_extra_files(host)
+    svc = health_probe(hh).get('svc')
+    if svc == 'ok':
+        return True, 'đã là bản mới' + (' (đã chép thêm %s)' % ', '.join(extra) if extra else '')
+    if svc == '?':
+        return False, 'chưa có tệp KhoaVeyonServices.bat trong payload nên chưa so sánh được'
+    job_fix_service([host])
+    return True, 'đã gửi bản mới và cài lại dịch vụ'
+
+
+def job_update_students(hosts):
+    log('>>> Cập nhật máy học sinh theo payload (%d máy)' % len(hosts), 'head')
+    pool_run(update_one, hosts, 'Cập nhật máy học sinh')
+
+
+def api_update_students(b):
+    """Nút “Cập nhật máy học sinh”: dùng khi hệ thống không tự cập nhật (tắt tự cập nhật, máy mới bật...)."""
+    if exam_snapshot().get('active'):
+        raise ApiError('Đang thi nên không cập nhật máy học sinh. Kết thúc kỳ thi rồi thử lại')
+    hosts = clean_hosts(b.get('hosts'))
+    if not hosts:
+        raise ApiError('Chưa có máy nào để cập nhật')
+    start_job(job_update_students, hosts)
+    return {'ok': True}

@@ -20,7 +20,10 @@ from .runtime import ApiError, CFG, CFG_LOCK, log, STATE
 
 
 UPDATE_FILES = ('KhoaVeyon.py', 'Chay-KhoaVeyon.bat', 'Tao-ShortCut.bat', 'README-KhoaVeyon.md', 'requirements.txt')
-UPDATE_DIRS = ('web', 'kv', 'scripts')          # chỉ ghi đè mã chương trình; data, lists, payload, runtime của bạn không bị đụng tới
+UPDATE_DIRS = ('web', 'kv', 'scripts')          # ghi đè mã chương trình; data, lists, runtime của bạn không bị đụng tới (payload: xem UPDATE_PAYLOAD_FILES)
+# Tệp trong payload cũng được cập nhật (máy học sinh sẽ tự nhận bản mới từ payload qua kv/autoupdate.py).
+# KHÔNG đụng KhoaVeyonAgent.cfg (khóa + địa chỉ riêng của máy giáo viên), *.pem và Setup-MayHocSinh.bat (tự tạo lại).
+UPDATE_PAYLOAD_FILES = ('KhoaVeyonServices.bat', 'KhoaVeyonStudent.ps1')
 UPDATE_MAX = 60 * 1024 * 1024
 UPDATE_HOSTS = ('github.com', 'githubusercontent.com')
 
@@ -164,6 +167,9 @@ def apply_update(url, app_dir=None, trusted=False):
             for dp, _dn, fn in os.walk(os.path.join(base, d)):
                 for f in fn:
                     todo.append(os.path.relpath(os.path.join(dp, f), base))
+        for f in UPDATE_PAYLOAD_FILES:
+            if os.path.isfile(os.path.join(base, 'payload', f)):
+                todo.append(os.path.join('payload', f))
         bk = os.path.join(app_dir, 'data', 'backup-' + VERSION)
         for rel in todo:
             dst = os.path.join(app_dir, rel)
@@ -173,6 +179,12 @@ def apply_update(url, app_dir=None, trusted=False):
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copy2(os.path.join(base, rel), dst + '.new')
             os.replace(dst + '.new', dst)
+        if app_dir == APP_DIR and any(r.replace('\\', '/').startswith('payload/') for r in todo):
+            try:   # cập nhật SHA-256 trong KhoaVeyonAgent.cfg cho khớp bản payload mới
+                from .setup import refresh_agent_cfg
+                refresh_agent_cfg()
+            except Exception:  # noqa
+                pass
         return todo
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

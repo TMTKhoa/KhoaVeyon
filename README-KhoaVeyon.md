@@ -237,6 +237,13 @@ Thao tác nào quá 0,7 giây chưa xong (quét mạng, hỏi Veyon, kết nối
 
 **Chưa kiểm chứng trên Windows và Veyon thật:** tên khóa `websiteUrls` của Veyon Open website (đã có phương án dự phòng `explorer.exe`), việc trang KhoaQuiz tải đủ khi bật "chỉ trang cho phép" (lệnh này chặn theo IP, trang dùng CDN có thể thiếu: hãy thử trên một máy trước giờ thi). Logic, giao diện và luồng gọi KhoaQuiz đã thử bằng KhoaQuiz giả lập (kiểm thử `tests/test_khoalink.py` và thử giao diện bằng trình duyệt).
 
+## 4.4.0
+
+- **Gộp Chẩn đoán vào Trạng thái máy.** Hai trang giống nhau nên trang *Chẩn đoán* không còn trong menu. Ở trang **Trạng thái máy**: nút **🩺 Chẩn đoán ngay** thêm cột *Chẩn đoán* (Agent, giờ máy, dịch vụ, kèm nút Sửa), các nút sửa hàng loạt và bảng kiểm tra máy giáo viên (tường lửa) hiện ngay bên dưới bảng.
+- **Xóa máy khỏi danh sách.** Nút 🗑 ở cuối mỗi dòng và nút **🗑 Xóa máy đã chọn**, dùng khi máy đổi IP do DHCP và IP cũ không còn máy nào. Xóa luôn MAC và tên đã nhớ của IP đó. Không gỡ gì trên máy học sinh.
+- Nút **⬆ Cập nhật máy học sinh** và tự cập nhật GitHub kèm `payload` (xem mục Cập nhật ở README.vi.md).
+- Phiên bản đổi sang **4.4.x**.
+
 ## 4.3.0
 
 - **Bốc thăm gọi tên** (trang Tương tác và trang Sơ đồ chỗ ngồi): chọn ngẫu nhiên một em có mặt (bỏ em vắng, máy tắt), không gọi trùng trong một vòng, tên em hiện trên máy của em đó và nổi bật trên sơ đồ.

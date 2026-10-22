@@ -22,7 +22,7 @@
 | 🪑 **Sơ đồ & điểm danh** | Sơ đồ chỗ ngồi theo lớp, học sinh vắng, liên kết KhoaQuiz |
 | 🚨 **Giám sát vi phạm** | Tự chụp ảnh khi mở trang/ứng dụng cấm, thư viện bằng chứng, báo cáo |
 | 📋 **Danh sách Excel** | Sửa ứng dụng/trang được phép, bị chặn, trang AI bằng bảng; tự gửi xuống máy học sinh |
-| 🩺 **Chẩn đoán** | Bảng xanh/đỏ từng máy (Veyon, Agent, giờ máy, bản dịch vụ, tường lửa) kèm nút sửa |
+| 🩺 **Chẩn đoán** (nằm trong *Trạng thái máy*) | Bảng xanh/đỏ từng máy (Veyon, Agent, giờ máy, bản dịch vụ, tường lửa) kèm nút sửa; có nút xóa máy IP cũ |
 | 💾 **Sao lưu** | Một file .zip chứa máy, lớp, thời khóa biểu, sơ đồ, danh sách; chuyển sang máy giáo viên khác một thao tác |
 | 🙋 **Tương tác** | Học sinh giơ tay / nộp bài từ máy; nhắn tin, khóa màn hình kèm lời nhắn, thống kê dùng máy |
 | 🔌 **Agent** | Máy giáo viên điều khiển máy học sinh không cần tài khoản quản trị, chia sẻ C$ hay Task Scheduler từ xa |
@@ -60,6 +60,11 @@ Xong: chọn máy ở **Điều khiển lớp** và bấm nút.
 | Máy được bật bằng Wake-on-LAN nhưng kẹt ở màn hình `PXE ... DHCP...` | BIOS đang ưu tiên khởi động mạng. Vào BIOS (HP: F10, máy khác: Del/F2), tắt **Network/PXE Boot** (hoặc đưa ổ cứng / Windows Boot Manager lên đầu), **giữ bật** Wake on LAN / Power On by PCI-E |
 | Máy hiện IP thay vì tên | Cần Agent, DNS ngược hoặc NetBIOS; quét lại sau khi cài |
 | Nhập thời khóa biểu lỗi | Cần hàng tiêu đề các thứ (`THỨ HAI`, `T2`…) + giờ hoặc số tiết; lỗi hiện ngay trên trang |
+
+## Cập nhật chương trình và máy học sinh
+
+- **Tự cập nhật từ GitHub** nay cũng thay `payload\KhoaVeyonServices.bat` và `payload\KhoaVeyonStudent.ps1` (bản cũ sao lưu ở `data\backup-<phiên bản>`). Không đụng `KhoaVeyonAgent.cfg`, `*.pem`. Máy học sinh sau đó tự nhận bản mới (cần bật *Tự cập nhật dịch vụ trên máy học sinh*).
+- **Nút ⬆ Cập nhật máy học sinh** (trang *Trạng thái máy*): cập nhật ngay các máy đã chọn khi hệ thống không tự làm (tắt tự cập nhật, máy vừa bật...). Máy cần bật và có Agent; không dùng được khi đang thi.
 
 ## Yêu cầu
 

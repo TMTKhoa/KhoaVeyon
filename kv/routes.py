@@ -19,6 +19,7 @@ from .attendance import api_school_attendance, api_school_attendance_set
 from .auto import api_auto, api_auto_set, api_auto_test
 from .cleanup import api_cleanup
 from .gallery import api_evidence_open, api_gallery
+from .autoupdate import api_update_students
 from .health import api_health_fix
 from .backup_api import api_backup_preview, api_backup_restore
 from .diagnose import api_diagnose, api_diagnose_fix
@@ -54,4 +55,4 @@ POST_ROUTES = {'/api/draw': api_draw, '/api/wall_apply': api_wall_apply, '/api/w
                '/api/settings': api_settings, '/api/dist': api_dist, '/api/open': api_open,
                '/api/veyon_list': api_veyon_list, '/api/sync': api_sync, '/api/quit': api_quit,
                '/api/payload_delete': api_payload_delete, '/api/vcfg_save': api_vcfg_save, '/api/vcfg_run': api_vcfg_run, '/api/shot': api_shot, '/api/ai_status': api_ai_status, '/api/ai_opts': api_ai_opts, '/api/watch': api_watch, '/api/alerts_clear': api_alerts_clear, '/api/cleanup': api_cleanup, '/api/report_export': api_report_export,
-               '/api/power': api_power, '/api/macs_set': api_macs_set, '/api/hostname_set': api_hostname_set, '/api/auto_set': api_auto_set, '/api/auto_test': api_auto_test, '/api/exam_start': api_exam_start, '/api/exam_end': api_exam_end, '/api/health_fix': api_health_fix, '/api/verify': api_verify, '/api/notice': api_notice, '/api/privacy_pin': api_privacy_pin, '/api/privacy_acl': api_privacy_acl, '/api/exam_collect': api_exam_collect, '/api/exam_release': api_exam_release, '/api/list_variant_save': api_list_variant_save, '/api/list_variant_delete': api_list_variant_delete, '/api/startup': api_startup, '/api/logon_policy': api_logon_policy, '/api/evidence_open': api_evidence_open, '/api/applock': api_applock, '/api/selftest': api_selftest, '/api/agent': api_agent}
+               '/api/power': api_power, '/api/macs_set': api_macs_set, '/api/hostname_set': api_hostname_set, '/api/auto_set': api_auto_set, '/api/auto_test': api_auto_test, '/api/exam_start': api_exam_start, '/api/exam_end': api_exam_end, '/api/health_fix': api_health_fix, '/api/update_students': api_update_students, '/api/verify': api_verify, '/api/notice': api_notice, '/api/privacy_pin': api_privacy_pin, '/api/privacy_acl': api_privacy_acl, '/api/exam_collect': api_exam_collect, '/api/exam_release': api_exam_release, '/api/list_variant_save': api_list_variant_save, '/api/list_variant_delete': api_list_variant_delete, '/api/startup': api_startup, '/api/logon_policy': api_logon_policy, '/api/evidence_open': api_evidence_open, '/api/applock': api_applock, '/api/selftest': api_selftest, '/api/agent': api_agent}
