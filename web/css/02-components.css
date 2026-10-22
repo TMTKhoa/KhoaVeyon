@@ -111,3 +111,4 @@ label.field{display:block;font-weight:600;margin:0 0 6px}
 .mdot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#94a3b8;vertical-align:0}.mt .mdot{position:absolute;top:8px;right:28px}
 .mt.on .mdot,.mdot.on{background:#16a34a}.mt.warn .mdot,.mdot.warn{background:#f59e0b}.mt.bad .mdot,.mdot.bad{background:#dc2626}.mdot.off{background:#94a3b8}
 .rlog{margin-top:6px;font-size:12px}.rlog summary{cursor:pointer;color:#2563eb}.rlog .tbl{font-size:12px;margin-top:4px}
+.mt.live{min-height:150px}.mt .mthumb{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:7px;background:#0f172a;margin-bottom:3px;display:block}.mt .mthumb.ph{display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:11px}

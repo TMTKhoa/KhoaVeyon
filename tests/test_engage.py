@@ -158,3 +158,35 @@ class MonitorTest(unittest.TestCase):
             d = board.api_monitor({'cls': '10A'})
         self.assertEqual(d['cls'], '10A'); self.assertEqual(d['seats']['1']['host'], 'MAY1'); self.assertEqual(d['seats']['1']['name'], 'An')
         self.assertIn('MAY9', d['extras']); self.assertIsNone(d['current'])
+
+
+class ThumbTest(unittest.TestCase):
+    def test_thumb_flow(self):
+        from kv import board, student
+        ok = '/9j/' + 'A' * 300
+        with mock.patch.object(student, 'host_for_ip', lambda ip: 'PC1'):
+            student.handle_events('1.1.1.1', {'events': [{'t': 'thumb', 'd': ok}, {'t': 'thumb', 'd': 'notjpeg' * 100}, {'t': 'thumb', 'd': '/9j/' + 'A' * 20000}]})
+        r = board.api_monitor_thumbs({'since': 0})
+        self.assertEqual(list(r['items']), ['PC1']); self.assertTrue(r['items']['PC1']['d'].startswith('data:image/jpeg;base64,/9j/'))
+        self.assertEqual(board.api_monitor_thumbs({'since': r['last']})['items'], {})
+        with mock.patch.object(board, 'start_job') as sj, mock.patch.object(board, 'clean_hosts', lambda h: list(h or [])):
+            board.api_monitor_live({'on': False, 'hosts': ['PC1']})
+            self.assertEqual(sj.call_args[0][2], {'type': 'config', 'live': 0, 'ttl': 120})
+        self.assertNotIn('PC1', board.THUMBS)
+
+
+class HostMapTest(unittest.TestCase):
+    def test_hostmap_overrides_and_validates(self):
+        from kv import board, seating
+        with mock.patch.dict(seating.CFG, {'hosts': ['10.0.0.5', '10.0.0.6', 'PC3'], 'host_names': {}, 'host_auto_names': {'10.0.0.5': 'PC11', '10.0.0.6': 'PC8'}}), \
+             mock.patch.dict(seating.SCHOOL, {'seat_hostmap': {}}), mock.patch.object(board, 'school_save'):
+            self.assertEqual(seating.school_seat_no('10.0.0.5', {}), 1)          # chưa gán: theo thứ tự danh sách
+            board.api_seat_hostmap({'map': {'10.0.0.5': 8, '10.0.0.6': '11', 'PC3': ''}})
+            self.assertEqual(seating.school_seat_no('10.0.0.5', {}), 8)
+            self.assertEqual(seating.school_seat_no('10.0.0.6', {'pattern': 'PC{n}'}), 11)   # bảng gán thắng tên máy mẫu
+            self.assertEqual(seating.school_seat_no('PC3', {}), 3)
+            self.assertEqual(seating.seat_host_map({})[8], '10.0.0.5')
+            with self.assertRaises(ApiError):
+                board.api_seat_hostmap({'map': {'10.0.0.5': 2, '10.0.0.6': 2}})
+            with self.assertRaises(ApiError):
+                board.api_seat_hostmap({'map': {'10.0.0.5': 999}})

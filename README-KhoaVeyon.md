@@ -237,6 +237,17 @@ Thao tác nào quá 0,7 giây chưa xong (quét mạng, hỏi Veyon, kết nối
 
 **Chưa kiểm chứng trên Windows và Veyon thật:** tên khóa `websiteUrls` của Veyon Open website (đã có phương án dự phòng `explorer.exe`), việc trang KhoaQuiz tải đủ khi bật "chỉ trang cho phép" (lệnh này chặn theo IP, trang dùng CDN có thể thiếu: hãy thử trên một máy trước giờ thi). Logic, giao diện và luồng gọi KhoaQuiz đã thử bằng KhoaQuiz giả lập (kiểm thử `tests/test_khoalink.py` và thử giao diện bằng trình duyệt).
 
+## Bản 4.7.1
+
+- **Gán máy vào vị trí**: khi tên PC không trùng số vị trí trên sơ đồ (vd. PC11 ngồi ở vị trí 8), bấm "🔗 Gán máy vào vị trí" (trang Sơ đồ lớp học hoặc Monitor), nhập số vị trí cho từng máy. Bảng này dùng chung mọi lớp, được ưu tiên hơn "Tên máy mẫu" và thứ tự danh sách; tên em trên hình nền, màn hình khóa, bốc thăm, Monitor, vi phạm đều theo bảng này. Có nút điền nhanh theo thứ tự danh sách hoặc theo số trong tên PC.
+- Nhận diện số máy còn dùng cả tên PC tự dò được khi máy được thêm bằng IP.
+
+## Bản 4.7.0
+
+- **Monitor xem được màn hình học sinh**: bật "📺 Xem màn hình học sinh" ở trang Monitor. Máy học sinh tự chụp, thu nhỏ (384 px, ~10 KB) và gửi về mỗi 3 đến 20 giây tùy chọn; chỉ chạy khi trang Monitor đang mở (ngừng gia hạn thì tự dừng sau 2 phút). Không chọn máy thì xem các máy đang bật, chọn máy thì chỉ xem máy đã chọn. Bấm đúp vào ô để phóng to.
+- Học sinh thấy chấm ● trên nút nổi khi đang được xem. Muốn ảnh lớn rõ nét thì dùng nút "Chụp màn hình" như cũ.
+- Phần PowerShell chưa thử trên Windows thật.
+
 ## Bản 4.6.0
 
 - **Chụp vi phạm gần như tức thì**: script giám sát trên máy học sinh quét 0,5 giây/lần (trước là 2 giây), chụp ngay khi mở ứng dụng/trang vi phạm, rồi tự báo về máy giáo viên. Máy giáo viên nhận ảnh ngay, không chờ lượt hỏi.

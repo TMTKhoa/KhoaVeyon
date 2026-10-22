@@ -1,4 +1,4 @@
-﻿# KhoaVeyonStudent.ps1: trợ lý nhỏ trên máy học sinh (giơ tay, nộp bài, nhận tin nhắn của giáo viên).
+﻿﻿﻿﻿﻿﻿﻿﻿﻿# KhoaVeyonStudent.ps1: trợ lý nhỏ trên máy học sinh (giơ tay, nộp bài, nhận tin nhắn của giáo viên).
 # Dịch vụ KhoaVeyonAutoLog chạy tệp này ẩn trong phiên của học sinh, mỗi phiên một bản. Không ghi phím, không chụp màn hình.
 # Dữ liệu trao đổi nằm ở %ProgramData%\KhoaVeyon:  inbox\ (giáo viên gửi tới), outbox\ (gửi về giáo viên), submit\ (bài nộp).
 # Muốn tắt trợ lý trên máy này: tạo tệp %ProgramData%\KhoaVeyon\tray.off. Nhật ký lỗi: %ProgramData%\KhoaVeyon\student.log
@@ -214,11 +214,13 @@ try {
     $CfgFile = Join-Path $Root 'student.cfg.json'
     $script:handOn = $true
     $script:actOn = $true
+    $script:liveUntil = [DateTime]::MinValue; $script:liveSec = 5; $script:lastThumb = [DateTime]::MinValue
     try { if (Test-Path -LiteralPath $CfgFile) { $c0 = Get-Content -LiteralPath $CfgFile -Raw -Encoding UTF8 | ConvertFrom-Json; if ($c0.hand -eq $false) { $script:handOn = $false }; if ($c0.act -eq $false) { $script:actOn = $false } } } catch { }
     function Update-Pill {
-        if (-not $script:handOn) { $script:float.BackColor = [System.Drawing.Color]::FromArgb(37, 99, 235); $script:pill.Text = 'Nộp bài'; return }
-        if ($script:raised) { $script:float.BackColor = [System.Drawing.Color]::FromArgb(234, 88, 12); $script:pill.Text = [string][char]0x270B + ' Đang giơ tay' }
-        else { $script:float.BackColor = [System.Drawing.Color]::FromArgb(37, 99, 235); $script:pill.Text = [string][char]0x270B + ' Giơ tay' }
+        $eye = if ($script:liveUntil -gt [DateTime]::Now) { [string][char]0x25CF + ' ' } else { '' }   # chấm tròn báo "giáo viên đang xem màn hình"
+        if (-not $script:handOn) { $script:float.BackColor = [System.Drawing.Color]::FromArgb(37, 99, 235); $script:pill.Text = $eye + 'Nộp bài'; return }
+        if ($script:raised) { $script:float.BackColor = [System.Drawing.Color]::FromArgb(234, 88, 12); $script:pill.Text = $eye + [string][char]0x270B + ' Đang giơ tay' }
+        else { $script:float.BackColor = [System.Drawing.Color]::FromArgb(37, 99, 235); $script:pill.Text = $eye + [string][char]0x270B + ' Giơ tay' }
     }
     function Toggle-Hand {
         if (-not $script:handOn) { return }
@@ -387,6 +389,31 @@ try {
         }
     }
 
+    # ---------- ảnh màn hình thu nhỏ cho trang Monitor (chụp và nén ngay trên máy học sinh, chỉ khi giáo viên bật xem) ----------
+    $jpgCodec = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' } | Select-Object -First 1
+    function Send-Thumb {
+        $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+        $full = New-Object System.Drawing.Bitmap($b.Width, $b.Height)
+        $g = [System.Drawing.Graphics]::FromImage($full)
+        try { $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $full.Size) } finally { $g.Dispose() }
+        $tw = 384; $th = [int]($tw * $b.Height / [Math]::Max(1, $b.Width))
+        $small = New-Object System.Drawing.Bitmap($tw, $th)
+        $g2 = [System.Drawing.Graphics]::FromImage($small)
+        try { $g2.InterpolationMode = 'HighQualityBicubic'; $g2.DrawImage($full, 0, 0, $tw, $th) } finally { $g2.Dispose(); $full.Dispose() }
+        $b64 = ''
+        try {
+            foreach ($q in 55, 42, 32, 24) {
+                $ms = New-Object System.IO.MemoryStream
+                $ep = New-Object System.Drawing.Imaging.EncoderParameters(1)
+                $ep.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter([System.Drawing.Imaging.Encoder]::Quality, [long]$q)
+                $small.Save($ms, $jpgCodec, $ep)
+                $b64 = [Convert]::ToBase64String($ms.ToArray()); $ms.Dispose()
+                if ($b64.Length -le 13500) { break }   # tệp sự kiện tối đa 16 KB
+            }
+        } finally { $small.Dispose() }
+        if ($b64.Length -gt 0 -and $b64.Length -le 14500) { Send-Event @{ t = 'thumb'; d = $b64 } }
+    }
+
     # ---------- đọc hộp thư đến mỗi 1,5 giây ----------
     function Read-Inbox {
         foreach ($f in (Get-ChildItem -LiteralPath $Inbox -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object Name)) {
@@ -403,6 +430,12 @@ try {
                     'block'    { Show-Block $msg }
                     'config'   {
                         if ($msg.act -ne $null) { $script:actOn = ($msg.act -eq $true) }
+                        if ($msg.live -ne $null) {   # xem màn hình thu nhỏ: chỉ chạy khi giáo viên đang mở trang Monitor, tự dừng sau ttl giây nếu không được gia hạn
+                            $ls = [int]$msg.live
+                            if ($ls -gt 0) { $script:liveSec = [Math]::Max(2, [Math]::Min(60, $ls)); $script:liveUntil = [DateTime]::Now.AddSeconds([Math]::Max(30, [Math]::Min(300, [int]$msg.ttl))) }
+                            else { $script:liveUntil = [DateTime]::MinValue }
+                            Update-Pill
+                        }
                         if ($msg.hand -ne $null -or $msg.act -ne $null) {
                             if ($msg.hand -ne $null) { $script:handOn = ($msg.hand -eq $true) }
                             [System.IO.File]::WriteAllText($CfgFile, (@{ hand = $script:handOn; act = $script:actOn } | ConvertTo-Json -Compress), $utf8)
@@ -432,6 +465,8 @@ try {
             }
             Read-Inbox
             try { Report-Activity } catch { }
+            if ($script:liveUntil -gt $now -and ($now - $script:lastThumb).TotalSeconds -ge $script:liveSec) { $script:lastThumb = $now; try { Send-Thumb } catch { Log ('thumb: ' + $_.Exception.Message) } }
+            elseif ($script:liveUntil -ne [DateTime]::MinValue -and $script:liveUntil -le $now) { $script:liveUntil = [DateTime]::MinValue; Update-Pill }
             foreach ($f in $script:blockForms) { try { $f.TopMost = $true; $f.Activate() } catch {} }
             foreach ($c in $script:blockClocks) { try { $c.Text = $now.ToString('HH:mm') } catch {} }
         } catch { Log ('tick: ' + $_.Exception.Message) }

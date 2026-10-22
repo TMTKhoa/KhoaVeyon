@@ -6,7 +6,7 @@ import json
 import time
 
 from .alerts import ALERT_LOCK, ALERTS, hn_of
-from .runtime import CFG, CFG_LOCK, clean_hosts, split_host_port, start_job
+from .runtime import ApiError, CFG, CFG_LOCK, clean_hosts, split_host_port, start_job
 from .school import _cls_norm, LAYOUT_DEFAULT, SCHOOL, SCHOOL_LOCK, school_bells, school_now, school_save
 from .seating import att_state, seat_host_map
 from .status import api_status
@@ -90,3 +90,74 @@ def api_act_option(b):
     if hosts:
         start_job(send_message, hosts, {'type': 'config', 'act': on})
     return {'ok': True, 'enabled': on}
+
+
+# ---------------------------------------------------------------- xem màn hình thu nhỏ
+THUMBS = {}          # máy -> {'d': base64 JPEG, 'ts', 'seq'}: máy học sinh tự chụp, nén và gửi khi giáo viên bật "Xem màn hình"
+THUMB_SEQ = [0]
+LIVE_TTL = 120
+
+
+def thumb_put(host, b64):
+    with LOCK:
+        THUMB_SEQ[0] += 1
+        THUMBS[host] = {'d': b64, 'ts': time.time(), 'seq': THUMB_SEQ[0]}
+        old = time.time() - 900
+        for h in [h for h, v in THUMBS.items() if v['ts'] < old]:
+            del THUMBS[h]
+
+
+def api_monitor_thumbs(q):
+    try:
+        since = int(q.get('since') or 0)
+    except (TypeError, ValueError):
+        since = 0
+    with LOCK:
+        items = {h: {'d': 'data:image/jpeg;base64,' + v['d'], 'age': int(time.time() - v['ts'])} for h, v in THUMBS.items() if v['seq'] > since}
+        last = THUMB_SEQ[0]
+    return {'last': last, 'items': items}
+
+
+def api_monitor_live(b):
+    """Bật / gia hạn / tắt xem màn hình thu nhỏ. Giao diện gọi lại mỗi ~40 giây khi đang xem; ngừng gọi thì máy học sinh tự dừng sau LIVE_TTL giây."""
+    on = bool(b.get('on'))
+    try:
+        sec = max(3, min(30, int(b.get('sec') or 5)))
+    except (TypeError, ValueError):
+        sec = 5
+    hosts = clean_hosts(b.get('hosts'))
+    if hosts:
+        start_job(send_message, hosts, {'type': 'config', 'live': sec if on else 0, 'ttl': LIVE_TTL})
+    if not on:
+        with LOCK:
+            for h in hosts or list(THUMBS):
+                THUMBS.pop(h, None)
+    return {'ok': True, 'count': len(hosts)}
+
+
+# ---------------------------------------------------------------- gán máy (tên PC) vào vị trí trong phòng
+def api_seat_hostmap(b):
+    """Bảng máy -> số vị trí (số máy trên sơ đồ). Dùng khi tên PC không trùng số vị trí (vd. PC11 ngồi ở vị trí 8). Gửi rỗng để xóa hết."""
+    raw = b.get('map')
+    if not isinstance(raw, dict):
+        raise ApiError('Dữ liệu không hợp lệ')
+    with CFG_LOCK:
+        hosts = [str(h) for h in CFG.get('hosts') or []]
+    out, used = {}, {}
+    for h, v in raw.items():
+        if h not in hosts or v in (None, ''):
+            continue
+        try:
+            no = int(v)
+        except (TypeError, ValueError):
+            raise ApiError('Số vị trí của máy %s phải là số' % h)
+        if not 1 <= no <= 300:
+            raise ApiError('Số vị trí từ 1 đến 300 (máy %s)' % h)
+        if no in used:
+            raise ApiError('Vị trí %d đang gán cho cả %s và %s' % (no, used[no], h))
+        used[no] = h
+        out[h] = no
+    with SCHOOL_LOCK:
+        SCHOOL['seat_hostmap'] = out
+    school_save()
+    return {'ok': True, 'map': out}

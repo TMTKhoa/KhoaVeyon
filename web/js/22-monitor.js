@@ -2,6 +2,29 @@
 S.mon = null;
 S.monCls = '';
 S.monTimer = 0;
+S.monLive = false; S.monSec = 5; S.thumbs = {}; S.thumbSeq = 0;
+
+function monLiveHosts() {
+  const M = S.mon; if (!M) return [];
+  const sel = Object.values(M.machines).filter(m => m.online && S.sel.has(m.host)).map(m => m.host);
+  return sel.length ? sel : Object.values(M.machines).filter(m => m.online).map(m => m.host);
+}
+async function monLiveSend(on) { try { await api('/api/monitor_live', {on, sec: S.monSec, hosts: on ? monLiveHosts() : (S.mon ? Object.keys(S.mon.machines) : [])}, {quiet: true}); } catch (e) { /* thử lại ở lần gia hạn sau */ } }
+setInterval(() => { if (S.monLive && S.page === 'monitor') monLiveSend(true); }, 40000);   // gia hạn: ngừng gia hạn thì máy học sinh tự dừng
+setInterval(async () => {
+  if (!S.monLive) return;
+  if (S.page !== 'monitor' || document.hidden) { if (S.page !== 'monitor') { S.monLive = false; monLiveSend(false); } return; }
+  try {
+    const r = await api('/api/monitor_thumbs?since=' + S.thumbSeq, undefined, {quiet: true});
+    S.thumbSeq = r.last; let needRender = false;
+    for (const [h, v] of Object.entries(r.items)) {
+      S.thumbs[h] = v.d;
+      const im = document.querySelector('.mthumb[data-h="' + CSS.escape(h) + '"]');
+      if (im) im.src = v.d; else needRender = true;
+    }
+    if (needRender && !$('#modalroot').innerHTML) render();
+  } catch (e) { /* bỏ qua */ }
+}, 2500);
 
 async function loadMonitor() {
   try { S.mon = await api('/api/monitor?cls=' + encodeURIComponent(S.monCls || ''), undefined, {quiet: true}); } catch (e) { if (!S.mon) throw e; }
@@ -25,11 +48,12 @@ function monTile(hostInfo, seat, no) {
   const st = !m.online ? 'off' : m.health === 'red' ? 'bad' : m.health === 'yellow' ? 'warn' : 'on';
   const nm = seat && seat.name ? seat.name : (seat && seat.absent ? seat.absent : (m.user || ''));
   const gone = seat && !seat.name && seat.absent;
+  const th = S.monLive && S.thumbs[m.host] ? `<img class="mthumb" data-h="${esc(m.host)}" src="${S.thumbs[m.host]}" alt="">` : (S.monLive && m.online ? `<div class="mthumb ph" data-h="${esc(m.host)}">đang chờ ảnh...</div>` : '');
   const act = m.act ? `<div class="mact" title="${esc(m.act.w)}"><b>${esc(monAppName(m.act))}</b> ${esc(m.act.w.slice(0, 46))}</div>` : (m.online ? '<div class="mact muted">—</div>' : '');
   const v = m.viol ? `<span class="mv" title="${m.viol.n} vi phạm hôm nay, gần nhất ${esc(m.viol.last)}: ${esc(m.viol.name)}">🚨${m.viol.n}</span>` : '';
-  return `<button class="mt ${st} ${sel ? 'sel' : ''} ${m.hand ? 'hand' : ''}" data-mon="tile" data-h="${esc(m.host)}" title="${esc(m.pc)}${m.viol ? ' · vi phạm gần nhất: ' + m.viol.name : ''}">
+  return `<button class="mt ${st} ${sel ? 'sel' : ''} ${m.hand ? 'hand' : ''} ${S.monLive ? 'live' : ''}" data-mon="tile" data-h="${esc(m.host)}" title="${esc(m.pc)}${m.viol ? ' · vi phạm gần nhất: ' + m.viol.name : ''}">
     <i class="mn">${no}</i><span class="mdot"></span>${m.hand ? '<em class="mh">✋</em>' : ''}${v}
-    <div class="mpc">${esc(m.pc)}</div><div class="mnm ${gone ? 'muted' : ''}">${esc(nm || (m.online ? 'Chưa xếp' : ''))}${gone ? ' (vắng)' : ''}</div>${act}</button>`;
+    ${th}<div class="mpc">${esc(m.pc)}</div><div class="mnm ${gone ? 'muted' : ''}">${esc(nm || (m.online ? 'Chưa xếp' : ''))}${gone ? ' (vắng)' : ''}</div>${act}</button>`;
 }
 
 function viewMonitor() {
@@ -61,7 +85,7 @@ function viewMonitor() {
         <span class="sstat">🟢 <b>${on}</b>/${M.total} bật</span><span class="sstat">✋ <b>${hands}</b></span><span class="sstat">🚨 <b>${viol}</b> máy vi phạm hôm nay</span>
         <span style="flex:1"></span>Sơ đồ lớp ${clsSel}</div>
       <div class="row" style="flex-wrap:wrap;gap:6px;margin-top:10px;align-items:center"><b>Chọn máy:</b>
-        <button class="btn sm" data-mon="selall">Tất cả</button><button class="btn sm" data-mon="selon">Máy đang bật</button><button class="btn sm" data-mon="selviol">Máy vi phạm</button><button class="btn sm" data-mon="selhand">Máy giơ tay</button><button class="btn sm ghost" data-mon="selnone">Bỏ chọn</button>
+        <button class="btn sm" data-mon="selall">Tất cả</button><button class="btn sm" data-mon="selon">Máy đang bật</button><button class="btn sm" data-mon="selviol">Máy vi phạm</button><button class="btn sm" data-mon="selhand">Máy giơ tay</button><button class="btn sm ghost" data-mon="selnone">Bỏ chọn</button><button class="btn sm ghost" data-mon="hostmap" title="Tên PC không trùng số vị trí? Gán lại cho đúng">🔗 Gán máy vào vị trí</button>
         <span class="muted">Đã chọn <b>${selN}</b> máy${selN ? '' : ' (không chọn = áp dụng tất cả, có hỏi lại)'} · bấm vào ô máy để chọn / bỏ chọn</span></div>
       <div class="row" style="flex-wrap:wrap;gap:6px;margin-top:10px;align-items:center"><b>Thao tác nhanh:</b>
         <button class="btn sm danger" data-mon="lockscr">🔒 Khóa màn hình</button><button class="btn sm" data-mon="unlockscr">🔓 Mở màn hình</button><button class="btn sm" data-mon="msg">💬 Nhắn tin</button>
@@ -71,6 +95,8 @@ function viewMonitor() {
         <button class="btn sm" data-mon="handdown">✋ Hạ tay</button><button class="btn sm" data-mon="power" data-a="shutdown">⏻ Tắt máy</button></div></section>
     <section class="card">${board}
       <div class="row" style="margin-top:12px;gap:14px;flex-wrap:wrap"><span class="muted"><span class="mdot on"></span> bật</span><span class="muted"><span class="mdot warn"></span> cần chú ý</span><span class="muted"><span class="mdot bad"></span> có lỗi</span><span class="muted"><span class="mdot off"></span> tắt</span>
+        <label class="switch"><input type="checkbox" data-mon="live" ${S.monLive ? 'checked' : ''}><span class="tr"></span><span>📺 Xem màn hình học sinh</span></label>
+        <select id="monSec" class="xsel" style="width:auto" title="Cứ bao nhiêu giây cập nhật một ảnh">${[3, 5, 10, 20].map(n => `<option value="${n}" ${S.monSec === n ? 'selected' : ''}>cập nhật ${n} giây</option>`).join('')}</select>
         <label class="switch" style="margin-left:auto"><input type="checkbox" data-mon="actopt" ${M.act_enabled ? 'checked' : ''}><span class="tr"></span><span>Máy học sinh báo ứng dụng / cửa sổ đang mở (chỉ gửi khi đổi, không tốn mạng)</span></label></div>
     </section></div>`;
 }
@@ -79,6 +105,13 @@ function monSelect(pred) { S.sel = new Set(Object.values(S.mon.machines).filter(
 
 document.addEventListener('change', async e => {
   const t = e.target;
+  if (t.dataset && t.dataset.mon === 'live') {
+    S.monLive = t.checked;
+    if (t.checked) { S.thumbs = {}; S.thumbSeq = 0; await monLiveSend(true); toast('Đang xem màn hình: học sinh thấy chấm ● trên nút nổi. Ảnh thu nhỏ, máy học sinh tự chụp và nén.', 'ok'); }
+    else { await monLiveSend(false); S.thumbs = {}; }
+    render(); return;
+  }
+  if (t.id === 'monSec') { S.monSec = +t.value; if (S.monLive) await monLiveSend(true); return; }
   if (t.id === 'monCls') { S.monCls = t.value; await loadMonitor(); render(); }
   else if (t.dataset && t.dataset.mon === 'actopt') {
     try { await api('/api/act_option', {enabled: t.checked, hosts: S.hosts.slice()}); S.mon.act_enabled = t.checked; toast(t.checked ? 'Đã bật báo cửa sổ đang mở' : 'Đã tắt báo cửa sổ đang mở', 'ok'); } catch (err) { toast(err.message, 'err'); }
@@ -89,7 +122,9 @@ document.addEventListener('click', async e => {
   e.preventDefault();
   const a = el.dataset.mon;
   try {
-    if (a === 'tile') { const h = el.dataset.h; S.sel.has(h) ? S.sel.delete(h) : S.sel.add(h); render(); }
+    if (a === 'hostmap') await hostMapDialog();
+    else if (a === 'tile') {
+      if (e.detail > 1 && S.monLive && S.thumbs[el.dataset.h]) { const m = S.mon.machines[el.dataset.h]; await modal({title: m.pc, ok: 'Đóng', noCancel: true, html: `<img src="${S.thumbs[el.dataset.h]}" style="width:100%;border-radius:8px"><div class="muted" style="margin-top:6px">${m.act ? esc(m.act.p + ' · ' + m.act.w) : ''}</div>`}); return; } const h = el.dataset.h; S.sel.has(h) ? S.sel.delete(h) : S.sel.add(h); render(); }
     else if (a === 'selall') monSelect(() => true);
     else if (a === 'selon') monSelect(m => m.online);
     else if (a === 'selviol') monSelect(m => m.viol);
@@ -112,4 +147,28 @@ document.addEventListener('click', async e => {
       await api('/api/power', {action: 'shutdown', hosts: hs, delay: 30}); openLog();
     }
   } catch (err) { toast(err.message, 'err'); }
+});
+
+
+/* ---------- Gán máy vào vị trí: dùng khi tên PC không trùng số vị trí trên sơ đồ (vd. PC11 ngồi ở vị trí 8) ---------- */
+async function hostMapDialog() {
+  const names = await api('/api/hostnames'); const nm = h => (names.manual || {})[h] || (names.auto || {})[h] || '';
+  const cur = (S.school || {}).seat_hostmap || {};
+  const rows = S.hosts.map((h, i) => `<tr><td><b>${esc(nm(h) || h)}</b>${nm(h) ? `<div class="muted" style="font-size:11.5px">${esc(h)}</div>` : ''}</td><td><input type="number" min="1" max="300" data-hm="${esc(h)}" value="${cur[h] || ''}" placeholder="tự động" style="width:90px"></td></tr>`).join('');
+  const v = await modal({title: '🔗 Gán máy vào vị trí trong phòng', ok: 'Lưu', html: `<p class="muted" style="margin-top:0">Nhập <b>số vị trí trên sơ đồ</b> cho từng máy. Để trống = tự động (theo “Tên máy mẫu” hoặc thứ tự danh sách). Áp dụng cho mọi lớp vì đây là vị trí thật của máy trong phòng.</p>
+      <div class="row" style="gap:6px;margin-bottom:6px"><button class="btn sm ghost" data-hmfill="order">Điền theo thứ tự danh sách</button><button class="btn sm ghost" data-hmfill="digits">Điền theo số trong tên PC</button><button class="btn sm ghost" data-hmfill="clear">Xóa hết</button></div>
+      <div style="max-height:50vh;overflow:auto"><table class="tbl"><thead><tr><th>Máy</th><th>Vị trí (số máy trên sơ đồ)</th></tr></thead><tbody>${rows}</tbody></table></div>`,
+    collect: r => Object.fromEntries([...r.querySelectorAll('[data-hm]')].map(i => [i.dataset.hm, i.value]))});
+  if (!v) return;
+  try { S.school = await api('/api/seat_hostmap', {map: v}).then(() => api('/api/school')); toast('Đã lưu vị trí các máy', 'ok'); if (S.page === 'monitor') { await loadMonitor(); } render(); } catch (err) { toast(err.message, 'err'); }
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-hmfill]'); if (!b) return;
+  e.preventDefault();
+  const ins = [...document.querySelectorAll('[data-hm]')];
+  ins.forEach((i, k) => {
+    if (b.dataset.hmfill === 'clear') i.value = '';
+    else if (b.dataset.hmfill === 'order') i.value = k + 1;
+    else { const m = (i.closest('tr').querySelector('b').textContent.match(/(\d+)\s*$/)); i.value = m ? +m[1] : ''; }
+  });
 });

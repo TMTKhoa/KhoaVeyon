@@ -84,6 +84,12 @@ def handle_events(ip, d):
         if not isinstance(ev, dict):
             continue
         t = ev.get('t')
+        if t == 'thumb':
+            d = str(ev.get('d') or '')
+            if 200 < len(d) <= 15000 and d.startswith('/9j/') and re.fullmatch(r'[A-Za-z0-9+/=]+', d):
+                from .board import thumb_put
+                thumb_put(host, d)
+            continue
         if t == 'act':
             with LOCK:
                 ACT[host] = {'p': str(ev.get('p') or '')[:60], 'w': re.sub(r'[\x00-\x1f]', ' ', str(ev.get('w') or ''))[:120], 'ts': time.time()}

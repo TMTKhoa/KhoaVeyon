@@ -43,6 +43,7 @@ def api_school(_q=None):
                                    'timetable_at', 'teacher', 'subject', 'attend_notify', 'auto_announce')}
         d['classes'] = [{'name': n, 'count': len(v)} for n, v in sorted(SCHOOL['classes'].items())]
         d['layouts'] = json.loads(json.dumps(SCHOOL['layouts']))
+        d['seat_hostmap'] = dict(SCHOOL.get('seat_hostmap') or {})
         d['bells'] = {str(n): list(v) for n, v in school_bells().items()}
         d['bell_sets'] = bell_sets_info()
         known = set(SCHOOL['classes'])

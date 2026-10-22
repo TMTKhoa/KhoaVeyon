@@ -13,20 +13,50 @@ from .runtime import CFG, CFG_LOCK
 from .school import _cls_norm, SCHOOL, SCHOOL_LOCK
 
 
+def _short(h):
+    return str(h or '').strip().lower().split('.')[0] if not re.fullmatch(r'[\d.]+(:\d+)?', str(h or '').strip()) else ''
+
+
+def _host_names(host):
+    """Các tên có thể dùng để nhận ra số máy: chính chuỗi `host`, tên giáo viên đặt, tên PC tự dò được (host có thể là IP)."""
+    h = str(host or '').strip()
+    base = h.rsplit(':', 1)[0] if re.fullmatch(r'.+:\d+', h) else h
+    with CFG_LOCK:
+        hn, an = CFG.get('host_names') or {}, CFG.get('host_auto_names') or {}
+    out = []
+    for k in (h, base):
+        for v in (k, hn.get(k), an.get(k)):
+            v = str(v or '').strip().lower()
+            if v and v not in out:
+                out.append(v)
+            sv = _short(v)
+            if sv and sv not in out:
+                out.append(sv)
+    return out
+
+
 def school_seat_no(host, lay):
-    """Số máy (số chỗ ngồi) của một tên máy: theo tên máy mẫu (MAY{n}) hoặc theo thứ tự trong danh sách máy ở trang Điều khiển lớp."""
-    h = str(host or '').strip().lower()
+    """Số máy (số chỗ ngồi) của một tên máy. Thứ tự ưu tiên: bảng "Gán máy vào vị trí" giáo viên đã lập (vị trí vật lý của máy trong phòng,
+    dùng chung mọi lớp), tên máy mẫu (MAY{n}), cuối cùng là thứ tự trong danh sách máy ở trang Điều khiển lớp."""
+    names = _host_names(host)
+    with SCHOOL_LOCK:
+        hm = dict(SCHOOL.get('seat_hostmap') or {})
+    if hm:
+        low = {str(k).strip().lower(): v for k, v in hm.items()}
+        for cand in names:
+            if cand in low:
+                return int(low[cand])
     pat = (lay.get('pattern') or '').strip().lower()
     if pat and '{n}' in pat:
         pre, post = pat.split('{n}', 1)
-        for cand in {h, h.split('.')[0]}:
+        for cand in names:
             m = re.fullmatch(re.escape(pre) + r'0*(\d+)' + re.escape(post), cand)
             if m:
                 return int(m.group(1))
         return 0
     with CFG_LOCK:
         hosts = [str(x).strip().lower() for x in CFG.get('hosts') or []]
-    for cand in (h, h.split('.')[0]):
+    for cand in names:
         if cand in hosts:
             return hosts.index(cand) + 1
     return 0
