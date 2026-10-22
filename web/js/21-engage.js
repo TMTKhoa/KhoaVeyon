@@ -80,29 +80,43 @@ function pickImageDownscaled() {
 }
 
 /* ---------- Bốc thăm ---------- */
+function tickSnd() {
+  try { interactBeep = interactBeep || new (window.AudioContext || window.webkitAudioContext)(); const o = interactBeep.createOscillator(), g = interactBeep.createGain(); o.type = 'square'; o.frequency.value = 520 + Math.random() * 300; g.gain.value = 0.03; o.connect(g); g.connect(interactBeep.destination); o.start(); o.stop(interactBeep.currentTime + 0.04); } catch (e) { /* bỏ qua */ }
+}
+function fanfare() {
+  try {
+    interactBeep = interactBeep || new (window.AudioContext || window.webkitAudioContext)();
+    [523, 659, 784, 1047].forEach((f, k) => { const o = interactBeep.createOscillator(), g = interactBeep.createGain(); o.frequency.value = f; g.gain.value = 0.07; o.connect(g); g.connect(interactBeep.destination); const t = interactBeep.currentTime + k * 0.13; o.start(t); o.stop(t + 0.18); });
+  } catch (e) { /* bỏ qua */ }
+}
 async function doDraw(opts) {
   const root = $('#modalroot');
   const repeat = !!(opts && opts.repeat);
   let r;
-  try { r = await api('/api/draw', {cls: S.seatCls || '', repeat, send: true}); } catch (err) { toast(err.message, 'err'); return; }
+  S.drawOpt = S.drawOpt || {announce: true, hide: false, sound: true};
+  try { r = await api('/api/draw', {cls: S.seatCls || '', repeat, send: true, announce: S.drawOpt.announce, hide_name: S.drawOpt.hide}); } catch (err) { toast(err.message, 'err'); return; }
   const names = r.names.length > 1 ? r.names : [r.name, r.name];
   let stop = false;
   root.innerHTML = `<div class="drawbg"><div class="drawbox"><div class="muted">Lớp ${esc(r.cls)}</div><div class="big roll" id="drawName">...</div><div class="muted" id="drawInfo">&nbsp;</div>
-    <div class="row" style="justify-content:center;margin-top:16px"><label class="muted"><input type="checkbox" id="drawRep" ${repeat ? 'checked' : ''}> cho phép gọi lại em đã gọi</label></div>
-    <div class="row" style="justify-content:center;margin-top:12px"><button class="btn primary" id="drawAgain" disabled>🎲 Bốc tiếp</button><button class="btn" id="drawClose">Đóng</button></div></div></div>`;
+    <div class="row" style="justify-content:center;margin-top:16px;flex-wrap:wrap;gap:12px"><label class="muted"><input type="checkbox" id="drawRep" ${repeat ? 'checked' : ''}> gọi lại em đã gọi</label><label class="muted"><input type="checkbox" id="drawAnn" ${S.drawOpt.announce ? 'checked' : ''}> báo cả lớp</label><label class="muted"><input type="checkbox" id="drawHide" ${S.drawOpt.hide ? 'checked' : ''}> chỉ nêu số máy</label><label class="muted"><input type="checkbox" id="drawSnd" ${S.drawOpt.sound ? 'checked' : ''}> âm thanh</label></div>
+    <div class="row" style="justify-content:center;margin-top:12px"><button class="btn primary" id="drawAgain" disabled>🎲 Bốc tiếp</button><button class="btn" id="drawStar" disabled>⭐ Trả lời đúng: tặng sao</button><button class="btn" id="drawFull">⛶ Toàn màn hình</button><button class="btn" id="drawClose">Đóng</button></div></div></div>`;
   const close = () => { stop = true; root.innerHTML = ''; S.drawNo = 0; if (S.page === 'seats') render(); };
-  $('#drawClose').onclick = close;
+  $('#drawClose').onclick = () => { try { if (document.fullscreenElement) document.exitFullscreen(); } catch (e) { /* bỏ qua */ } close(); };
+  const sync = () => { S.drawOpt = {announce: $('#drawAnn').checked, hide: $('#drawHide').checked, sound: $('#drawSnd').checked}; };
+  ['drawAnn', 'drawHide', 'drawSnd'].forEach(id => { $('#' + id).onchange = sync; });
+  $('#drawFull').onclick = () => { try { const e = root.firstElementChild; if (document.fullscreenElement) document.exitFullscreen(); else e.requestFullscreen(); } catch (e) { /* bỏ qua */ } };
+  $('#drawStar').onclick = async () => { try { await api('/api/star', {hosts: [r.host], text: 'Em trả lời đúng rồi!', cls: r.cls}); S.fun && (S.fun.board = null, S.fun.boardCls = ''); $('#drawStar').disabled = true; toast('⭐ Đã tặng sao cho ' + r.name, 'ok'); } catch (err) { toast(err.message, 'err'); } };
   $('#drawAgain').onclick = () => { const rep = $('#drawRep').checked; stop = true; doDraw({repeat: rep}); };
   const t0 = Date.now(); let i = 0;
   const tick = () => {
     if (stop) return;
     const el = $('#drawName'); if (!el) return;
-    if (Date.now() - t0 < 2200) { el.textContent = names[i++ % names.length]; setTimeout(tick, 70 + (Date.now() - t0) / 14); return; }
-    el.textContent = r.name; el.classList.remove('roll');
+    if (Date.now() - t0 < 2200) { el.textContent = ($('#drawHide') && $('#drawHide').checked) ? 'Máy ?' : names[i++ % names.length]; if (S.drawOpt.sound) tickSnd(); setTimeout(tick, 70 + (Date.now() - t0) / 14); return; }
+    el.textContent = S.drawOpt.hide ? 'Máy số ' + r.no : r.name; el.classList.remove('roll'); $('#drawStar').disabled = !r.host;
     $('#drawInfo').innerHTML = `Máy số ${r.no} · còn ${r.left} em chưa được gọi${r.new_round ? ' · <b>bắt đầu vòng mới</b>' : ''}${r.host ? '' : ' · máy này chưa có trong danh sách'}`;
     $('#drawAgain').disabled = false;
     S.drawNo = r.no; if (S.page === 'seats') render();
-    ding();
+    if (S.drawOpt.sound) fanfare(); else ding();
   };
   tick();
 }

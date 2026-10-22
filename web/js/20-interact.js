@@ -70,6 +70,7 @@ function viewInteract() {
     ${viewEngage()}
     ${viewFun()}
     ${viewClassroom()}
+    ${viewPhone()}
     <section class="card"><h3>📥 Bài nộp</h3>
       <p class="sub">Học sinh bấm nút nổi → Nộp tệp / Nộp thư mục. Bài được chép về máy giáo viên, xếp theo ngày, lớp và tên học sinh.</p>${subs}
       <div class="row" style="margin-top:8px"><button class="btn" data-act="openfolder" data-what="submissions">📂 Mở thư mục bài nộp</button></div></section>

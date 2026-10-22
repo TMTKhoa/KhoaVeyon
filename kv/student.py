@@ -84,6 +84,11 @@ def handle_events(ip, d):
         if not isinstance(ev, dict):
             continue
         t = ev.get('t')
+        if t == 'snap':
+            from .classroom import share_ready, SID_RE
+            if SID_RE.match(str(ev.get('id') or '')):
+                share_ready(host, str(ev['id']))
+            continue
         if t == 'quiz':
             from .classroom import quiz_answer
             try:

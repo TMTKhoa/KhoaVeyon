@@ -296,3 +296,96 @@ class ClassroomTest(unittest.TestCase):
             r = self.c.api_handout_send({'hosts': ['a'], 'files': [{'name': '..\\..\\bai 1.pdf', 'data': b64(b'pdf')}]})
             self.assertEqual(r['files'], ['bai 1.pdf'])
             self.assertEqual(self.c.safe_name('a/b:c?.txt'), 'b_c_.txt')
+
+
+class ShareDrawTest(unittest.TestCase):
+    def setUp(self):
+        from kv import classroom
+        self.c = classroom
+        self.c.SHARE.clear()
+        self.jobs = []
+        mock.patch.object(classroom, 'start_job', lambda f, *a: self.jobs.append(a)).start()
+        mock.patch.object(classroom, 'log').start()
+        mock.patch.object(classroom, 'who', lambda h, c='': ('HS ' + h, c, 3)).start()
+        mock.patch.object(classroom, 'clean_hosts', lambda h: [x for x in h if x]).start()
+
+    def tearDown(self):
+        mock.patch.stopall()
+
+    def test_share_flow(self):
+        self.assertRaises(ApiError, self.c.api_share_snap, {'host': ''})
+        r = self.c.api_share_snap({'host': 'a'}); sid = r['id']
+        self.assertRaises(ApiError, self.c.api_share_push, {'id': sid, 'hosts': ['b']})   # chưa có ảnh
+        self.c.share_ready('zz', sid); self.assertFalse(self.c.SHARE[sid]['ready'])      # máy khác không được báo
+        self.c.share_ready('a', sid)
+        with mock.patch.object(self.c, 'rfs_read', return_value=b'\xff\xd8abc'):
+            st = self.c.api_share_state({'id': sid})
+        self.assertTrue(st['ready']); self.assertTrue(st['img'].startswith('data:image/jpeg;base64,'))
+        self.jobs.clear()
+        self.assertTrue(self.c.api_share_push({'id': sid, 'hosts': ['a', 'b', 'c'], 'secs': 99999, 'hide_name': True})['ok'])
+        job = self.jobs[0]; self.assertEqual(job[0], ['b', 'c'])   # máy nguồn bị loại
+        self.assertEqual(job[3]['secs'], 900); self.assertEqual(job[3]['cap'], 'Bài của một bạn')
+        with mock.patch.object(self.c, 'rfs_read', return_value=b'notjpeg'):
+            s2 = self.c.api_share_snap({'host': 'a'})['id']; self.c.share_ready('a', s2)
+            self.assertRaises(ApiError, self.c.api_share_state, {'id': s2})
+
+    def test_draw_announce(self):
+        from kv import engage
+        engage.DRAWN.clear()
+        c = [('An', 1, 'h1'), ('Binh', 2, 'h2'), ('Chi', 3, 'h3')]
+        sent = []
+        with mock.patch.object(engage, 'draw_candidates', lambda cls: list(c)), mock.patch.object(engage, 'start_job', lambda f, *a: sent.append(a)), \
+                mock.patch.object(engage, 'log'), mock.patch.dict(engage.SCHOOL['classes'], {'10A': []}):
+            r = engage.api_draw({'cls': '10A', 'announce': True, 'hide_name': True})
+        self.assertEqual(len(sent), 2)
+        ann = sent[1]
+        self.assertNotIn(r['host'], ann[0]); self.assertEqual(len(ann[0]), 2)
+        self.assertIn('Máy số', ann[1]['title']); self.assertNotIn(r['name'], ann[1]['title'])
+
+
+class PhoneTest(unittest.TestCase):
+    def setUp(self):
+        from kv import phone
+        self.p = phone
+        mock.patch.object(phone, 'log').start()
+        mock.patch.object(phone, '_student_ips', lambda: {'10.0.0.50'}).start()
+        mock.patch.object(phone, 'lan_ip', lambda: '192.168.1.9').start()
+        phone.PH.update(devices={}, fails={})
+        phone.api_phone_stop()
+
+    def tearDown(self):
+        self.p.api_phone_stop()
+        mock.patch.stopall()
+
+    def test_auth_and_block(self):
+        self.assertEqual(self.p.handle('192.168.1.20', 'GET', '/state', 'x')[0], 403)     # chưa bật
+        st = self.p.api_phone_start({'hours': 99})
+        tok = self.p.PH['token']
+        self.assertTrue(st['on'] and st['qr'].startswith('<svg') and tok in st['url'] and st['url'].startswith('http://192.168.1.9:'))
+        self.assertLessEqual(self.p.PH['exp'] - __import__('time').time(), 12 * 3600 + 5)
+        self.assertEqual(self.p.handle('8.8.8.8', 'GET', '/', tok)[0], 403)               # ngoài mạng riêng
+        self.assertEqual(self.p.handle('10.0.0.50', 'GET', '/', tok)[0], 403)             # máy học sinh
+        self.assertEqual(self.p.handle('192.168.1.20', 'GET', '/', tok)[0], 200)
+        for _ in range(self.p.MAX_FAILS):
+            self.assertEqual(self.p.handle('192.168.1.21', 'GET', '/state', 'sai')[0], 403)
+        self.assertEqual(self.p.handle('192.168.1.21', 'GET', '/state', tok)[0], 429)     # bị khóa dù đúng mã
+        self.assertEqual(self.p.handle('192.168.1.20', 'GET', '/state', tok)[0], 200)     # máy khác vẫn dùng được
+        self.p.api_phone_start({})                                                         # đổi mã: mã cũ chết
+        self.assertEqual(self.p.handle('192.168.1.20', 'GET', '/state', tok)[0], 403)
+
+    def test_ops_whitelist(self):
+        self.p.api_phone_start({}); tok = self.p.PH['token']
+        with mock.patch.object(self.p, '_all_hosts', lambda: ['h1', 'h2']):
+            code, out, _ = self.p.handle('192.168.1.20', 'POST', '/do', tok, {'op': 'format_c'})
+            self.assertEqual(code, 400)
+            sent = []
+            with mock.patch('kv.student.start_job', lambda f, *a: sent.append(a)):
+                code, out, _ = self.p.handle('192.168.1.20', 'POST', '/do', tok, {'op': 'msg', 'text': 'Lớp ổn'})
+            self.assertEqual(code, 200); self.assertEqual(sent[0][0], ['h1', 'h2']); self.assertEqual(sent[0][1]['text'], 'Lớp ổn')
+            self.assertEqual(self.p.handle('192.168.1.20', 'POST', '/do', tok, {'op': 'star', 'host': 'khac'})[0], 400)
+
+    def test_expiry(self):
+        self.p.api_phone_start({}); tok = self.p.PH['token']
+        self.p.PH['exp'] = 1
+        self.assertEqual(self.p.handle('192.168.1.20', 'GET', '/state', tok)[0], 403)
+        self.assertFalse(self.p.api_phone_state()['on'])

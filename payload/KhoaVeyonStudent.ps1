@@ -151,6 +151,68 @@ try {
         }
     }
 
+    # ---------- chiếu bài của một học sinh cho cả lớp ----------
+    $script:showForm = $null; $script:showTimer = $null; $script:showAllow = $false
+    function Close-Show {
+        if ($script:showTimer) { try { $script:showTimer.Stop(); $script:showTimer.Dispose() } catch {}; $script:showTimer = $null }
+        if ($script:showForm) { $script:showAllow = $true; try { $script:showForm.Close() } catch {}; $script:showForm = $null; $script:showAllow = $false }
+    }
+    function Snap-Screen($msg) {
+        $id = [string]$msg.id
+        if ($id -notmatch '^[0-9a-f]{8}$') { return }
+        $dir = Join-Path $Root 'share'
+        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        Get-ChildItem -LiteralPath $dir -Filter '*.jpg' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddHours(-2) } | Remove-Item -Force -ErrorAction SilentlyContinue
+        $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+        $full = New-Object System.Drawing.Bitmap($b.Width, $b.Height)
+        $g = [System.Drawing.Graphics]::FromImage($full)
+        try { $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $full.Size) } finally { $g.Dispose() }
+        $tw = [Math]::Min(1600, $b.Width); $th = [int]($tw * $b.Height / [Math]::Max(1, $b.Width))
+        $small = New-Object System.Drawing.Bitmap($tw, $th)
+        $g2 = [System.Drawing.Graphics]::FromImage($small)
+        try { $g2.InterpolationMode = 'HighQualityBicubic'; $g2.DrawImage($full, 0, 0, $tw, $th) } finally { $g2.Dispose(); $full.Dispose() }
+        try {
+            $ep = New-Object System.Drawing.Imaging.EncoderParameters(1)
+            $ep.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter([System.Drawing.Imaging.Encoder]::Quality, [long]72)
+            $tmp = Join-Path $dir ($id + '.tmp')
+            $small.Save($tmp, $jpgCodec, $ep)
+            Move-Item -LiteralPath $tmp -Destination (Join-Path $dir ($id + '.jpg')) -Force
+        } finally { $small.Dispose() }
+        Send-Event @{ t = 'snap'; id = $id }
+    }
+    function Show-Shared($msg) {
+        $id = [string]$msg.id
+        if ($id -notmatch '^[0-9a-f]{8}$') { return }
+        $p = Join-Path (Join-Path $Root 'show') ($id + '.jpg')
+        if (-not (Test-Path -LiteralPath $p)) { return }
+        Close-Show
+        $bytes = [System.IO.File]::ReadAllBytes($p)
+        $ms = New-Object System.IO.MemoryStream(, $bytes)
+        $img = [System.Drawing.Image]::FromStream($ms)
+        $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+        $f = New-Object System.Windows.Forms.Form
+        $f.FormBorderStyle = 'None'; $f.StartPosition = 'Manual'; $f.Bounds = $b
+        $f.TopMost = $true; $f.ShowInTaskbar = $false; $f.BackColor = [System.Drawing.Color]::Black
+        $pb = New-Object System.Windows.Forms.PictureBox
+        $pb.Dock = 'Fill'; $pb.SizeMode = 'Zoom'; $pb.Image = $img
+        $cap = New-Object System.Windows.Forms.Label
+        $cap.Text = ([string]$msg.cap) + '   (cả lớp cùng xem, thầy/cô sẽ tắt sau)'
+        $cap.Dock = 'Top'; $cap.Height = 38; $cap.TextAlign = 'MiddleCenter'
+        $cap.Font = New-Object System.Drawing.Font('Segoe UI', 13, [System.Drawing.FontStyle]::Bold)
+        $cap.ForeColor = [System.Drawing.Color]::White; $cap.BackColor = [System.Drawing.Color]::FromArgb(30, 64, 175)
+        $f.Controls.Add($pb); $f.Controls.Add($cap)
+        $f.Add_FormClosing({ param($s, $e) if (-not $script:showAllow) { $e.Cancel = $true } })
+        $script:showForm = $f
+        $secs = [int]$msg.secs
+        if ($secs -gt 0) {
+            $script:showTimer = New-Object System.Windows.Forms.Timer
+            $script:showTimer.Interval = $secs * 1000
+            $script:showTimer.Add_Tick({ Close-Show })
+            $script:showTimer.Start()
+        }
+        $f.Show(); $f.Activate()
+    }
+
     # ---------- mở trang web / nhận tài liệu ----------
     function Open-Url($msg) {
         $u = [string]$msg.url
@@ -600,6 +662,9 @@ try {
                     'timer'    { if ($msg.cancel -eq $true) { Stop-Timer } else { Start-Timer ([int]$msg.secs) ([string]$msg.label) } }
                     'reactclear' { Set-React '' }
                     'quiz'     { Show-Quiz $msg }
+                    'snap'     { Snap-Screen $msg }
+                    'show'     { Show-Shared $msg }
+                    'showclear' { Close-Show }
                     'quizend'  { End-Quiz $msg }
                     'open'     { Open-Url $msg }
                     'handout'  { Receive-Handout $msg }

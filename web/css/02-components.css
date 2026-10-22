@@ -95,6 +95,9 @@ label.field{display:block;font-weight:600;margin:0 0 6px}
 .drawbox{background:var(--card,#fff);color:var(--fg,#0f172a);border-radius:18px;padding:28px 36px;min-width:min(420px,90vw);text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.4)}
 .drawbox .big{font-size:40px;font-weight:800;margin:14px 0 4px;min-height:52px}
 .drawbox .big.roll{opacity:.6}
+.drawbg:fullscreen,.drawbg:-webkit-full-screen{background:#0f172a}
+.drawbg:fullscreen .drawbox{min-width:70vw;padding:6vh 4vw}
+.drawbg:fullscreen .drawbox .big{font-size:12vw;min-height:14vw}
 .wallprev{width:100%;max-width:420px;aspect-ratio:16/9;border-radius:10px;border:1px solid #cbd5e1;display:block}
 .seat .tg.hnd{background:#ea580c;color:#fff}
 @keyframes handpulse{50%{box-shadow:0 0 0 6px rgba(234,88,12,.12)}}

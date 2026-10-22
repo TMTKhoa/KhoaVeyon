@@ -536,6 +536,14 @@ Mục **Nâng cao** sao chép sẵn dòng lệnh dạng `cmd.exe /c C:\cmd\KhoaV
 Trang **Tương tác → ❓ Câu đố nhanh**: nhập câu hỏi, 2–4 đáp án (tùy chọn chấm đáp án đúng, đặt thời gian), bấm Gửi. Máy học sinh hiện hộp chọn đáp án (đổi được đến khi hết giờ). Giáo viên xem biểu đồ cột trực tiếp, danh sách em chưa trả lời; bấm "Kết thúc và công bố đáp án" để từng máy hiện đúng/sai.
 **Phát tệp**: chọn tệp (tối đa 10 tệp, 12 MB/tệp, 30 MB/lần; không nhận .exe/.bat/.ps1...), tệp được chép vào thư mục trên màn hình nền học sinh và mở thư mục. **Mở trang web**: dán địa chỉ http/https rồi bấm mở trên các máy đang chọn. Cần dịch vụ KhoaVeyonAutoLog và Agent; phần PowerShell chưa thử trên Windows thật.
 
+### Vòng quay gọi tên và chiếu bài học sinh (bản 4.12.0)
+**Bốc thăm** nay có hiệu ứng vòng quay kèm âm thanh, nút "⛶ Toàn màn hình" để chiếu lên máy chiếu, tùy chọn "báo cả lớp" (popup "🎯 Bạn X được gọi!" trên máy các em còn lại), "chỉ nêu số máy" (không hiện tên), và nút "⭐ Trả lời đúng: tặng sao".
+**Chiếu bài em này** (trang Monitor): chọn đúng 1 máy → hệ thống chụp màn hình em đó một lần (JPEG ≤1600 px) → giáo viên **xem trước** → bấm chiếu thì ảnh hiện toàn màn hình trên các máy còn lại (tự tắt sau 30 giây/1/3 phút hoặc khi bấm "Tắt chiếu bài"). Có tùy chọn không ghi tên em. Cần Agent và helper bản mới; phần PowerShell chưa thử trên Windows thật.
+
+### Điều khiển bằng điện thoại qua mã QR (bản 4.13.0)
+Trang **Tương tác → 📱 Điều khiển bằng điện thoại**: bấm "Bật và hiện mã QR", dùng điện thoại **cùng mạng Wi-Fi/LAN** quét mã. Trang điều khiển rút gọn cho phép: bốc thăm (báo cả lớp), xem và hạ tay / tặng sao, gửi thông báo nhanh hoặc tin tự gõ, khóa/mở màn hình cả lớp, đếm ngược.
+Bảo mật: mặc định tắt; mã phiên ngẫu nhiên, tự hết hạn (1–12 giờ), "Đổi mã" thu hồi mã cũ; chỉ nhận lệnh trong danh sách cho phép (không đổi cài đặt, không xóa dữ liệu); chỉ nhận thiết bị trong mạng riêng và **chặn IP các máy học sinh**; sai mã 8 lần bị khóa 5 phút. Lưu ý: kết nối là HTTP trong mạng LAN (không mã hóa), nên chỉ bật khi cần và tắt sau giờ dạy. Cổng 8768; lần đầu Windows có thể hỏi tường lửa, chọn mạng Private. Mã QR tạo bằng thư viện segno (BSD) đặt trong kv/vendor.
+
 ### Cài đặt
 
 Thư mục danh sách (mặc định `lists` cạnh chương trình), đường dẫn `veyon-cli.exe`, mẫu lệnh Veyon, thư mục đồng bộ và tên các mục trong Veyon. `veyon-cli.exe` được tìm theo thứ tự: đường dẫn trong Cài đặt, thư mục `veyon\` cạnh chương trình, PATH, rồi `C:\Program Files\Veyon`. Máy giáo viên vẫn cần có Veyon Master.

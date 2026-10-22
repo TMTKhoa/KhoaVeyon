@@ -10,7 +10,7 @@ import threading
 import time
 
 from .paths import CONFIG_PATH
-from .remote import rfs_sha, rfs_write
+from .remote import rfs_read, rfs_sha, rfs_write
 from .runtime import ApiError, clean_hosts, log, pool_run, split_host_port, start_job
 from .school import _cls_norm, school_now
 from .student import _inbox_write, send_message, STUDENT_ROOT, who
@@ -186,3 +186,99 @@ def api_handout_send(b):
     start_job(job_handout, hosts, hid, files, label, mode)
     log('📎 Phát %d tệp tới %d máy: %s' % (len(files), len(hosts), ', '.join(n for n, _ in files)[:80]), 'head')
     return {'ok': True, 'count': len(hosts), 'files': [n for n, _ in files]}
+
+
+# ---------------------------------------------------------------- chiếu bài một học sinh cho cả lớp
+SHARE = {}
+SLOCK = threading.RLock()
+SID_RE = re.compile(r'^[0-9a-f]{8}$')
+
+
+def api_share_snap(b):
+    """Bước 1: yêu cầu máy học sinh chụp màn hình (một lần, nén JPEG) để giáo viên xem trước."""
+    hosts = clean_hosts([b.get('host')])
+    if len(hosts) != 1:
+        raise ApiError('Chọn đúng một máy học sinh')
+    sid = secrets.token_hex(4)
+    cls = _cls_norm(b.get('cls')) or (school_now().get('current') or {}).get('cls', '')
+    name, _c, no = who(hosts[0], cls)
+    with SLOCK:
+        for k in [k for k, v in SHARE.items() if time.time() - v['ts'] > 3600]:
+            SHARE.pop(k, None)
+        SHARE[sid] = {'host': hosts[0], 'ready': False, 'jpg': b'', 'ts': time.time(), 'name': name, 'no': no}
+    start_job(send_message, hosts, {'type': 'snap', 'id': sid})
+    return {'id': sid, 'name': name, 'no': no}
+
+
+def share_ready(host, sid):
+    with SLOCK:
+        s = SHARE.get(sid)
+        if s and s['host'] == host:
+            s['ready'] = True
+
+
+def api_share_state(q):
+    sid = str((q or {}).get('id') or '')
+    with SLOCK:
+        s = SHARE.get(sid)
+        if not s:
+            raise ApiError('Phiên chụp đã hết hạn')
+        ready, have = s['ready'], bool(s['jpg'])
+        host = s['host']
+    if ready and not have:
+        try:
+            data = rfs_read(split_host_port(host)[0], STUDENT_ROOT + '\\share\\' + sid + '.jpg')
+        except Exception as e:  # noqa
+            raise ApiError('Không lấy được ảnh từ máy học sinh: %s' % e)
+        if not data.startswith(b'\xff\xd8') or len(data) > 4 * 1024 * 1024:
+            raise ApiError('Ảnh chụp không hợp lệ')
+        with SLOCK:
+            SHARE[sid]['jpg'] = data
+    with SLOCK:
+        jpg = SHARE[sid]['jpg']
+        out = {'ready': bool(jpg), 'name': SHARE[sid]['name'], 'no': SHARE[sid]['no']}
+    if jpg:
+        out['img'] = 'data:image/jpeg;base64,' + base64.b64encode(jpg).decode()
+    return out
+
+
+def job_share(hosts, sid, jpg, msg):
+    def one(h):
+        try:
+            hh = split_host_port(h)[0]
+            rfs_write(hh, STUDENT_ROOT + '\\show\\' + sid + '.jpg', jpg)
+            _inbox_write(h, msg)
+        except Exception as e:  # noqa
+            return False, 'không chiếu được: %s' % e
+        return True, 'đã hiện bài'
+    pool_run(one, hosts, 'Chiếu bài học sinh')
+
+
+def api_share_push(b):
+    """Bước 2 (sau khi giáo viên xem trước và đồng ý): đẩy ảnh tới các máy được chọn."""
+    sid = str(b.get('id') or '')
+    with SLOCK:
+        s = SHARE.get(sid)
+        jpg = s['jpg'] if s else b''
+        src, name, no = (s['host'], s['name'], s['no']) if s else ('', '', 0)
+    if not jpg:
+        raise ApiError('Chưa có ảnh để chiếu')
+    hosts = [h for h in clean_hosts(b.get('hosts')) if b.get('include_source') or h != src]
+    if not hosts:
+        raise ApiError('Chưa có máy nhận')
+    try:
+        secs = max(0, min(900, int(b.get('secs') or 0)))
+    except (TypeError, ValueError):
+        secs = 0
+    cap = '' if b.get('hide_name') else (name or '')
+    cap = ('Bài của ' + cap) if cap else 'Bài của một bạn'
+    start_job(job_share, hosts, sid, jpg, {'type': 'show', 'id': sid, 'secs': secs, 'cap': cap})
+    log('📽 Chiếu bài %s tới %d máy' % (name or src, len(hosts)), 'head')
+    return {'ok': True, 'count': len(hosts)}
+
+
+def api_share_clear(b):
+    hosts = clean_hosts(b.get('hosts'))
+    if hosts:
+        start_job(send_message, hosts, {'type': 'showclear'})
+    return {'ok': True, 'count': len(hosts)}

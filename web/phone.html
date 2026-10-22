@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><title>KhoaVeyon - Điều khiển nhanh</title>
+<style>
+:root{--bg:#f1f5f9;--card:#fff;--fg:#0f172a;--mut:#64748b;--pri:#2563eb;--dan:#dc2626;--ok:#16a34a}
+@media(prefers-color-scheme:dark){:root{--bg:#0f172a;--card:#1e293b;--fg:#f1f5f9;--mut:#94a3b8}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px system-ui,sans-serif;padding:12px 14px 40px}
+h1{font-size:18px;margin:0 0 2px}.sub{color:var(--mut);font-size:13px;margin-bottom:10px}
+.card{background:var(--card);border-radius:14px;padding:12px;margin:10px 0;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.card h2{font-size:15px;margin:0 0 8px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button{font:inherit;border:0;border-radius:12px;padding:14px 8px;background:var(--pri);color:#fff;font-weight:600;min-height:52px}
+button.g{background:#e2e8f0;color:#0f172a}button.d{background:var(--dan)}button.o{background:var(--ok)}button:active{opacity:.7}
+input{font:inherit;width:100%;padding:12px;border-radius:10px;border:1px solid #cbd5e1;margin-bottom:8px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid rgba(100,116,139,.2)}.row:first-of-type{border-top:0}
+.row button{min-height:40px;padding:8px 12px}
+#toast{position:fixed;left:14px;right:14px;bottom:16px;background:#0f172a;color:#fff;padding:12px;border-radius:12px;text-align:center;display:none}
+#big{font-size:30px;font-weight:800;text-align:center;padding:10px}
+</style></head><body>
+<h1>📱 Điều khiển nhanh</h1><div class="sub" id="hdr">Đang kết nối...</div>
+<div class="card"><h2>🎲 Gọi tên</h2><div id="big" hidden></div><div class="grid"><button data-op="draw">Bốc thăm</button><button class="g" data-op="drawhide">Chỉ nêu số máy</button></div></div>
+<div class="card"><h2>✋ Giơ tay <span id="hn"></span></h2><div id="hands" class="sub">Không có em nào giơ tay.</div><button class="g" style="width:100%;margin-top:6px" data-op="handall">Hạ tất cả</button></div>
+<div class="card"><h2>💬 Thông báo nhanh</h2><div class="grid" id="notes"></div><input id="free" maxlength="200" placeholder="Hoặc gõ tin nhắn..." style="margin-top:8px"><button style="width:100%" data-op="sendfree">Gửi</button></div>
+<div class="card"><h2>🔒 Màn hình học sinh</h2><input id="lock" maxlength="200" placeholder="Lời nhắn khi khóa (tùy chọn)"><div class="grid"><button class="d" data-op="block">Khóa cả lớp</button><button class="o" data-op="clear">Mở khóa</button></div></div>
+<div class="card"><h2>⏱ Đếm ngược</h2><div class="grid"><button class="g" data-op="t" data-m="3">3 phút</button><button class="g" data-op="t" data-m="5">5 phút</button><button class="g" data-op="t" data-m="10">10 phút</button><button class="g" data-op="t" data-m="15">15 phút</button></div><button class="g" style="width:100%;margin-top:8px" data-op="tstop">Dừng đếm ngược</button></div>
+<div id="toast"></div>
+<script>
+const K=new URLSearchParams(location.search).get('k')||'';
+const $=s=>document.querySelector(s), esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let tt;function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(tt);tt=setTimeout(()=>t.style.display='none',2600)}
+async function call(path,body){const r=await fetch(path,{method:body?'POST':'GET',headers:{'X-Pk':K,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('Lỗi '+r.status));return j}
+const act=async(body,ok)=>{try{const r=await call('/do',body);toast(ok||'Đã gửi');return r}catch(e){toast(e.message)}};
+async function load(){try{const s=await call('/state');
+ $('#hdr').textContent=(s.cls?'Lớp '+s.cls+' · ':'')+(s.current?('tiết '+(s.current.period||'?')+' · '):'')+s.online+'/'+s.total+' máy bật'+(s.viol?' · '+s.viol+' máy vi phạm':'');
+ $('#hn').textContent=s.hands.length?'('+s.hands.length+')':'';
+ $('#hands').innerHTML=s.hands.length?s.hands.map(h=>`<div class="row"><span>${esc(h.name||h.pc)}${h.no?' · máy '+h.no:''}</span><span><button class="o" data-op="star" data-h="${esc(h.host)}">⭐</button> <button class="g" data-op="down" data-h="${esc(h.host)}">Hạ</button></span></div>`).join(''):'Không có em nào giơ tay.';
+ $('#notes').innerHTML=s.notes.map((n,i)=>`<button class="g" data-op="note" data-t="${esc(n.text)}">${esc(n.icon)} ${esc(n.label)}</button>`).join('');
+}catch(e){$('#hdr').textContent=e.message}}
+document.addEventListener('click',async e=>{const b=e.target.closest('button[data-op]');if(!b)return;const op=b.dataset.op;
+ if(op==='draw'||op==='drawhide'){const r=await act({op:'draw',hide:op==='drawhide'},'Đã báo cả lớp');if(r){const B=$('#big');B.hidden=false;B.textContent='🎯 '+(op==='drawhide'?'Máy số '+r.no:r.name)}}
+ else if(op==='handall'){await act({op:'handdown'},'Đã hạ tay');load()}
+ else if(op==='down'){await act({op:'handdown',host:b.dataset.h},'Đã hạ tay');load()}
+ else if(op==='star'){await act({op:'star',host:b.dataset.h},'⭐ Đã tặng sao');load()}
+ else if(op==='note')act({op:'msg',text:b.dataset.t});
+ else if(op==='sendfree'){const t=$('#free').value.trim();if(!t)return toast('Chưa nhập nội dung');if(await act({op:'msg',text:t}))$('#free').value=''}
+ else if(op==='block'){if(confirm('Khóa màn hình cả lớp?'))act({op:'block',text:$('#lock').value.trim()},'Đã khóa')}
+ else if(op==='clear')act({op:'clear'},'Đã mở khóa');
+ else if(op==='t')act({op:'timer',minutes:+b.dataset.m},'Đã bật đếm ngược');
+ else if(op==='tstop')act({op:'timerstop'},'Đã dừng');
+});
+load();setInterval(load,4000);
+</script></body></html>

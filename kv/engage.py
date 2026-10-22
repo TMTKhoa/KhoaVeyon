@@ -59,6 +59,11 @@ def api_draw(b):
         left = len([c for c in cands if c[0] not in done])
     if b.get('send', True) and host:
         start_job(send_message, [host], {'type': 'msg', 'title': 'Mời em trả lời!', 'text': '%s ơi, thầy/cô mời em!' % name, 'seconds': 8})
+    if b.get('announce'):   # popup cho cả lớp cùng xem (tùy chọn ẩn tên: chỉ nêu số máy)
+        others = sorted({c[2] for c in cands if c[2] and c[2] != host})
+        if others:
+            who_txt = ('Máy số %d' % no) if b.get('hide_name') else name
+            start_job(send_message, others, {'type': 'msg', 'title': '🎯 %s được gọi!' % who_txt, 'text': 'Cả lớp cùng lắng nghe bạn trả lời nhé.', 'seconds': 6})
     log('🎲 Bốc thăm lớp %s: %s (máy %d)' % (cls, name, no), 'head')
     return {'name': name, 'no': no, 'host': host, 'cls': cls, 'left': left, 'new_round': new_round, 'names': [c[0] for c in cands]}
 

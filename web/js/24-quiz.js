@@ -74,3 +74,28 @@ document.addEventListener('click', async e => {
   } catch (err) { toast(err.message, 'err'); }
 });
 quizRefresh();
+
+// ---- chiếu bài một học sinh cho cả lớp: chụp -> xem trước -> xác nhận -> chiếu
+async function funShare() {
+  if (!S.sel || S.sel.size !== 1) return toast('Hãy chọn đúng 1 máy (của em cần chiếu bài)', 'warn');
+  const src = [...S.sel][0];
+  const snap = await api('/api/share_snap', {host: src, cls: S.mon ? S.mon.cls : ''});
+  toast('Đang chụp màn hình ' + (snap.name || 'em này') + '...', 'ok');
+  let r = null;
+  for (let i = 0; i < 20 && !(r && r.ready); i++) {
+    await new Promise(ok => setTimeout(ok, 1000));
+    try { r = await api('/api/share_state?id=' + snap.id, undefined, {quiet: true}); } catch (err) { return toast(err.message, 'err'); }
+  }
+  if (!r || !r.ready) return toast('Máy học sinh chưa gửi ảnh (máy tắt, hoặc chưa bật giám sát để nhận bản helper mới?)', 'err');
+  const targets = Object.values((S.mon && S.mon.machines) || {}).filter(m => m.online && m.host !== src).map(m => m.host);
+  const hs = targets.length ? targets : S.hosts.filter(h => h !== src);
+  const v = await modal({title: '📽 Xem trước trước khi chiếu cho cả lớp', ok: 'Chiếu cho ' + hs.length + ' máy',
+    html: `<img src="${r.img}" style="max-width:100%;max-height:50vh;border:1px solid #cbd5e1;border-radius:8px"><div class="row" style="flex-wrap:wrap;gap:12px;margin-top:8px">
+      <label class="muted">Tự tắt sau <select id="shSec" class="xsel"><option value="0">khi tôi bấm tắt</option><option value="30">30 giây</option><option value="60">1 phút</option><option value="180">3 phút</option></select></label>
+      <label class="muted"><input type="checkbox" id="shHide"> không ghi tên em</label></div>
+      <p class="sub">Kiểm tra ảnh không có tin nhắn riêng tư hay nội dung không phù hợp rồi mới chiếu.</p>`,
+    collect: x => ({secs: +x.querySelector('#shSec').value, hide_name: x.querySelector('#shHide').checked})});
+  if (!v) return;
+  await api('/api/share_push', Object.assign({id: snap.id, hosts: hs}, v));
+  toast('Đang chiếu bài cho ' + hs.length + ' máy. Bấm "Tắt chiếu bài" khi xong.', 'ok');
+}
