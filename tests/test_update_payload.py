@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tự cập nhật từ GitHub cũng phải cập nhật payload (Services.bat, Student.ps1) nhưng giữ KhoaVeyonAgent.cfg."""
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -126,4 +127,4 @@ class HostsRemoveAndMerge(unittest.TestCase):
 
     def test_version_is_4_4(self):
         from kv.paths import VERSION
-        self.assertTrue(VERSION.startswith('4.'))
+        self.assertTrue(re.match(r'^\d+\.\d+\.\d+$', VERSION))

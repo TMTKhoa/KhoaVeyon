@@ -118,3 +118,6 @@ label.field{display:block;font-weight:600;margin:0 0 6px}
 .mt .mr{position:absolute;bottom:4px;left:7px;font-size:16px}.grpbox{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-top:10px}.grpcard{border:1.5px solid #cfd8ea;border-radius:12px;padding:10px 12px;background:#fff}.grpcard b{display:block;margin-bottom:4px;color:#1e40af}.grpcard div{font-size:13px}
 .qchips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px}
 body.kvview .side{display:none}body.kvview .main,body.kvview .app>main{width:100%}
+.gdgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.gdcard{border:1px solid rgba(100,116,139,.3);border-radius:12px;padding:10px;display:grid;gap:6px;align-content:start}
+.gdnoimg{aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:#f1f5f9;border-radius:8px;color:#94a3b8}

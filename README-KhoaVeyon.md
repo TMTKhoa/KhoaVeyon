@@ -237,6 +237,15 @@ Thao tác nào quá 0,7 giây chưa xong (quét mạng, hỏi Veyon, kết nối
 
 **Chưa kiểm chứng trên Windows và Veyon thật:** tên khóa `websiteUrls` của Veyon Open website (đã có phương án dự phòng `explorer.exe`), việc trang KhoaQuiz tải đủ khi bật "chỉ trang cho phép" (lệnh này chặn theo IP, trang dùng CDN có thể thiếu: hãy thử trên một máy trước giờ thi). Logic, giao diện và luồng gọi KhoaQuiz đã thử bằng KhoaQuiz giả lập (kiểm thử `tests/test_khoalink.py` và thử giao diện bằng trình duyệt).
 
+## Bản 5.0.0: hướng dẫn thao tác cho học sinh
+Trang **Tương tác → 📘 Hướng dẫn thao tác cho học sinh** (và nút **📘 Gửi hướng dẫn** ở trang Monitor): thư viện 8 ảnh động có sẵn, mỗi hướng dẫn gồm hình động, phím tắt, các bước và một mẹo nhỏ:
+- Phóng to / thu nhỏ bằng **Ctrl + lăn chuột** (lăn lên = to, lăn xuống = nhỏ)
+- Sao chép và dán (Ctrl + C, Ctrl + V) · Hoàn tác (Ctrl + Z) · Lưu bài (Ctrl + S)
+- Chuyển cửa sổ (Alt + Tab) · Chụp một vùng màn hình (Windows + Shift + S) · Chọn tất cả (Ctrl + A) · Tìm chữ (Ctrl + F)
+Bấm **Gửi** để hiện cửa sổ hướng dẫn trên các máy đang chọn (không chọn = tất cả). Cửa sổ không khóa máy; học sinh bấm "Đã hiểu" để đóng. Hướng dẫn đã nhận được lưu trên máy học sinh, xem lại bằng menu nút nổi → **Hướng dẫn thao tác...**
+**Tạo hướng dẫn riêng**: tiêu đề, phím tắt, các bước (mỗi dòng một bước), mẹo, ảnh hoặc GIF của bạn (dưới 3 MB, quay bằng ScreenToGif/Xbox Game Bar...). Hướng dẫn riêng được đưa vào bản sao lưu. Hình động có sẵn tạo bằng `tools/make_guides.py` (cần thư viện Pillow, chỉ để vẽ lại hình; chạy chương trình không cần).
+Từ bản này số phiên bản là 5.0.0 (gộp các tính năng lớp học 4.x: câu đố, chiếu bài, điều khiển bằng điện thoại, quản trị từ laptop, kiểm tra tính năng...).
+
 ## Bản 4.7.2
 
 - **PC cố định theo vị trí**: mặc định số cuối tên PC là số vị trí (PC1 luôn ở vị trí 1, PC12 ở vị trí 12). Chỉ học sinh đổi chỗ, máy không đổi. Thứ tự ưu tiên: bảng "Gán máy vào vị trí" (nếu có), Tên máy mẫu, số cuối tên PC, thứ tự danh sách. Máy thêm bằng IP dùng tên PC tự dò được; chưa dò được tên thì tạm theo thứ tự danh sách.

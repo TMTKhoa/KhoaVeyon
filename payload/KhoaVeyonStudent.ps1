@@ -226,6 +226,112 @@ try {
         $f.Show(); $f.Activate()
     }
 
+    # ---------- hướng dẫn thao tác (ảnh động + các bước), xem lại được từ menu nút nổi ----------
+    $script:guideForm = $null; $script:guideMs = $null; $script:guideTimer = $null
+    function Close-Guide {
+        if ($script:guideTimer) { try { $script:guideTimer.Stop(); $script:guideTimer.Dispose() } catch {}; $script:guideTimer = $null }
+        if ($script:guideForm) { try { $script:guideForm.Close() } catch {}; $script:guideForm = $null }
+        if ($script:guideMs) { try { $script:guideMs.Dispose() } catch {}; $script:guideMs = $null }
+    }
+    function Show-Guide($msg, [bool]$save = $true) {
+        $gid = [string]$msg.gid
+        if ($gid -notmatch '^[a-z0-9]{2,16}$') { return }
+        $gdir = Join-Path $Root 'guide'
+        if (-not (Test-Path -LiteralPath $gdir)) { New-Item -ItemType Directory -Path $gdir -Force | Out-Null }
+        if ($save) { try { [System.IO.File]::WriteAllText((Join-Path $gdir ($gid + '.json')), ($msg | ConvertTo-Json -Compress -Depth 5), $utf8) } catch {} }
+        Close-Guide
+        $f = New-Object System.Windows.Forms.Form
+        $f.Text = 'Hướng dẫn thao tác'
+        $f.TopMost = $true; $f.StartPosition = 'CenterScreen'; $f.FormBorderStyle = 'FixedDialog'
+        $f.MinimizeBox = $false; $f.MaximizeBox = $false
+        $f.BackColor = [System.Drawing.Color]::White
+        $y = 12
+        $lt = New-Object System.Windows.Forms.Label
+        $lt.Text = [string]$msg.title
+        $lt.Font = New-Object System.Drawing.Font('Segoe UI', 15, [System.Drawing.FontStyle]::Bold)
+        $lt.ForeColor = [System.Drawing.Color]::FromArgb(30, 64, 175)
+        $lt.SetBounds(20, $y, 580, 56); $f.Controls.Add($lt); $y += 58
+        if ([string]$msg.keys) {
+            $lk = New-Object System.Windows.Forms.Label
+            $lk.Text = 'Phím: ' + [string]$msg.keys
+            $lk.Font = New-Object System.Drawing.Font('Segoe UI', 12, [System.Drawing.FontStyle]::Bold)
+            $lk.ForeColor = [System.Drawing.Color]::FromArgb(234, 88, 12)
+            $lk.SetBounds(20, $y, 580, 26); $f.Controls.Add($lk); $y += 30
+        }
+        $imgName = [string]$msg.img
+        if ($imgName -match '^[a-z0-9]{2,16}\.(gif|png|jpg)$') {
+            $ip = Join-Path $gdir $imgName
+            if (Test-Path -LiteralPath $ip) {
+                try {
+                    $bytes = [System.IO.File]::ReadAllBytes($ip)
+                    $script:guideMs = New-Object System.IO.MemoryStream(, $bytes)
+                    $pb = New-Object System.Windows.Forms.PictureBox
+                    $pb.Image = [System.Drawing.Image]::FromStream($script:guideMs)
+                    $pb.SizeMode = 'Zoom'; $pb.BackColor = [System.Drawing.Color]::FromArgb(241, 245, 249)
+                    $pb.SetBounds(30, $y, 560, 315); $f.Controls.Add($pb); $y += 325
+                } catch { Log ('guide img: ' + $_.Exception.Message) }
+            }
+        }
+        $lines = @(); $n = 1
+        foreach ($s in @($msg.steps)) { if ([string]$s) { $lines += ([string]$n + '. ' + [string]$s); $n++ } }
+        $stepFont = New-Object System.Drawing.Font('Segoe UI', 12)
+        $ls = New-Object System.Windows.Forms.Label
+        $ls.Text = ($lines -join "`r`n`r`n"); $ls.Font = $stepFont
+        $sz = [System.Windows.Forms.TextRenderer]::MeasureText($ls.Text, $stepFont, (New-Object System.Drawing.Size(570, 3000)), [System.Windows.Forms.TextFormatFlags]::WordBreak)
+        $ls.SetBounds(25, $y, 575, [Math]::Min(420, $sz.Height + 8)); $f.Controls.Add($ls); $y += $ls.Height + 8
+        if ([string]$msg.tip) {
+            $lp = New-Object System.Windows.Forms.Label
+            $lp.Text = 'Mẹo: ' + [string]$msg.tip
+            $lp.Font = New-Object System.Drawing.Font('Segoe UI', 11, [System.Drawing.FontStyle]::Italic)
+            $lp.ForeColor = [System.Drawing.Color]::FromArgb(21, 128, 61)
+            $lp.SetBounds(25, $y, 575, 40); $f.Controls.Add($lp); $y += 44
+        }
+        $b = New-Object System.Windows.Forms.Button
+        $b.Text = 'Đã hiểu'; $b.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+        $b.SetBounds(240, $y, 140, 38); $f.Controls.Add($b); $y += 52
+        $b.Add_Click({ Close-Guide })
+        $f.AcceptButton = $b
+        $maxH = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height - 40
+        $f.ClientSize = New-Object System.Drawing.Size(620, [Math]::Min($y, $maxH))
+        if ($y -gt $maxH) { $f.AutoScroll = $true; $f.AutoScrollMinSize = New-Object System.Drawing.Size(600, $y) }
+        $script:guideForm = $f
+        $secs = 0; try { $secs = [int]$msg.secs } catch { }
+        if ($secs -gt 0) {
+            $script:guideTimer = New-Object System.Windows.Forms.Timer
+            $script:guideTimer.Interval = $secs * 1000
+            $script:guideTimer.Add_Tick({ Close-Guide })
+            $script:guideTimer.Start()
+        }
+        $f.Show(); $f.Activate()
+    }
+    function Open-GuideList {
+        $gdir = Join-Path $Root 'guide'
+        $items = @()
+        if (Test-Path -LiteralPath $gdir) {
+            foreach ($jf in (Get-ChildItem -LiteralPath $gdir -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)) {
+                try { $g = Get-Content -LiteralPath $jf.FullName -Raw -Encoding UTF8 | ConvertFrom-Json; if ($g.title) { $items += $g } } catch { }
+            }
+        }
+        if ($items.Count -eq 0) { Show-Message 'Hướng dẫn thao tác' 'Thầy/cô chưa gửi hướng dẫn nào. Khi có, em sẽ xem lại được ở đây.' 0; return }
+        $f = New-Object System.Windows.Forms.Form
+        $f.Text = 'Hướng dẫn thao tác'; $f.TopMost = $true; $f.StartPosition = 'CenterScreen'; $f.FormBorderStyle = 'FixedDialog'
+        $f.MinimizeBox = $false; $f.MaximizeBox = $false; $f.ClientSize = New-Object System.Drawing.Size(460, 340)
+        $lb = New-Object System.Windows.Forms.ListBox
+        $lb.Font = New-Object System.Drawing.Font('Segoe UI', 12); $lb.SetBounds(15, 15, 430, 260)
+        foreach ($g in $items) { [void]$lb.Items.Add([string]$g.title) }
+        $lb.SelectedIndex = 0
+        $f.Controls.Add($lb)
+        $bo = New-Object System.Windows.Forms.Button
+        $bo.Text = 'Xem'; $bo.SetBounds(120, 290, 100, 36); $bo.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+        $bc = New-Object System.Windows.Forms.Button
+        $bc.Text = 'Đóng'; $bc.SetBounds(240, 290, 100, 36); $bc.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+        $f.Controls.AddRange(@($bo, $bc))
+        $open = { if ($lb.SelectedIndex -ge 0) { Show-Guide $items[$lb.SelectedIndex] $false } }.GetNewClosure()
+        $bo.Add_Click($open); $lb.Add_DoubleClick($open); $bc.Add_Click({ $f.Close() }.GetNewClosure())
+        $f.AcceptButton = $bo
+        $f.Show(); $f.Activate()
+    }
+
     # ---------- mở trang web / nhận tài liệu ----------
     function Open-Url($msg) {
         $u = [string]$msg.url
@@ -436,6 +542,8 @@ try {
     }
     $miOk.Add_Click({ try { Set-React 'ok'; Send-Event @{ t = 'react'; v = 'ok' } } catch { Log ('react: ' + $_.Exception.Message) } })
     $miLost.Add_Click({ try { Set-React 'lost'; Send-Event @{ t = 'react'; v = 'lost' } } catch { Log ('react: ' + $_.Exception.Message) } })
+    $miGuide = $menu.Items.Add('Hướng dẫn thao tác...')
+    $miGuide.Add_Click({ try { Open-GuideList } catch { Log ('guide list: ' + $_.Exception.Message) } })
     $miFiles = $menu.Items.Add('Nộp tệp...')
     $miFolder = $menu.Items.Add('Nộp thư mục...')
     $miHand.Visible = $script:handOn
@@ -676,6 +784,7 @@ try {
                     'reactclear' { Set-React '' }
                     'selftest' { $script:ackInfo = Get-SelfInfo }
                     'quiz'     { Show-Quiz $msg }
+                    'guide'    { Show-Guide $msg $true }
                     'snap'     { Snap-Screen $msg }
                     'show'     { Show-Shared $msg }
                     'showclear' { Close-Show }

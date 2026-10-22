@@ -94,7 +94,7 @@ function viewMonitor() {
         <button class="btn sm danger" data-mon="act" data-k="lockall-start">⛔ Khóa toàn bộ</button><button class="btn sm" data-mon="act" data-k="lockall-stop">✅ Mở khóa toàn bộ</button>
         <button class="btn sm" data-mon="act" data-k="blockall">🌐 Chặn internet</button><button class="btn sm" data-mon="act" data-k="allowall">🌐 Cho internet</button>
         <button class="btn sm" data-mon="act" data-k="mute">🔇 Tắt tiếng</button><button class="btn sm" data-mon="shot">📷 Chụp màn hình</button>
-        <button class="btn sm" data-mon="star">⭐ Tặng sao</button><button class="btn sm" data-mon="share" title="Chọn đúng 1 máy: chụp màn hình em đó, xem trước rồi chiếu cho cả lớp">📽 Chiếu bài em này</button><button class="btn sm ghost" data-mon="shareoff">⏹ Tắt chiếu bài</button><button class="btn sm" data-mon="timer">⏱ Đếm ngược</button><button class="btn sm" data-mon="reactclr">🔄 Làm mới 😊😕</button><button class="btn sm" data-mon="handdown">✋ Hạ tay</button><button class="btn sm" data-mon="power" data-a="shutdown">⏻ Tắt máy</button></div></section>
+        <button class="btn sm" data-mon="star">⭐ Tặng sao</button><button class="btn sm" data-mon="guide" title="Gửi ảnh động hướng dẫn thao tác (Ctrl + lăn chuột...)">📘 Gửi hướng dẫn</button><button class="btn sm" data-mon="share" title="Chọn đúng 1 máy: chụp màn hình em đó, xem trước rồi chiếu cho cả lớp">📽 Chiếu bài em này</button><button class="btn sm ghost" data-mon="shareoff">⏹ Tắt chiếu bài</button><button class="btn sm" data-mon="timer">⏱ Đếm ngược</button><button class="btn sm" data-mon="reactclr">🔄 Làm mới 😊😕</button><button class="btn sm" data-mon="handdown">✋ Hạ tay</button><button class="btn sm" data-mon="power" data-a="shutdown">⏻ Tắt máy</button></div></section>
     <section class="card">${board}
       <div class="row" style="margin-top:12px;gap:14px;flex-wrap:wrap"><span class="muted"><span class="mdot on"></span> bật</span><span class="muted"><span class="mdot warn"></span> cần chú ý</span><span class="muted"><span class="mdot bad"></span> có lỗi</span><span class="muted"><span class="mdot off"></span> tắt</span>
         <label class="switch"><input type="checkbox" data-mon="live" ${S.monLive ? 'checked' : ''}><span class="tr"></span><span>📺 Xem màn hình học sinh</span></label>
@@ -131,6 +131,7 @@ document.addEventListener('click', async e => {
       toast('Đã xếp ' + r.placed + ' học sinh' + (r.left ? ', còn ' + r.left + ' em chưa có máy' : ''), r.left ? 'warn' : 'ok');
     }
     else if (a === 'star') await funStar();
+    else if (a === 'guide') await monGuide();
     else if (a === 'share') await funShare();
     else if (a === 'shareoff') { const hs = S.hosts.slice(); await api('/api/share_clear', {hosts: hs}); toast('Đã tắt chiếu bài trên ' + hs.length + ' máy', 'ok'); }
     else if (a === 'timer') await funTimer();

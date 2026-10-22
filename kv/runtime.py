@@ -15,7 +15,7 @@ from .paths import abs_path, APP_DIR
 
 
 WEB_DIR = os.path.join(APP_DIR, 'web')
-ASSET_TYPES = {'.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
+ASSET_TYPES = {'.gif': 'image/gif', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
                '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8'}
 PAYLOAD_DIR = os.path.join(APP_DIR, 'payload')
 IDLE_EXIT_SECONDS = 180      # đóng cửa sổ trình duyệt thì chương trình tự thoát sau chừng này giây

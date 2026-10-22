@@ -58,6 +58,11 @@ def make_backup(include_secrets=True):
             for n in sorted(os.listdir(wd)):
                 if n.endswith('.jpg') and os.path.getsize(os.path.join(wd, n)) < 4 * 1024 * 1024:
                     z.write(os.path.join(wd, n), 'walls/' + n)
+        gd = os.path.join(os.path.dirname(CONFIG_PATH), 'guides')   # hướng dẫn thao tác tự tạo
+        if os.path.isdir(gd):
+            for n in sorted(os.listdir(gd)):
+                if (n == 'custom.json' or n[:1] == 'c') and os.path.getsize(os.path.join(gd, n)) < 4 * 1024 * 1024:
+                    z.write(os.path.join(gd, n), 'guides/' + n)
     return buf.getvalue()
 
 
@@ -149,7 +154,14 @@ def restore_backup(data, parts=None):
                     os.makedirs(wd, exist_ok=True)
                     with open(os.path.join(wd, fn), 'wb') as f:
                         f.write(z.read(name))
-            done.append('lớp, thời khóa biểu, sơ đồ, hình nền')
+            gd = os.path.join(base, 'guides')
+            for name in z.namelist():
+                fn = os.path.basename(name)
+                if name.startswith('guides/') and (fn == 'custom.json' or _re.match(r'^c[0-9a-f]{8}\.(gif|png|jpg)$', fn)):
+                    os.makedirs(gd, exist_ok=True)
+                    with open(os.path.join(gd, fn), 'wb') as f:
+                        f.write(z.read(name))
+            done.append('lớp, thời khóa biểu, sơ đồ, hình nền, hướng dẫn')
     if 'lists' in parts:
         with CFG_LOCK:
             d = abs_path(CFG['list_dir'])

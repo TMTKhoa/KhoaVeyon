@@ -563,3 +563,51 @@ class HelperTestTest(unittest.TestCase):
 
     def test_single_host_required(self):
         self.assertRaises(ApiError, self.h.api_ht_start, {'hosts': ['a', 'b']})
+
+
+class GuidesTest(unittest.TestCase):
+    def setUp(self):
+        from kv import guides
+        self.g = guides
+        self.td = tempfile.TemporaryDirectory()
+        self.jobs = []
+        mock.patch.object(guides, 'gdir', lambda: self.td.name).start()
+        mock.patch.object(guides, 'start_job', lambda f, *a: self.jobs.append(a)).start()
+        mock.patch.object(guides, 'log').start()
+        mock.patch.object(guides, 'clean_hosts', lambda h: [x for x in h if x]).start()
+
+    def tearDown(self):
+        mock.patch.stopall(); self.td.cleanup()
+
+    def test_builtin_assets_exist(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        for g in self.g.BUILTIN:
+            p = os.path.join(root, 'web', 'assets', 'guide-%s.gif' % g['id'])
+            self.assertTrue(os.path.isfile(p), p)
+            with open(p, 'rb') as f:
+                self.assertEqual(f.read(6)[:4], b'GIF8')
+        self.assertEqual(self.g.BUILTIN_BY_ID['zoom']['keys'], 'Ctrl + lăn chuột')
+
+    def test_custom_crud(self):
+        gif = b'GIF89a' + b'\x00' * 50
+        self.assertRaises(ApiError, self.g.api_guide_save, {'title': '', 'steps': ['a']})
+        self.assertRaises(ApiError, self.g.api_guide_save, {'title': 'T', 'steps': ['a'], 'image': base64.b64encode(b'notimage').decode()})
+        r = self.g.api_guide_save({'title': 'Đổi cỡ chữ', 'steps': ['Bôi đen', '  ', 'Chọn cỡ'], 'image': 'data:image/gif;base64,' + base64.b64encode(gif).decode()})
+        mine = [x for x in r['items'] if not x['builtin']]
+        self.assertEqual(len(mine), 1); self.assertEqual(mine[0]['steps'], ['Bôi đen', 'Chọn cỡ']); gid = mine[0]['id']
+        self.assertTrue(self.g.api_guide_img({'id': gid})['data'].startswith('data:image/gif;base64,'))
+        self.g.api_guide_save({'id': gid, 'title': 'Mới', 'steps': ['x']})                    # sửa không gửi ảnh: giữ ảnh cũ
+        self.assertTrue(self.g.api_guide_img({'id': gid})['data'])
+        self.assertEqual(len(self.g.api_guides()['items']), len(self.g.BUILTIN) + 1)
+        self.g.api_guide_delete({'id': gid})
+        self.assertEqual(len(self.g.api_guides()['items']), len(self.g.BUILTIN))
+        self.assertEqual([f for f in os.listdir(self.td.name) if f != 'custom.json'], [])
+
+    def test_send(self):
+        self.assertRaises(ApiError, self.g.api_guide_send, {'id': 'zoom', 'hosts': []})
+        self.assertRaises(ApiError, self.g.api_guide_send, {'id': '../x', 'hosts': ['a']})
+        self.assertRaises(ApiError, self.g.api_guide_send, {'id': 'khongco', 'hosts': ['a']})
+        self.g.api_guide_send({'id': 'zoom', 'hosts': ['a', 'b'], 'secs': 99999})
+        hosts, msg, data, ext = self.jobs[0]
+        self.assertEqual(hosts, ['a', 'b']); self.assertEqual((msg['type'], msg['gid'], msg['img'], ext), ('guide', 'zoom', 'zoom.gif', '.gif'))
+        self.assertEqual(msg['secs'], 900); self.assertTrue(data.startswith(b'GIF8')); self.assertEqual(len(msg['steps']), 3)

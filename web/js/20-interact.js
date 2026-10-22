@@ -70,6 +70,7 @@ function viewInteract() {
     ${viewEngage()}
     ${viewFun()}
     ${viewClassroom()}
+    ${viewGuides()}
     ${viewPhone()}
     ${viewRadmin()}
     <section class="card"><h3>📥 Bài nộp</h3>
