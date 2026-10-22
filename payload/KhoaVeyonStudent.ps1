@@ -250,6 +250,16 @@ try {
 
     $menu = New-Object System.Windows.Forms.ContextMenuStrip
     $miHand = $menu.Items.Add('Giơ tay hỏi thầy/cô')
+    $miOk = $menu.Items.Add('Em hiểu rồi')
+    $miLost = $menu.Items.Add('Em chưa hiểu')
+    $script:react = ''
+    function Set-React([string]$v) {
+        $script:react = $v
+        $miOk.Text = $(if ($v -eq 'ok') { [string][char]0x2714 + ' Em hiểu rồi' } else { 'Em hiểu rồi' })
+        $miLost.Text = $(if ($v -eq 'lost') { [string][char]0x2714 + ' Em chưa hiểu' } else { 'Em chưa hiểu' })
+    }
+    $miOk.Add_Click({ try { Set-React 'ok'; Send-Event @{ t = 'react'; v = 'ok' } } catch { Log ('react: ' + $_.Exception.Message) } })
+    $miLost.Add_Click({ try { Set-React 'lost'; Send-Event @{ t = 'react'; v = 'lost' } } catch { Log ('react: ' + $_.Exception.Message) } })
     $miFiles = $menu.Items.Add('Nộp tệp...')
     $miFolder = $menu.Items.Add('Nộp thư mục...')
     $miHand.Visible = $script:handOn
@@ -414,6 +424,46 @@ try {
         if ($b64.Length -gt 0 -and $b64.Length -le 14500) { Send-Event @{ t = 'thumb'; d = $b64 } }
     }
 
+    # ---------- đồng hồ đếm ngược toàn lớp (góc trên giữa màn hình, nhỏ, luôn nổi) ----------
+    $script:timerForm = $null; $script:timerEnd = [DateTime]::MinValue; $script:timerLabel = ''
+    function Stop-Timer { if ($script:timerForm) { try { $script:timerForm.Close() } catch { }; $script:timerForm = $null }; $script:timerEnd = [DateTime]::MinValue }
+    function Start-Timer([int]$secs, [string]$label) {
+        Stop-Timer
+        $f = New-Object System.Windows.Forms.Form
+        $f.FormBorderStyle = 'None'; $f.TopMost = $true; $f.ShowInTaskbar = $false; $f.StartPosition = 'Manual'
+        $f.BackColor = [System.Drawing.Color]::FromArgb(30, 64, 175); $f.Opacity = 0.92
+        $f.Size = New-Object System.Drawing.Size(220, 64)
+        $wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+        $f.Location = New-Object System.Drawing.Point(($wa.Left + [int](($wa.Width - 220) / 2)), ($wa.Top + 8))
+        $l = New-Object System.Windows.Forms.Label
+        $l.Dock = 'Fill'; $l.TextAlign = 'MiddleCenter'; $l.ForeColor = [System.Drawing.Color]::White
+        $l.Font = New-Object System.Drawing.Font('Segoe UI', 22, [System.Drawing.FontStyle]::Bold)
+        $f.Controls.Add($l)
+        $f.Tag = $l
+        $f.Show()
+        $script:timerForm = $f; $script:timerLabel = $label
+        $script:timerEnd = [DateTime]::Now.AddSeconds([Math]::Max(5, [Math]::Min(10800, $secs)))
+    }
+    function Tick-Timer {
+        if ($script:timerEnd -eq [DateTime]::MinValue -or -not $script:timerForm) { return }
+        $left = [int][Math]::Ceiling(($script:timerEnd - [DateTime]::Now).TotalSeconds)
+        $lb = $script:timerForm.Tag
+        if ($left -le 0) {
+            $lab = $script:timerLabel
+            Stop-Timer
+            Show-Message ([string][char]0x23F0 + ' Hết giờ!') $(if ($lab) { $lab } else { 'Đã hết thời gian.' }) 15
+            return
+        }
+        $lb.Text = ('{0:00}:{1:00}' -f [int][Math]::Floor($left / 60), ($left % 60))
+        if ($left -le 60) { $script:timerForm.BackColor = [System.Drawing.Color]::FromArgb(185, 28, 28) }
+        $script:timerForm.TopMost = $true
+    }
+
+    $clockTimer = New-Object System.Windows.Forms.Timer
+    $clockTimer.Interval = 500
+    $clockTimer.Add_Tick({ try { Tick-Timer } catch { } })
+    $clockTimer.Start()
+
     # ---------- đọc hộp thư đến mỗi 1,5 giây ----------
     function Read-Inbox {
         foreach ($f in (Get-ChildItem -LiteralPath $Inbox -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object Name)) {
@@ -446,6 +496,8 @@ try {
                     }
                     'clear'    { Close-Block }
                     'wallpaper' { if ($msg.restore -eq $true) { Restore-Wallpaper } else { Show-Wallpaper $msg } }
+                    'timer'    { if ($msg.cancel -eq $true) { Stop-Timer } else { Start-Timer ([int]$msg.secs) ([string]$msg.label) } }
+                    'reactclear' { Set-React '' }
                     'handclear' { $script:raised = $false; Update-Pill }
                     'collect'  { Show-Message 'Giáo viên yêu cầu nộp bài' ([string]$msg.text) 0; Submit-Files }
                 }

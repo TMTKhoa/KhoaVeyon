@@ -84,6 +84,10 @@ def handle_events(ip, d):
         if not isinstance(ev, dict):
             continue
         t = ev.get('t')
+        if t == 'react':
+            from .fun import react_put
+            react_put(host, str(ev.get('v') or ''))
+            continue
         if t == 'thumb':
             d = str(ev.get('d') or '')
             if 200 < len(d) <= 15000 and d.startswith('/9j/') and re.fullmatch(r'[A-Za-z0-9+/=]+', d):

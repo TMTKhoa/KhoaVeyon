@@ -20,7 +20,7 @@ SCHOOL_DAYS = ['THỨ HAI', 'THỨ BA', 'THỨ TƯ', 'THỨ NĂM', 'THỨ SÁU',
 SCHOOL_DAY_SHORT = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
 SCHOOL = {'classes': {}, 'layouts': {}, 'slots': [], 'from': '', 'auto': True, 'override': None, 'manual': '',
           'classes_file': '', 'classes_at': '', 'timetable_file': '', 'timetable_at': '', 'teacher': '', 'subject': '',
-          'bells': {}, 'wall_presets': {}, 'seat_hostmap': {}, 'wall_follow': None, 'lock_style': None, 'hand_enabled': True, 'act_enabled': True, 'attendance': {}, 'attend_notify': True, 'auto_announce': False, 'kq_game_absent': True, 'automation': None}
+          'bells': {}, 'wall_presets': {}, 'seat_hostmap': {}, 'stars': {}, 'wall_follow': None, 'lock_style': None, 'hand_enabled': True, 'act_enabled': True, 'attendance': {}, 'attend_notify': True, 'auto_announce': False, 'kq_game_absent': True, 'automation': None}
 
 
 def school_path():

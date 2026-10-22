@@ -47,6 +47,8 @@ def api_monitor(q):
                 v['n'] += 1
                 if e.get('ts', 0) >= v['ts']:
                     v.update(ts=e.get('ts', 0), last=e.get('time', ''), name=e.get('name', ''))
+    from .fun import react_snapshot
+    react = react_snapshot()
     with LOCK:
         hands = {h: v['ts'] for h, v in HANDS.items()}
         act = {h: dict(v) for h, v in ACT.items()}
@@ -55,7 +57,7 @@ def api_monitor(q):
         r = st.get(h) or {}
         a = act.get(h)
         return {'host': h, 'pc': cfg_names.get(h) or h, 'online': bool(r.get('online')), 'health': r.get('health', 'wait'), 'user': r.get('user', ''),
-                'hand': h in hands, 'viol': viol.get(h), 'watching': bool(r.get('watching')),
+                'hand': h in hands, 'react': react.get(h, ''), 'viol': viol.get(h), 'watching': bool(r.get('watching')),
                 'act': ({'p': a['p'], 'w': a['w'], 'age': int(now - a['ts'])} if a and now - a['ts'] < ACT_FRESH_SEC else None)}
     out = {'ts': now, 'cls': cls, 'classes': classes, 'source': n['source'],
            'current': {'cls': cur.get('cls', ''), 'start': cur.get('start', ''), 'end': cur.get('end', ''), 'period': _period_no(cur.get('start', ''))} if cur else None,

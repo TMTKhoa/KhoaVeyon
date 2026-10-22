@@ -196,3 +196,22 @@ class HostMapTest(unittest.TestCase):
         from kv import seating
         with mock.patch.dict(seating.CFG, {'hosts': ['PC3', 'pc01', '10.0.0.9', 'LAB-PC12.local'], 'host_names': {}, 'host_auto_names': {}}), mock.patch.dict(seating.SCHOOL, {'seat_hostmap': {}}):
             self.assertEqual([seating.school_seat_no(h, {}) for h in seating.CFG['hosts']], [3, 1, 3, 12])   # IP chưa biết tên: theo thứ tự danh sách (vị trí 3)
+
+
+class FunTest(unittest.TestCase):
+    def test_groups_stars_react(self):
+        from kv import fun
+        names = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+        with mock.patch.dict(fun.SCHOOL, {'classes': {'10A': names}, 'layouts': {}, 'attendance': {}, 'stars': {}}), mock.patch.object(fun, 'start_job') as sj, \
+             mock.patch.object(fun, 'log'), mock.patch.object(fun, 'school_save'), mock.patch.object(fun, 'clean_hosts', lambda h: list(h or [])), \
+             mock.patch.object(fun, 'who', lambda h, c='': ('A', '10A', 1)):
+            r = fun.api_groups({'cls': '10A', 'mode': 'count', 'n': 3, 'send': False})
+            self.assertEqual(sorted(len(g['names']) for g in r['groups']), [2, 2, 3]); self.assertEqual(sorted(sum((g['names'] for g in r['groups']), [])), names)
+            self.assertEqual(len(fun.api_groups({'cls': '10A', 'mode': 'size', 'n': 3, 'send': False})['groups']), 3)
+            fun.api_star({'hosts': ['h1'], 'cls': '10A'}); fun.api_star({'hosts': ['h1'], 'cls': '10A', 'text': 'Giỏi'})
+            self.assertEqual(fun.stars_board('10A'), [{'name': 'A', 'stars': 2}])
+            with self.assertRaises(ApiError):
+                fun.api_countdown({'hosts': ['h'], 'minutes': 'x'})
+            sj.reset_mock(); fun.api_countdown({'hosts': ['h'], 'minutes': '2.5'}); self.assertEqual(sj.call_args[0][2]['secs'], 150)
+        fun.react_put('PC1', 'lost'); fun.react_put('PC2', 'bad')
+        self.assertEqual(fun.react_snapshot(), {'PC1': 'lost'})

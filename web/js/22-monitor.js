@@ -53,7 +53,7 @@ function monTile(hostInfo, seat, no) {
   const v = m.viol ? `<span class="mv" title="${m.viol.n} vi phạm hôm nay, gần nhất ${esc(m.viol.last)}: ${esc(m.viol.name)}">🚨${m.viol.n}</span>` : '';
   return `<button class="mt ${st} ${sel ? 'sel' : ''} ${m.hand ? 'hand' : ''} ${S.monLive ? 'live' : ''}" data-mon="tile" data-h="${esc(m.host)}" title="${esc(m.pc)}${m.viol ? ' · vi phạm gần nhất: ' + m.viol.name : ''}">
     <i class="mn">${no}</i><span class="mdot"></span>${m.hand ? '<em class="mh">✋</em>' : ''}${v}
-    ${th}<div class="mpc">${esc(m.pc)}</div><div class="mnm ${gone ? 'muted' : ''}">${esc(nm || (m.online ? 'Chưa xếp' : ''))}${gone ? ' (vắng)' : ''}</div>${act}</button>`;
+    ${m.react ? `<span class="mr" title="${m.react === 'ok' ? 'Em hiểu rồi' : 'Em chưa hiểu'}">${m.react === 'ok' ? '😊' : '😕'}</span>` : ''}${th}<div class="mpc">${esc(m.pc)}</div><div class="mnm ${gone ? 'muted' : ''}">${esc(nm || (m.online ? 'Chưa xếp' : ''))}${gone ? ' (vắng)' : ''}</div>${act}</button>`;
 }
 
 function viewMonitor() {
@@ -82,7 +82,7 @@ function viewMonitor() {
   const clsSel = M.classes.length ? `<select id="monCls" class="xsel" style="width:auto"><option value="">(lớp đang có tiết)</option>${M.classes.map(c => `<option ${c === S.monCls ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>` : '';
   return `<div class="stack">${banner}
     <section class="card"><div class="row" style="flex-wrap:wrap;gap:8px;align-items:center">
-        <span class="sstat">🟢 <b>${on}</b>/${M.total} bật</span><span class="sstat">✋ <b>${hands}</b></span><span class="sstat">🚨 <b>${viol}</b> máy vi phạm hôm nay</span>
+        <span class="sstat">🟢 <b>${on}</b>/${M.total} bật</span><span class="sstat">✋ <b>${hands}</b></span><span class="sstat">🚨 <b>${viol}</b> máy vi phạm hôm nay</span><span class="sstat" title="Học sinh bấm “Em hiểu rồi / chưa hiểu” trên nút nổi">😊 <b>${all.filter(m => m.react === 'ok').length}</b> · 😕 <b>${all.filter(m => m.react === 'lost').length}</b></span>
         <span style="flex:1"></span>Sơ đồ lớp ${clsSel}</div>
       <div class="row" style="flex-wrap:wrap;gap:6px;margin-top:10px;align-items:center"><b>Chọn máy:</b>
         <button class="btn sm" data-mon="selall">Tất cả</button><button class="btn sm" data-mon="selon">Máy đang bật</button><button class="btn sm" data-mon="selviol">Máy vi phạm</button><button class="btn sm" data-mon="selhand">Máy giơ tay</button><button class="btn sm ghost" data-mon="selnone">Bỏ chọn</button><button class="btn sm ghost" data-mon="hostmap" title="Tên PC không trùng số vị trí? Gán lại cho đúng">🔗 Gán máy vào vị trí</button>
@@ -92,7 +92,7 @@ function viewMonitor() {
         <button class="btn sm danger" data-mon="act" data-k="lockall-start">⛔ Khóa toàn bộ</button><button class="btn sm" data-mon="act" data-k="lockall-stop">✅ Mở khóa toàn bộ</button>
         <button class="btn sm" data-mon="act" data-k="blockall">🌐 Chặn internet</button><button class="btn sm" data-mon="act" data-k="allowall">🌐 Cho internet</button>
         <button class="btn sm" data-mon="act" data-k="mute">🔇 Tắt tiếng</button><button class="btn sm" data-mon="shot">📷 Chụp màn hình</button>
-        <button class="btn sm" data-mon="handdown">✋ Hạ tay</button><button class="btn sm" data-mon="power" data-a="shutdown">⏻ Tắt máy</button></div></section>
+        <button class="btn sm" data-mon="star">⭐ Tặng sao</button><button class="btn sm" data-mon="timer">⏱ Đếm ngược</button><button class="btn sm" data-mon="reactclr">🔄 Làm mới 😊😕</button><button class="btn sm" data-mon="handdown">✋ Hạ tay</button><button class="btn sm" data-mon="power" data-a="shutdown">⏻ Tắt máy</button></div></section>
     <section class="card">${board}
       <div class="row" style="margin-top:12px;gap:14px;flex-wrap:wrap"><span class="muted"><span class="mdot on"></span> bật</span><span class="muted"><span class="mdot warn"></span> cần chú ý</span><span class="muted"><span class="mdot bad"></span> có lỗi</span><span class="muted"><span class="mdot off"></span> tắt</span>
         <label class="switch"><input type="checkbox" data-mon="live" ${S.monLive ? 'checked' : ''}><span class="tr"></span><span>📺 Xem màn hình học sinh</span></label>
@@ -123,6 +123,9 @@ document.addEventListener('click', async e => {
   const a = el.dataset.mon;
   try {
     if (a === 'hostmap') await hostMapDialog();
+    else if (a === 'star') await funStar();
+    else if (a === 'timer') await funTimer();
+    else if (a === 'reactclr') { const hs = await resolveTargets(); if (!hs) return; await api('/api/react_clear', {hosts: hs}); await loadMonitor(); render(); }
     else if (a === 'tile') {
       if (e.detail > 1 && S.monLive && S.thumbs[el.dataset.h]) { const m = S.mon.machines[el.dataset.h]; await modal({title: m.pc, ok: 'Đóng', noCancel: true, html: `<img src="${S.thumbs[el.dataset.h]}" style="width:100%;border-radius:8px"><div class="muted" style="margin-top:6px">${m.act ? esc(m.act.p + ' · ' + m.act.w) : ''}</div>`}); return; } const h = el.dataset.h; S.sel.has(h) ? S.sel.delete(h) : S.sel.add(h); render(); }
     else if (a === 'selall') monSelect(() => true);

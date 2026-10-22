@@ -241,6 +241,14 @@ Thao tác nào quá 0,7 giây chưa xong (quét mạng, hỏi Veyon, kết nối
 
 - **PC cố định theo vị trí**: mặc định số cuối tên PC là số vị trí (PC1 luôn ở vị trí 1, PC12 ở vị trí 12). Chỉ học sinh đổi chỗ, máy không đổi. Thứ tự ưu tiên: bảng "Gán máy vào vị trí" (nếu có), Tên máy mẫu, số cuối tên PC, thứ tự danh sách. Máy thêm bằng IP dùng tên PC tự dò được; chưa dò được tên thì tạm theo thứ tự danh sách.
 
+## Bản 4.8.0 - Vui lớp học
+
+- **⭐ Tặng sao**: ở trang Monitor chọn máy rồi bấm "Tặng sao"; lời khen hiện trên máy em đó, bảng sao theo lớp ở trang Tương tác.
+- **⏱ Đếm ngược cả lớp**: đồng hồ nhỏ ở giữa mép trên màn hình học sinh, 1 phút cuối chuyển đỏ, hết giờ hiện lời nhắn.
+- **👥 Chia nhóm ngẫu nhiên** theo số em mỗi nhóm hoặc số nhóm (bỏ em vắng), hiện "Em ở Nhóm N" trên từng máy.
+- **😊 / 😕 Em hiểu rồi / chưa hiểu**: học sinh bấm trên nút nổi, Monitor hiện biểu tượng ở ô máy và tổng số; nút "Làm mới" để hỏi lại.
+- Cộng với 🎲 Bốc thăm và hình nền theo tiết ở bản trước. Phần PowerShell chưa thử trên Windows thật.
+
 ## Bản 4.7.1
 
 - **Gán máy vào vị trí**: khi tên PC không trùng số vị trí trên sơ đồ (vd. PC11 ngồi ở vị trí 8), bấm "🔗 Gán máy vào vị trí" (trang Sơ đồ lớp học hoặc Monitor), nhập số vị trí cho từng máy. Bảng này dùng chung mọi lớp, được ưu tiên hơn "Tên máy mẫu" và thứ tự danh sách; tên em trên hình nền, màn hình khóa, bốc thăm, Monitor, vi phạm đều theo bảng này. Có nút điền nhanh theo thứ tự danh sách hoặc theo số trong tên PC.
