@@ -1,6 +1,13 @@
 // KhoaVeyon - Khởi động
 /* ---------- khởi động ---------- */
 (async function init() {
+  if (window.KV_VIEW) {   // tài khoản "chỉ xem" (PIN riêng): chỉ hiện Monitor / sơ đồ lớp, không có điều khiển
+    document.body.classList.add('kvview');
+    S.hosts = []; S.sel = new Set(); S.st = {cfg: {hosts: [], setup_done: true}, actions: []};
+    try { applyUi((await api('/api/ui_prefs', undefined, {quiet: true})).prefs); } catch (e) { /* bỏ qua */ }
+    await go('monitor').catch(err => { $('#view').innerHTML = `<div class="note warn">${esc(err.message)}</div>`; });
+    return;
+  }
   try {
     S.st = await api('/api/state');
   } catch (e) {

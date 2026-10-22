@@ -84,6 +84,10 @@ def handle_events(ip, d):
         if not isinstance(ev, dict):
             continue
         t = ev.get('t')
+        if t == 'ack':
+            from .helpertest import ack_put
+            ack_put(host, str(ev.get('tid') or ''), str(ev.get('step') or ''), ev.get('ok') is True, ev.get('err'), ev.get('info'))
+            continue
         if t == 'snap':
             from .classroom import share_ready, SID_RE
             if SID_RE.match(str(ev.get('id') or '')):

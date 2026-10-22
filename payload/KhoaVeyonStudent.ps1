@@ -40,6 +40,19 @@ try {
         Move-Item -LiteralPath $tmp -Destination (Join-Path $Outbox ($name + '.json')) -Force
     }
 
+    # ---------- báo lại cho giáo viên khi tác vụ có mã kiểm tra (tid): thành công hoặc lỗi cụ thể ----------
+    $script:ackInfo = ''
+    function Send-Ack($msg, [bool]$ok, [string]$err, [string]$info) {
+        try {
+            if (-not $err) { $err = '' }; if (-not $info) { $info = '' }
+            Send-Event @{ t = 'ack'; tid = [string]$msg.tid; step = [string]$msg.step; ok = $ok; err = $err.Substring(0, [Math]::Min(180, $err.Length)); info = $info.Substring(0, [Math]::Min(180, $info.Length)) }
+        } catch { }
+    }
+    function Get-SelfInfo {
+        $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+        return ('người dùng ' + $env:USERNAME + ' · PowerShell ' + $PSVersionTable.PSVersion.ToString() + ' · màn hình ' + $b.Width + 'x' + $b.Height)
+    }
+
     # ---------- hộp thông báo của giáo viên ----------
     function Show-Message([string]$title, [string]$text, [int]$seconds) {
         $f = New-Object System.Windows.Forms.Form
@@ -661,6 +674,7 @@ try {
                     'wallpaper' { if ($msg.restore -eq $true) { Restore-Wallpaper } else { Show-Wallpaper $msg } }
                     'timer'    { if ($msg.cancel -eq $true) { Stop-Timer } else { Start-Timer ([int]$msg.secs) ([string]$msg.label) } }
                     'reactclear' { Set-React '' }
+                    'selftest' { $script:ackInfo = Get-SelfInfo }
                     'quiz'     { Show-Quiz $msg }
                     'snap'     { Snap-Screen $msg }
                     'show'     { Show-Shared $msg }
@@ -671,7 +685,8 @@ try {
                     'handclear' { $script:raised = $false; Update-Pill }
                     'collect'  { Show-Message 'Giáo viên yêu cầu nộp bài' ([string]$msg.text) 0; Submit-Files }
                 }
-            } catch { Log ('inbox ' + $msg.type + ': ' + $_.Exception.Message) }
+                if ($msg.tid) { Send-Ack $msg $true '' ([string]$script:ackInfo); $script:ackInfo = '' }
+            } catch { Log ('inbox ' + $msg.type + ': ' + $_.Exception.Message); if ($msg.tid) { Send-Ack $msg $false $_.Exception.Message '' } }
         }
     }
     $timer = New-Object System.Windows.Forms.Timer

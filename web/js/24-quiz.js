@@ -73,7 +73,7 @@ document.addEventListener('click', async e => {
     }
   } catch (err) { toast(err.message, 'err'); }
 });
-quizRefresh();
+if (!window.KV_VIEW) quizRefresh();
 
 // ---- chiếu bài một học sinh cho cả lớp: chụp -> xem trước -> xác nhận -> chiếu
 async function funShare() {

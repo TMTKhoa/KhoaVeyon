@@ -170,6 +170,7 @@ document.addEventListener('click', async e => {
     case 'openevidence': api('/api/open', {what: 'evidence'}).catch(err => toast(err.message, 'warn')); break;
     case 'locknow': await lockNow(); break;
     case 'selftest': await runSelftest(); break;
+    case 'htest': await runHelperTest(); break;
     case 'seatproject': projectSeats(); break;
     case 'aioptsave': {
       const o = {}; document.querySelectorAll('[data-aiopt]').forEach(x => { o[x.dataset.aiopt] = x.checked; });

@@ -389,3 +389,177 @@ class PhoneTest(unittest.TestCase):
         self.p.PH['exp'] = 1
         self.assertEqual(self.p.handle('192.168.1.20', 'GET', '/state', tok)[0], 403)
         self.assertFalse(self.p.api_phone_state()['on'])
+
+
+class RadminTest(unittest.TestCase):
+    def setUp(self):
+        from kv import radmin, phone
+        self.r = radmin
+        mock.patch.object(radmin, 'log').start()
+        mock.patch.object(phone, '_student_ips', lambda: {'10.0.0.50'}).start()
+        mock.patch.object(radmin, 'lan_ip', lambda: '192.168.1.9').start()
+        radmin.api_radmin_stop()
+
+    def tearDown(self):
+        self.r.api_radmin_stop()
+        mock.patch.stopall()
+
+    def test_pin_format_and_login(self):
+        self.assertEqual(self.r.login('192.168.1.2', '123456')[0], 403)      # đang tắt
+        st = self.r.api_radmin_start({'hours': 1})
+        pin = st['pin']; self.assertRegex(pin, r'^\d{6}$')
+        self.assertEqual(self.r.login('192.168.1.2', '12345x')[0], 403)
+        code, _o, sid = self.r.login('192.168.1.2', pin); self.assertEqual(code, 200); self.assertTrue(sid)
+        self.assertIsNotNone(self.r.session_for('192.168.1.2', sid))
+        self.assertIsNone(self.r.session_for('192.168.1.3', sid))            # phiên gắn với IP
+        self.assertIsNone(self.r.session_for('192.168.1.2', 'khac'))
+        pin2 = self.r.api_radmin_newpin()['pin']
+        self.assertIsNone(self.r.session_for('192.168.1.2', sid))            # đổi PIN đăng xuất hết
+        self.assertEqual(self.r.login('192.168.1.2', pin2)[0], 200)
+
+    def test_lockout_and_global_off(self):
+        pin = self.r.api_radmin_start({})['pin']
+        wrong = '000000' if pin != '000000' else '111111'
+        for i in range(self.r.MAX_IP_FAILS):
+            self.assertEqual(self.r.login('192.168.1.7', wrong)[0], 403)
+        self.assertEqual(self.r.login('192.168.1.7', pin)[0], 429)           # khóa IP kể cả đúng PIN
+        for k in range(8, 8 + self.r.MAX_GLOBAL_FAILS):
+            self.r.login('192.168.1.%d' % k, wrong)
+        self.assertFalse(self.r.api_radmin_state()['on'])                     # tự tắt khi bị đoán dồn dập
+
+    def test_denied_paths(self):
+        self.r.api_radmin_start({'full': False})
+        for p in ('/api/radmin_state', '/api/phone_state', '/api/quit', '/api/open', '/api/run', '/api/backup_restore', '/api/settings'):
+            self.assertTrue(self.r.denied(p), p)
+        for p in ('/api/monitor', '/api/student_send', '/api/open_url', '/api/draw', '/api/school'):
+            self.assertFalse(self.r.denied(p), p)
+        self.r.api_radmin_start({'full': True})
+        self.assertFalse(self.r.denied('/api/run')); self.assertTrue(self.r.denied('/api/radmin_state')); self.assertTrue(self.r.denied('/api/applock'))
+
+    def test_forward_token_swap(self):
+        from kv.runtime import STATE
+        seen = {}
+
+        class R:
+            status = 200
+            def read(s): return b'<script>const TOKEN = \'REAL\';</script>'
+            def getheader(s, k): return 'text/html'
+
+        class C:
+            def __init__(s, *a, **k): pass
+            def request(s, m, t, body=None, headers=None): seen.update(t=t, h=headers)
+            def getresponse(s): return R()
+            def close(s): pass
+        old = dict(STATE)
+        STATE.update(token='REAL', port=9)
+        try:
+            with mock.patch.object(self.r.http.client, 'HTTPConnection', C):
+                sess = {'fake': 'FAKE'}
+                code, data, ct, cd = self.r.forward(sess, 'GET', '/?t=remote', None, {})
+                self.assertIn(b'FAKE', data); self.assertNotIn(b'REAL', data); self.assertIn('t=REAL', seen['t'])
+                self.r.forward(sess, 'POST', '/api/draw', b'{}', {'X-Token': 'FAKE'}); self.assertEqual(seen['h']['X-Token'], 'REAL')
+                self.r.forward(sess, 'POST', '/api/draw', b'{}', {'X-Token': 'REAL'}); self.assertNotIn('X-Token', seen['h'])   # không nhận mã thật từ ngoài
+                self.r.forward(sess, 'GET', '/evidence/a.jpg?t=sai', None, {}); self.assertNotIn('t=', seen['t'])
+        finally:
+            STATE.clear(); STATE.update(old)
+
+
+class RadminViewTest(unittest.TestCase):
+    def setUp(self):
+        from kv import radmin, phone
+        self.r = radmin
+        mock.patch.object(radmin, 'log').start()
+        mock.patch.object(radmin, '_student_ips', lambda: {'10.0.0.50'}).start()
+        mock.patch.object(radmin, 'lan_ip', lambda: '192.168.1.9').start()
+        radmin.api_radmin_stop()
+
+    def tearDown(self):
+        self.r.api_radmin_stop(); mock.patch.stopall()
+
+    def test_roles(self):
+        st = self.r.api_radmin_start({}); pin, vpin = st['pin'], st['vpin']
+        self.assertNotEqual(pin, vpin); self.assertRegex(vpin, r'^\d{6}$')
+        c, o, sid = self.r.login('192.168.1.2', pin); self.assertEqual(o['role'], 'admin')
+        c, o, vsid = self.r.login('192.168.1.3', vpin); self.assertEqual(o['role'], 'view')
+        self.assertEqual(self.r.session_for('192.168.1.3', vsid)['role'], 'view')
+        c, o, ssid = self.r.login('10.0.0.50', vpin); self.assertEqual((c, o['role']), (200, 'view'))   # máy học sinh: chỉ vào được PIN xem
+        self.assertEqual(self.r.login('10.0.0.50', pin)[0], 403)                                        # PIN quản trị bị từ chối
+        self.assertTrue(self.r.view_denied('/api/student_send', 'POST')); self.assertTrue(self.r.view_denied('/api/log'))
+        self.assertTrue(self.r.view_denied('/api/monitor', 'POST')); self.assertFalse(self.r.view_denied('/api/monitor?cls=10A'))
+        self.assertTrue(self.r.view_denied('/api/radmin_state'))
+        self.assertTrue(self.r.ip_ok('192.168.0.4')); self.assertFalse(self.r.ip_ok('8.8.8.8'))
+
+
+class HelperTestTest(unittest.TestCase):
+    def setUp(self):
+        from kv import helpertest
+        self.h = helpertest
+        self.h.ACKS.clear(); self.h.HT['data'] = None
+        self.sent = []
+        self.mocks = [mock.patch.object(helpertest, '_inbox_write', lambda host, msg: self.sent.append(msg)),
+                      mock.patch.object(helpertest, 'log'), mock.patch.object(helpertest, 'pause', lambda s: None),
+                      mock.patch.object(helpertest, 'ACK_WAIT', 0.5)]
+        [m.start() for m in self.mocks]
+
+    def tearDown(self):
+        mock.patch.stopall()
+
+    def _auto_ack(self, ok=True, skip=()):
+        """Giả lập máy học sinh: mỗi tin có tid thì báo lại."""
+        orig = self.h._inbox_write
+
+        def w(host, msg):
+            self.sent.append(msg)
+            if msg.get('tid') and msg['step'] not in skip:
+                self.h.ack_put(host, msg['tid'], msg['step'], ok, '' if ok else 'boom', 'thông tin')
+        return mock.patch.object(self.h, '_inbox_write', w)
+
+    def test_ack_rules(self):
+        self.h.ack_put('a', 'zzzz', 's', True, '', '')           # tid sai: bỏ qua
+        self.assertEqual(len(self.h.ACKS), 0)
+        self.h.ack_put('a', 'aabbccdd', 's', True, 'x' * 999, '')
+        self.assertLessEqual(len(self.h.ACKS[('aabbccdd', 's')]['err']), 200)
+        self.assertIsNone(self.h.wait_ack('aabbccdd', 's', 'khac', 0.3))   # ack của máy khác không tính
+        self.assertEqual(self.h._show_ack(None, 'x')[0], 'bad')
+        self.assertEqual(self.h._show_ack({'ok': False, 'err': 'e', 'info': ''}, 'x')[0], 'bad')
+
+    def test_full_run_all_ok(self):
+        rf = {}
+        with self._auto_ack(), mock.patch.object(self.h, 'rfs_write', lambda h, p, d: rf.__setitem__(p, d)), \
+                mock.patch.object(self.h, 'rfs_read', lambda h, p: rf.get(p) or (b'\xff\xd8' + b'0' * 5000)), mock.patch.object(self.h, 'rfs_remove', lambda h, p: None), \
+                mock.patch('kv.engage._ensure_bg', lambda h, b: None):
+            from kv.board import THUMBS
+            from kv.student import LOCK
+            with LOCK:
+                THUMBS['h1'] = {'d': 'x', 'ts': 9e12, 'seq': 1}
+            try:
+                self.h.api_ht_start({'hosts': ['h1'], 'url': True})
+                for _ in range(100):
+                    if self.h.HT['data']['done']:
+                        break
+                    __import__('time').sleep(0.1)
+            finally:
+                with LOCK:
+                    THUMBS.pop('h1', None)
+        D = self.h.HT['data']
+        self.assertTrue(D['done'])
+        bad = [(r['key'], r['detail']) for r in D['steps'] if r['status'] not in ('ok',)]
+        self.assertEqual(bad, [])
+        types = [m['type'] for m in self.sent]
+        for t in ('selftest', 'msg', 'quiz', 'quizend', 'timer', 'block', 'clear', 'wallpaper', 'snap', 'show', 'showclear', 'handout', 'config', 'open'):
+            self.assertIn(t, types)
+
+    def test_helper_dead_skips_rest(self):
+        rf = {}
+        with self._auto_ack(skip=('helper',)), mock.patch.object(self.h, 'rfs_write', lambda h, p, d: rf.__setitem__(p, d)), \
+                mock.patch.object(self.h, 'rfs_read', lambda h, p: rf.get(p)), mock.patch.object(self.h, 'rfs_remove', lambda h, p: None):
+            self.h.api_ht_start({'hosts': ['h1']})
+            for _ in range(100):
+                if self.h.HT['data']['done']:
+                    break
+                __import__('time').sleep(0.1)
+        st = {r['key']: r['status'] for r in self.h.HT['data']['steps']}
+        self.assertEqual((st['link'], st['helper'], st['msg'], st['thumb']), ('ok', 'bad', 'skip', 'skip'))
+
+    def test_single_host_required(self):
+        self.assertRaises(ApiError, self.h.api_ht_start, {'hosts': ['a', 'b']})

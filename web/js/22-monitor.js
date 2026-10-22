@@ -80,6 +80,8 @@ function viewMonitor() {
       <div class="mgrid flat">${all.map((m, i) => monTile(m, null, i + 1)).join('')}</div>`;
   }
   const clsSel = M.classes.length ? `<select id="monCls" class="xsel" style="width:auto"><option value="">(lớp đang có tiết)</option>${M.classes.map(c => `<option ${c === S.monCls ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>` : '';
+  if (window.KV_VIEW) return `<div class="stack">${banner}<section class="card"><div class="row" style="flex-wrap:wrap;gap:8px;align-items:center"><span class="sstat">🟢 <b>${on}</b>/${M.total} bật</span><span class="sstat">✋ <b>${hands}</b></span><span style="flex:1"></span>Sơ đồ lớp ${clsSel}</div></section>
+    <section class="card">${board}</section></div>`;
   return `<div class="stack">${banner}
     <section class="card"><div class="row" style="flex-wrap:wrap;gap:8px;align-items:center">
         <span class="sstat">🟢 <b>${on}</b>/${M.total} bật</span><span class="sstat">✋ <b>${hands}</b></span><span class="sstat">🚨 <b>${viol}</b> máy vi phạm hôm nay</span><span class="sstat" title="Học sinh bấm “Em hiểu rồi / chưa hiểu” trên nút nổi">😊 <b>${all.filter(m => m.react === 'ok').length}</b> · 😕 <b>${all.filter(m => m.react === 'lost').length}</b></span>
