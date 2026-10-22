@@ -237,6 +237,10 @@ Thao tác nào quá 0,7 giây chưa xong (quét mạng, hỏi Veyon, kết nối
 
 **Chưa kiểm chứng trên Windows và Veyon thật:** tên khóa `websiteUrls` của Veyon Open website (đã có phương án dự phòng `explorer.exe`), việc trang KhoaQuiz tải đủ khi bật "chỉ trang cho phép" (lệnh này chặn theo IP, trang dùng CDN có thể thiếu: hãy thử trên một máy trước giờ thi). Logic, giao diện và luồng gọi KhoaQuiz đã thử bằng KhoaQuiz giả lập (kiểm thử `tests/test_khoalink.py` và thử giao diện bằng trình duyệt).
 
+## Bản 4.7.2
+
+- **PC cố định theo vị trí**: mặc định số cuối tên PC là số vị trí (PC1 luôn ở vị trí 1, PC12 ở vị trí 12). Chỉ học sinh đổi chỗ, máy không đổi. Thứ tự ưu tiên: bảng "Gán máy vào vị trí" (nếu có), Tên máy mẫu, số cuối tên PC, thứ tự danh sách. Máy thêm bằng IP dùng tên PC tự dò được; chưa dò được tên thì tạm theo thứ tự danh sách.
+
 ## Bản 4.7.1
 
 - **Gán máy vào vị trí**: khi tên PC không trùng số vị trí trên sơ đồ (vd. PC11 ngồi ở vị trí 8), bấm "🔗 Gán máy vào vị trí" (trang Sơ đồ lớp học hoặc Monitor), nhập số vị trí cho từng máy. Bảng này dùng chung mọi lớp, được ưu tiên hơn "Tên máy mẫu" và thứ tự danh sách; tên em trên hình nền, màn hình khóa, bốc thăm, Monitor, vi phạm đều theo bảng này. Có nút điền nhanh theo thứ tự danh sách hoặc theo số trong tên PC.

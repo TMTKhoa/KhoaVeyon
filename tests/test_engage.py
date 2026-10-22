@@ -180,7 +180,7 @@ class HostMapTest(unittest.TestCase):
         from kv import board, seating
         with mock.patch.dict(seating.CFG, {'hosts': ['10.0.0.5', '10.0.0.6', 'PC3'], 'host_names': {}, 'host_auto_names': {'10.0.0.5': 'PC11', '10.0.0.6': 'PC8'}}), \
              mock.patch.dict(seating.SCHOOL, {'seat_hostmap': {}}), mock.patch.object(board, 'school_save'):
-            self.assertEqual(seating.school_seat_no('10.0.0.5', {}), 1)          # chưa gán: theo thứ tự danh sách
+            self.assertEqual(seating.school_seat_no('10.0.0.5', {}), 11)         # chưa gán: lấy số cuối tên PC (PC11 -> 11)
             board.api_seat_hostmap({'map': {'10.0.0.5': 8, '10.0.0.6': '11', 'PC3': ''}})
             self.assertEqual(seating.school_seat_no('10.0.0.5', {}), 8)
             self.assertEqual(seating.school_seat_no('10.0.0.6', {'pattern': 'PC{n}'}), 11)   # bảng gán thắng tên máy mẫu
@@ -190,3 +190,9 @@ class HostMapTest(unittest.TestCase):
                 board.api_seat_hostmap({'map': {'10.0.0.5': 2, '10.0.0.6': 2}})
             with self.assertRaises(ApiError):
                 board.api_seat_hostmap({'map': {'10.0.0.5': 999}})
+
+
+    def test_pc_number_is_seat_number(self):
+        from kv import seating
+        with mock.patch.dict(seating.CFG, {'hosts': ['PC3', 'pc01', '10.0.0.9', 'LAB-PC12.local'], 'host_names': {}, 'host_auto_names': {}}), mock.patch.dict(seating.SCHOOL, {'seat_hostmap': {}}):
+            self.assertEqual([seating.school_seat_no(h, {}) for h in seating.CFG['hosts']], [3, 1, 3, 12])   # IP chưa biết tên: theo thứ tự danh sách (vị trí 3)

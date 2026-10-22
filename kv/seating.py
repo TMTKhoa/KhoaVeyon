@@ -37,7 +37,7 @@ def _host_names(host):
 
 def school_seat_no(host, lay):
     """Số máy (số chỗ ngồi) của một tên máy. Thứ tự ưu tiên: bảng "Gán máy vào vị trí" giáo viên đã lập (vị trí vật lý của máy trong phòng,
-    dùng chung mọi lớp), tên máy mẫu (MAY{n}), cuối cùng là thứ tự trong danh sách máy ở trang Điều khiển lớp."""
+    dùng chung mọi lớp), tên máy mẫu (MAY{n}), số ở cuối tên máy (PC3 là vị trí 3), cuối cùng là thứ tự trong danh sách máy."""
     names = _host_names(host)
     with SCHOOL_LOCK:
         hm = dict(SCHOOL.get('seat_hostmap') or {})
@@ -54,6 +54,11 @@ def school_seat_no(host, lay):
             if m:
                 return int(m.group(1))
         return 0
+    for cand in names:   # PC máy cố định theo vị trí: PC1 luôn ở vị trí 1, PC12 ở vị trí 12 (chỉ học sinh đổi chỗ, máy thì không)
+        if not re.fullmatch(r'[\d.:]+', cand):
+            m = re.search(r'(\d+)$', cand)
+            if m and int(m.group(1)) > 0:
+                return int(m.group(1))
     with CFG_LOCK:
         hosts = [str(x).strip().lower() for x in CFG.get('hosts') or []]
     for cand in names:
