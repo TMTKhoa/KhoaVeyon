@@ -16,7 +16,7 @@ from .network import tcp_open
 from .privacy import privacy_status
 from .remote import rfs_read, rfs_reachable, rfs_remove, rfs_scan, rfs_write
 from .runtime import CFG, CFG_LOCK, log
-from .school import school_class_at
+from .school import _cls_norm, school_class_at
 from .school_api import school_brief
 from .seating import school_student_for
 from .updater import update_brief
@@ -30,7 +30,8 @@ ALERT_SEEN = set()          # (máy, tên file) đã xử lý, tránh báo trùn
 HOST_ONLINE = {}
 PUSH_CAPABLE = {}           # máy -> lúc nhận tín hiệu "hello" gần nhất từ script giám sát (máy đó tự đẩy ảnh về, máy giáo viên chỉ cần quét thưa)
 PUSH_FRESH_SEC = 600
-PUSH_FALLBACK_SEC = 60
+PUSH_FALLBACK_SEC = 15      # máy đã báo hello vẫn được quét dự phòng chừng này giây một lần, phòng khi tín hiệu đẩy bị mất (trước đây 60 giây)
+_IS_WIN = os.name == 'nt'
 ALERT_FILE = 'alerts.jsonl'
 ALERT_CSV = 'violations.csv'
 ALERT_MAX = 500
@@ -54,6 +55,16 @@ def watch_hosts_set(host, on):
 def hn_of(cfg, host):
     """Tên máy để ghi vào tên file ảnh: tên giáo viên tự đặt, không có thì tên PC dò được, không có nữa thì IP."""
     return (cfg.get('host_names') or {}).get(host) or (cfg.get('host_auto_names') or {}).get(host) or host
+
+
+def alert_class_at(cfg, ts):
+    """Lớp ghi vào vi phạm. 'current': lớp đang có tiết tại giờ vi phạm (thời khóa biểu, hoặc lớp giáo viên đặt).
+    'manual': luôn là lớp giáo viên chọn riêng cho báo động; chưa chọn lớp thì rơi về 'current'."""
+    if cfg.get('alert_cls_mode') == 'manual':
+        c = _cls_norm(cfg.get('alert_cls_manual'))
+        if c:
+            return c
+    return school_class_at(ts)
 
 
 def _clip(v, n):
@@ -148,7 +159,7 @@ def collect_and_beep(cfg, host):
     before = ALERT_SEQ[0]
     alert_collect_host(cfg, host)
     with ALERT_LOCK:
-        fresh = [e for e in ALERTS if e['id'] > before]
+        fresh = [e for e in ALERTS if e['id'] > before and e['host'] == host]   # chỉ của máy này: vi phạm máy khác do luồng khác lo
     try:
         gap = int(cfg.get('alert_group_sec') or 60)
     except (TypeError, ValueError):
@@ -229,7 +240,7 @@ def _alert_collect_host(cfg, host):
         except ValueError:
             ts = time.time()
             date, tm = time.strftime('%Y-%m-%d'), time.strftime('%H:%M:%S')
-        cls_now = school_class_at(ts)
+        cls_now = alert_class_at(cfg, ts)
         stu, seat = school_student_for(host, cls_now)
         img = ''
         try:
@@ -277,20 +288,74 @@ def alert_should_beep(events, gap):
     return beep
 
 
-def alert_beep():
+_BEEP_REQ = threading.Event()
+_BEEP_START = threading.Lock()
+_BEEP_THREAD = [None]
+_BEEP_FAILED = [False]
+
+
+def _beep_play():
+    """Một hồi bíp (4 tiếng, mỗi tiếng 0,2 giây). Loa/thiết bị âm thanh vừa "thức dậy" thường nuốt mất tiếng đầu nên hồi bíp đủ dài.
+    Beep lỗi thì thử âm thanh hệ thống. Trả về False nếu cả hai đều lỗi."""
+    try:
+        import winsound
+    except ImportError:
+        return False
+    try:
+        for f in (1100, 1400, 1100, 1400):
+            winsound.Beep(f, 200)
+        return True
+    except Exception:  # noqa
+        pass
+    try:
+        winsound.PlaySound('SystemExclamation', winsound.SND_ALIAS)
+        return True
+    except Exception:  # noqa
+        return False
+
+
+def _beep_worker():
+    # Một luồng duy nhất phát tiếng: hai yêu cầu cùng lúc không còn đè nhau (winsound.Beep lỗi nếu đang có tiếng khác) và không bị nuốt lỗi âm thầm.
+    # Yêu cầu đến trong lúc đang kêu thì kêu thêm đúng một hồi sau đó.
+    while True:
+        _BEEP_REQ.wait()
+        _BEEP_REQ.clear()
+        try:
+            ok = _beep_play()
+        except Exception:  # noqa: luồng phát tiếng không bao giờ được chết
+            ok = False
+        if not ok and not _BEEP_FAILED[0]:
+            log('Không phát được tiếng báo động trên máy giáo viên: kiểm tra loa, âm lượng và thiết bị âm thanh mặc định. Bấm “Thử tiếng báo” ở trang Vi phạm để kiểm tra.', 'warn')
+        _BEEP_FAILED[0] = not ok
+        time.sleep(0.3)
+
+
+def alert_beep(force=False):
+    """Phát tiếng báo động (nếu đang bật; force=True thì phát dù đang tắt, dùng cho nút thử). Trả về False nếu không phát được."""
+    if not _IS_WIN:
+        return False
+    if not force:
+        with CFG_LOCK:
+            if not bool(CFG.get('alert_sound', True)):
+                return False
+    with _BEEP_START:
+        t = _BEEP_THREAD[0]
+        if t is None or not t.is_alive():
+            t = threading.Thread(target=_beep_worker, daemon=True)
+            t.start()
+            _BEEP_THREAD[0] = t
+    _BEEP_REQ.set()
+    return True
+
+
+def api_alert_test(_b=None):
+    """Nút “Thử tiếng báo”: phát một hồi bíp để giáo viên kiểm tra loa."""
+    if not _IS_WIN:
+        return {'ok': False, 'msg': 'Tiếng báo chỉ phát được trên Windows (máy này không chạy Windows).'}
     with CFG_LOCK:
         on = bool(CFG.get('alert_sound', True))
-    if not on or os.name != 'nt':
-        return
-
-    def run():
-        try:
-            import winsound
-            for f in (1100, 1400, 1100):
-                winsound.Beep(f, 160)
-        except Exception:  # noqa
-            pass
-    threading.Thread(target=run, daemon=True).start()
+    alert_beep(force=True)
+    return {'ok': True, 'msg': 'Đang phát tiếng báo thử.' + ('' if on else ' Lưu ý: “Kêu bíp khi có vi phạm” đang TẮT nên khi có vi phạm sẽ không kêu.')}
 
 
 def api_alerts(q):

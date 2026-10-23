@@ -6,7 +6,7 @@ import shutil
 import sys
 
 
-VERSION = '5.1.0'
+VERSION = '5.2.1'
 APP_TITLE = 'KhoaVeyon - Hỗ trợ quản lý lớp học'
 _HERE = os.path.dirname(os.path.abspath(__file__))   # thư mục kv/
 if getattr(sys, 'frozen', False):

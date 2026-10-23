@@ -22,7 +22,7 @@ async function go(id) {
     if (id === 'report') await loadReport();
     if (id === 'school' || id === 'seats') await loadSchool();
     if (id === 'auto') await loadAuto();
-    if (id === 'monitor') { await loadSchool(); await loadMonitor(); }
+    if (id === 'monitor') { await loadSchool(); await loadMonitor(); await monLiveResume(); }
     if (id === 'settings') S.startup = await api('/api/startup', {});
     if (id === 'exam') { await loadExam(); await examReload(); }
   } catch (e) { toast(e.message, 'err'); }
@@ -167,6 +167,7 @@ document.addEventListener('click', async e => {
     case 'evopen_today': api('/api/evidence_open', {date: todayIso()}).catch(err => toast(err.message, 'warn')); break;
     case 'evopen_filter': { const f = galState().f; api('/api/evidence_open', f.from && f.from === f.to ? {date: f.from, cls: f.cls} : {}).catch(err => toast(err.message, 'warn')); break; }
     case 'alertclear': if (await modal({title: 'Xóa danh sách vi phạm?', ok: 'Xóa danh sách', danger: true, html: 'Danh sách trên màn hình sẽ được làm trống. Ảnh vẫn còn trong thư mục <code>data\\evidence</code>.'})) { try { await api('/api/alerts_clear', {}); S.alerts = []; S.unseen = 0; render(); } catch (err) { toast(err.message, 'err'); } } break;
+    case 'alerttest': try { const r = await api('/api/alert_test', {}); toast(r.msg, r.ok ? 'ok' : 'warn'); } catch (err) { toast(err.message, 'err'); } break;
     case 'openevidence': api('/api/open', {what: 'evidence'}).catch(err => toast(err.message, 'warn')); break;
     case 'locknow': await lockNow(); break;
     case 'selftest': await runSelftest(); break;
@@ -342,7 +343,7 @@ document.addEventListener('change', async e => {
   else if (t.dataset.schoolfile) { await schoolUpload(t.dataset.schoolfile, t.files[0]); t.value = ''; }
   else if (t.dataset.schoolauto !== undefined) { await schoolSet({action: 'auto', value: t.checked}); }
   else if (t.id === 'reportRange') { S.reportRange = t.value; try { await loadReport(); render(); } catch (err) { toast(err.message, 'err'); } }
-  else if (t.dataset.cfg) { await saveCfg({[t.dataset.cfg]: t.type === 'checkbox' ? t.checked : t.value}); if (t.dataset.cfg === 'auto_push') render(); }
+  else if (t.dataset.cfg) { await saveCfg({[t.dataset.cfg]: t.type === 'checkbox' ? t.checked : t.value}); if (t.dataset.cfg === 'auto_push' || t.dataset.cfg === 'alert_cls_mode' || t.dataset.cfg === 'alert_cls_manual') render(); }
   else if (t.id === 'fileInput') { await uploadFiles(t.files); t.value = ''; }
 });
 

@@ -57,7 +57,8 @@ def report_episodes(events, gap):
     """Gộp các ảnh liên tiếp của cùng máy + cùng trang/ứng dụng (cách nhau <= gap giây) thành một lần vi phạm."""
     out, last = [], {}
     for e in events:
-        k = (e['host'], e['type'], e['name'])
+        # tách theo lớp và học sinh: máy bỏ mở một trang qua giờ ra chơi thì ảnh của lớp sau không được gộp vào lần vi phạm của lớp trước
+        k = (e['host'], e['type'], e['name'], e.get('cls', ''), e.get('student', ''))
         g = last.get(k)
         if g and e['ts'] - g['last_ts'] <= gap:
             g['shots'] += 1

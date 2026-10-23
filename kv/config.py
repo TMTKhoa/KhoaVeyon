@@ -51,6 +51,8 @@ DEFAULT_CONFIG = {
     'alert_sound': True,   # kêu bíp trên máy giáo viên khi có vi phạm mới
     'alert_popup': True,   # hiện thông báo nổi (kèm ảnh) khi có vi phạm mới
     'alert_group_sec': '60',  # các vi phạm giống nhau (cùng máy, cùng trang/ứng dụng) cách nhau không quá chừng này giây thì gộp thành một báo động
+    'alert_cls_mode': 'current',  # lớp ghi vào mỗi vi phạm: 'current' = theo lớp hiện tại (thời khóa biểu / giáo viên đặt) tại giờ vi phạm, 'manual' = luôn dùng lớp ở alert_cls_manual
+    'alert_cls_manual': '',       # lớp dùng khi alert_cls_mode = 'manual'
     'keep_days': '14',     # tự xóa ảnh chụp màn hình cũ hơn chừng này ngày (0 = không tự xóa). Ảnh là dữ liệu nhạy cảm nên giữ ngắn
     'keep_records_days': '180',  # tự xóa bản ghi vi phạm dạng chữ (không có ảnh) cũ hơn chừng này ngày; dùng cho thống kê tuần/tháng
     'school_name': '',      # tên trường, ghi vào đầu tên file ảnh vi phạm

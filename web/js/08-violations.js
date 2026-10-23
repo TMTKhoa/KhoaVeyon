@@ -115,10 +115,19 @@ function viewViol() {
       </div>
       <div class="row" style="margin-top:14px;gap:22px">
         <label class="switch"><input type="checkbox" data-cfg="alert_sound" ${c.alert_sound !== false ? 'checked' : ''}><span class="tr"></span><span>Kêu bíp khi có vi phạm</span></label>
+        <button class="btn sm" data-act="alerttest" title="Phát thử một hồi bíp để kiểm tra loa máy giáo viên">🔔 Thử tiếng báo</button>
         <label class="switch"><input type="checkbox" data-cfg="alert_popup" ${c.alert_popup !== false ? 'checked' : ''}><span class="tr"></span><span>Hiện thông báo kèm ảnh</span></label>
         <span class="row" style="gap:8px"><span class="muted">Nhận ảnh mỗi</span><input type="text" data-cfg="alert_poll" value="${esc(c.alert_poll || '3')}" style="width:60px"><span class="muted">giây</span></span>
       </div>
       <div class="row" style="margin-top:12px;gap:8px"><span class="muted">Tên trường (ghi vào đầu tên file ảnh)</span><input type="text" data-cfg="school_name" maxlength="80" value="${esc(c.school_name || '')}" placeholder="Ví dụ: THPT Nguyễn Du" style="width:auto;flex:0 1 340px"></div>
+      <div class="row" style="margin-top:12px;gap:8px;flex-wrap:wrap">
+        <span class="muted">Lớp ghi cho vi phạm:</span>
+        <select data-cfg="alert_cls_mode" style="width:auto">
+          <option value="current" ${c.alert_cls_mode !== 'manual' ? 'selected' : ''}>Theo lớp hiện tại</option>
+          <option value="manual" ${c.alert_cls_mode === 'manual' ? 'selected' : ''}>Thủ công</option>
+        </select>
+        ${c.alert_cls_mode === 'manual' ? `<input type="text" data-cfg="alert_cls_manual" list="alertClsList" value="${esc(c.alert_cls_manual || '')}" placeholder="Ví dụ: 5A4" style="width:110px"><datalist id="alertClsList">${((S.school && S.school.classes) || []).map(x => `<option value="${esc(x.name)}">`).join('')}</datalist>${c.alert_cls_manual ? '' : '<span class="muted">(chưa chọn lớp: tạm dùng lớp hiện tại)</span>'}` : ''}
+      </div>
       <div class="row" style="margin-top:12px;gap:14px;flex-wrap:wrap">${privacyRow()}</div>
       <div class="row" style="margin-top:12px;gap:22px">
         <span class="row" style="gap:8px"><span class="muted">Gộp vi phạm giống nhau cách nhau dưới</span><input type="text" data-cfg="alert_group_sec" value="${esc(c.alert_group_sec || '60')}" style="width:60px"><span class="muted">giây (chỉ bíp một lần)</span></span>

@@ -187,6 +187,7 @@ function Take-Shot($kind, $name, $title) {
         # Ghi thang file .json (khong dung .tmp + doi ten, vi doi ten can quyen xoa ma thu muc nay co the da khoa).
         # Anh luon duoc luu xong truoc, roi moi ghi .json, nen khi may giao vien thay .json thi anh da day du.
         [IO.File]::WriteAllText($jf, ($meta | ConvertTo-Json -Compress -Depth 5), (New-Object Text.UTF8Encoding($true)))
+        [void]$script:unsent.Add([pscustomobject]@{ Jpg = $file; At = (Get-Date) }); $script:resendTries = 0; $script:lastResend = Get-Date
         Push-Signal $kind $name
         return $file
     } catch { Log "Shot failed: $_" }
@@ -266,6 +267,20 @@ function Clear-OldReceipts {
         Remove-Item -Force
 }
 
+# Anh da chup nhung may giao vien chua lay: file .jpg van con trong thu muc (may giao vien lay xong se xoa). Con file thi cu bao lai
+# (sau 4 giay, roi 10, roi 30 giay mot lan, toi da 10 phut) de anh toi tay giao vien ngay ca khi tin hieu dau bi mat. Moi lan chi gui MOT tin hieu cho ca danh sach.
+$unsent = New-Object System.Collections.Generic.List[object]
+$resendTries = 0; $lastResend = [datetime]::MinValue
+function Resend-Unsent {
+    for ($i = $unsent.Count - 1; $i -ge 0; $i--) {
+        $it = $unsent[$i]
+        if (-not (Test-Path -LiteralPath $it.Jpg) -or ((Get-Date) - $it.At).TotalSeconds -ge 600) { $unsent.RemoveAt($i) }
+    }
+    if ($unsent.Count -eq 0) { $script:resendTries = 0; return }
+    $wait = 30; if ($script:resendTries -lt 3) { $wait = 4 } elseif ($script:resendTries -lt 8) { $wait = 10 }
+    if (((Get-Date) - $script:lastResend).TotalSeconds -ge $wait) { Push-Signal 'retry' ''; $script:lastResend = Get-Date; $script:resendTries++ }
+}
+
 Load-Lists
 Log ("Watch STARTED. Sites allowed: {0}; apps allowed: {1} names, {2} paths; AI sites: {3}" -f $allowDomains.Count, $keepNames.Count, $keepPaths.Count, $aiDomains.Count)
 $lastHello = [datetime]::MinValue
@@ -303,7 +318,9 @@ while (-not (StopRequested)) {
         if ($kind) {
             $key = "$kind|$name"
             if ($key -ne $curKey) { $curKey = $key; $shots = 0; $lastShot = [datetime]::MinValue }
-            if ($shots -lt $MaxShots -and ((Get-Date) - $lastShot).TotalSeconds -ge $RepeatSec) {
+            # anh dau chup ngay khi phat hien; anh thu hai sau 2 giay (luc dau trang co the chua tai xong, hoac hoc sinh dong tab rat nhanh), cac anh sau cach nhau RepeatSec
+            $gap = $RepeatSec; if ($shots -eq 1) { $gap = [Math]::Min(2, $RepeatSec) }
+            if ($shots -lt $MaxShots -and ((Get-Date) - $lastShot).TotalSeconds -ge $gap) {
                 $shotFile = Take-Shot $kind $name $title
                 if ($NotifyStudent -and $shotFile -and $shots -eq 0) {   # chi anh dau tien cua moi lan vi pham moi duoc bao
                     $pending.Add([pscustomobject]@{ Jpg = $shotFile; Kind = $kind; Name = $name; At = (Get-Date) })
@@ -312,10 +329,11 @@ while (-not (StopRequested)) {
             }
         } else { $curKey = '' }
         if ($NotifyStudent -and $pending.Count -gt 0) { Process-Receipts }
+        Resend-Unsent
     } catch { Log "Loop error: $_" }
     # "hello": bao may giao vien biet script nay tu day anh ve ngay khi co vi pham, nen may giao vien khong can quet lien tuc qua mang
     if (((Get-Date) - $lastHello).TotalSeconds -ge 240) { Push-Signal 'hello' ''; $lastHello = Get-Date }
     if (((Get-Date) - $lastBeat).TotalSeconds -ge 10) { try { Set-Content -LiteralPath $aliveFile -Value (Get-Date -Format s) } catch {}; $lastBeat = Get-Date }
-    Start-Sleep -Milliseconds 500
+    Start-Sleep -Milliseconds 300
 }
 Log 'Watch STOPPED'

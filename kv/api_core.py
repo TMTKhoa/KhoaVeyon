@@ -68,6 +68,15 @@ def api_settings(b):
                     raise ApiError('Mục Veyon không hợp lệ')
                 if k == 'school_name':
                     v = v[:80]
+                if k == 'alert_cls_mode' and v not in ('current', 'manual'):
+                    raise ApiError('Cách xác định lớp cho vi phạm không hợp lệ')
+                if k == 'alert_cls_manual':
+                    from .school import _cls_norm, SCHOOL, SCHOOL_LOCK
+                    v = _cls_norm(v)[:20]
+                    with SCHOOL_LOCK:
+                        known = set(SCHOOL.get('classes') or {})
+                    if v and known and v not in known:
+                        raise ApiError('Lớp "%s" chưa có trong danh sách lớp. Hãy nhập danh sách lớp hoặc chọn lớp có sẵn' % v)
                 new[k] = v
             elif k in BOOL_KEYS:
                 new[k] = bool(v)

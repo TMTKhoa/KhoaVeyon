@@ -4,6 +4,21 @@ S.monCls = '';
 S.monTimer = 0;
 S.monLive = false; S.monSec = 5; S.thumbs = {}; S.thumbSeq = 0;
 
+/* Nhớ lựa chọn “Xem màn hình học sinh” và số giây cập nhật: rời trang Monitor thì tạm dừng xem (máy học sinh ngừng chụp),
+   quay lại Monitor (hoặc mở lại chương trình) thì tự xem tiếp theo lựa chọn đã lưu. */
+const MON_LIVE_KEY = 'kv_mon_live', MON_SECS = [3, 5, 10, 20];
+function monPrefLoad() {
+  try { const v = JSON.parse(localStorage.getItem(MON_LIVE_KEY) || '{}'); return {on: v.on === true, sec: MON_SECS.includes(+v.sec) ? +v.sec : 5}; }
+  catch (e) { return {on: false, sec: 5}; }
+}
+function monPrefSave() { try { localStorage.setItem(MON_LIVE_KEY, JSON.stringify({on: !!S.monLiveWant, sec: S.monSec})); } catch (e) { /* bỏ qua */ } }
+{ const p = monPrefLoad(); S.monLiveWant = p.on; S.monSec = p.sec; }
+async function monLiveResume() {
+  if (!S.monLiveWant || S.monLive || window.KV_VIEW || !S.mon || S.page !== 'monitor') return;
+  S.monLive = true; S.thumbs = {}; S.thumbSeq = 0;   // bỏ ảnh cũ từ lần xem trước
+  await monLiveSend(true);
+}
+
 function monLiveHosts() {
   const M = S.mon; if (!M) return [];
   const sel = Object.values(M.machines).filter(m => m.online && S.sel.has(m.host)).map(m => m.host);
@@ -98,7 +113,7 @@ function viewMonitor() {
     <section class="card">${board}
       <div class="row" style="margin-top:12px;gap:14px;flex-wrap:wrap"><span class="muted"><span class="mdot on"></span> bật</span><span class="muted"><span class="mdot warn"></span> cần chú ý</span><span class="muted"><span class="mdot bad"></span> có lỗi</span><span class="muted"><span class="mdot off"></span> tắt</span>
         <label class="switch"><input type="checkbox" data-mon="live" ${S.monLive ? 'checked' : ''}><span class="tr"></span><span>📺 Xem màn hình học sinh</span></label>
-        <select id="monSec" class="xsel" style="width:auto" title="Cứ bao nhiêu giây cập nhật một ảnh">${[3, 5, 10, 20].map(n => `<option value="${n}" ${S.monSec === n ? 'selected' : ''}>cập nhật ${n} giây</option>`).join('')}</select>
+        <select id="monSec" class="xsel" style="width:auto" title="Cứ bao nhiêu giây cập nhật một ảnh">${MON_SECS.map(n => `<option value="${n}" ${S.monSec === n ? 'selected' : ''}>cập nhật ${n} giây</option>`).join('')}</select>
         <label class="switch" style="margin-left:auto"><input type="checkbox" data-mon="actopt" ${M.act_enabled ? 'checked' : ''}><span class="tr"></span><span>Máy học sinh báo ứng dụng / cửa sổ đang mở (chỉ gửi khi đổi, không tốn mạng)</span></label></div>
     </section></div>`;
 }
@@ -108,12 +123,12 @@ function monSelect(pred) { S.sel = new Set(Object.values(S.mon.machines).filter(
 document.addEventListener('change', async e => {
   const t = e.target;
   if (t.dataset && t.dataset.mon === 'live') {
-    S.monLive = t.checked;
+    S.monLive = t.checked; S.monLiveWant = t.checked; monPrefSave();
     if (t.checked) { S.thumbs = {}; S.thumbSeq = 0; await monLiveSend(true); toast('Đang xem màn hình: học sinh thấy chấm ● trên nút nổi. Ảnh thu nhỏ, máy học sinh tự chụp và nén.', 'ok'); }
     else { await monLiveSend(false); S.thumbs = {}; }
     render(); return;
   }
-  if (t.id === 'monSec') { S.monSec = +t.value; if (S.monLive) await monLiveSend(true); return; }
+  if (t.id === 'monSec') { S.monSec = +t.value; monPrefSave(); if (S.monLive) await monLiveSend(true); return; }
   if (t.id === 'monCls') { S.monCls = t.value; await loadMonitor(); render(); }
   else if (t.dataset && t.dataset.mon === 'actopt') {
     try { await api('/api/act_option', {enabled: t.checked, hosts: S.hosts.slice()}); S.mon.act_enabled = t.checked; toast(t.checked ? 'Đã bật báo cửa sổ đang mở' : 'Đã tắt báo cửa sổ đang mở', 'ok'); } catch (err) { toast(err.message, 'err'); }
