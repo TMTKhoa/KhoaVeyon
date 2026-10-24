@@ -307,7 +307,14 @@ def api_setup_done(b):
 def api_update_check(_q=None):
     with CFG_LOCK:
         repo = CFG.get('update_repo', '')
-    info = check_update(repo)
+    info = None
+    try:
+        from .updater import check_local
+        info = check_local()   # có zip bản mới trong thư mục update/ thì ưu tiên, khỏi cần GitHub
+    except Exception:  # noqa
+        info = None
+    if not info:
+        info = check_update(repo)
     STATE['update'] = info
     return info
 

@@ -598,3 +598,11 @@ Chương trình hỏi GitHub (mục Releases của kho `update_repo` ở trang C
 ## Bản 3.7.1
 
 Tối ưu nhỏ, không đổi hành vi: bảng Trạng thái máy dò cổng Veyon và chia sẻ C$ cùng lúc nên mỗi chu kỳ quét máy đang tắt nhanh gấp đôi (0,8 giây thay vì 1,6 giây); dọn vài biến thừa.
+
+## 5.2.5
+- Mở mạng chỉ cần một nút: **Cho phép internet** và **Bỏ chỉ-trang-cho-phép** đều gỡ cả luật tường lửa lẫn chính sách trình duyệt, xóa bộ nhớ DNS và đóng trình duyệt cũ để vào mạng được ngay (không phải tắt/mở lại thủ công).
+- Đổi giữa các chế độ (Chặn internet / Chỉ trang tường lửa / Chỉ trang trình duyệt) tự gỡ chế độ cũ trước, không bị chồng luật.
+
+## 5.3.0
+- Cập nhật không cần GitHub: thả file `KhoaVeyon-x.y.z.zip` bản mới vào thư mục `update/` cạnh chương trình; khi mở chương trình (hoặc bấm kiểm tra bản mới) sẽ hiện hộp thoại cập nhật, bấm là tự thay file và khởi động lại. Máy học sinh tự nhận dịch vụ mới như trước (so sánh mã băm với `payload`).
+- Lưu ý: kho GitHub mặc định `TMTKhoa/KhoaVeyon` là kho của tác giả gốc, không phải kho của bạn; bản cũ hơn 5.3.0 phải chép đè thủ công một lần.

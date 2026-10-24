@@ -483,8 +483,37 @@ print([r for r in ("/api/startup", "/api/logon_policy") if r not in POST_ROUTES]
 import kv.paths as P
 print(P.VERSION)
 ''')
-        self.assertEqual(out.splitlines(), ['[]', '5.2.4'])
+        self.assertEqual(out.splitlines(), ['[]', '5.3.0'])
 
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class Fix525Tests(unittest.TestCase):
+    def test_open_net_clears_everything(self):
+        s = open(os.path.join(os.path.dirname(__file__), '..', 'payload', 'KhoaVeyonServices.bat'), encoding='utf-8').read()
+        self.assertIn('function Net-Open', s)
+        i = s.index("'allowall' {"); self.assertIn('Net-Open', s[i:i + 300])
+        i = s.index("'weboff'"); self.assertIn('Net-Open', s[i:i + 60])
+        self.assertIn('Restart-Browsers', s)
+        i = s.index("'blockall' {"); self.assertIn('Page-Stop', s[i:i + 250])
+
+
+class LocalUpdateTests(unittest.TestCase):
+    def test_local_zip_update(self):
+        import tempfile, zipfile, shutil
+        from kv import updater
+        d = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(d, 'update'))
+            self.assertIsNone(updater.check_local(d))
+            with zipfile.ZipFile(os.path.join(d, 'update', 'KhoaVeyon-9.9.9.zip'), 'w') as z:
+                z.writestr('KhoaVeyon-main/kv/paths.py', "VERSION = '9.9.9'\n")
+            r = updater.check_local(d)
+            self.assertTrue(r and r['newer'] and r['latest'] == '9.9.9' and r['url'].startswith('local:'))
+            with zipfile.ZipFile(os.path.join(d, 'update', 'KhoaVeyon-0.0.1.zip'), 'w') as z:
+                z.writestr('kv/paths.py', "VERSION = '0.0.1'\n")
+            self.assertEqual(updater.check_local(d)['latest'], '9.9.9')
+        finally:
+            shutil.rmtree(d, ignore_errors=True)

@@ -75,6 +75,35 @@ def _from_branch(repo):
             'notes': 'Kho chưa có Release: so sánh số VERSION trong mã nguồn nhánh chính (HEAD).', 'page': 'https://github.com/%s' % repo}
 
 
+def check_local(app_dir=None):
+    """Thư mục update/ cạnh chương trình: thả file KhoaVeyon-x.y.z.zip vào đó (không cần GitHub). Trả về thông tin bản mới nhất hơn VERSION, hoặc None."""
+    d = os.path.join(app_dir or APP_DIR, 'update')
+    best = None
+    try:
+        names = os.listdir(d)
+    except OSError:
+        return None
+    for n in names:
+        if not n.lower().endswith('.zip'):
+            continue
+        fp = os.path.join(d, n)
+        try:
+            with zipfile.ZipFile(fp) as z:
+                mains = [x for x in z.namelist() if x.replace('\\', '/').endswith('kv/paths.py')]
+                if not mains:
+                    continue
+                txt = z.read(min(mains, key=len)).decode('utf-8', 'replace')
+        except (OSError, zipfile.BadZipFile, KeyError):
+            continue
+        m = re.search(r"VERSION\s*=\s*['\"]([^'\"]+)['\"]", txt)
+        if not m or _ver(m.group(1)) <= _ver(VERSION):
+            continue
+        if best is None or _ver(m.group(1)) > _ver(best['latest']):
+            best = {'current': VERSION, 'latest': m.group(1), 'newer': True, 'url': 'local:' + fp,
+                    'notes': 'Bản cài từ file %s trong thư mục update/' % n, 'page': ''}
+    return best
+
+
 def check_update(repo, api_base='https://api.github.com', trusted=False):
     """Hỏi GitHub xem có bản mới hơn VERSION không (Release mới nhất; không có thì tag; không có nữa thì VERSION trong nhánh chính). Không tải gì về."""
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo or ''):
@@ -125,7 +154,13 @@ def check_update(repo, api_base='https://api.github.com', trusted=False):
 def apply_update(url, app_dir=None, trusted=False):
     """Tải bản mới, chỉ thay file chương trình (có sao lưu bản cũ). Trả về danh sách file đã thay."""
     app_dir = app_dir or APP_DIR
-    blob = _http_get(url, timeout=60, trusted=trusted)
+    if url.startswith('local:'):   # bản zip đặt sẵn trong thư mục update/ cạnh chương trình
+        with open(url[6:], 'rb') as f:
+            blob = f.read(UPDATE_MAX + 1)
+        if len(blob) > UPDATE_MAX:
+            raise ApiError('File cập nhật quá lớn')
+    else:
+        blob = _http_get(url, timeout=60, trusted=trusted)
     tmp = tempfile.mkdtemp(prefix='khoaveyon-upd-')
     try:
         zp = os.path.join(tmp, 'u.zip')
@@ -207,11 +242,17 @@ def update_check_once():
     """Hỏi GitHub một lần. Có bản mới thì ghi vào STATE['update'] để giao diện hiện hộp thoại hỏi giáo viên."""
     with CFG_LOCK:
         repo, auto = CFG.get('update_repo', ''), CFG.get('update_auto')
+    info = None
     try:
-        info = check_update(repo)
-    except Exception as e:  # noqa
-        log('Kiểm tra bản mới lỗi: %s' % e, 'warn')
-        return
+        info = check_local()
+    except Exception:  # noqa
+        info = None
+    if not info:
+        try:
+            info = check_update(repo)
+        except Exception as e:  # noqa
+            log('Kiểm tra bản mới lỗi: %s' % e, 'warn')
+            return
     old = STATE.get('update') or {}
     STATE['update'] = info
     if not info['newer']:

@@ -1667,12 +1667,24 @@ function Page-Stop {
             }
             Remove-Item -LiteralPath $pageBackup -Force -ErrorAction SilentlyContinue
             Log 'WEBONLY OFF: browser policy restored.'
+            Restart-Browsers
             return
         }
     }
     # No readable backup: just take the "*" we added back out of every blocklist
     foreach ($root in $pageRoots) { Page-SetListVals $root 'URLBlocklist' @(Page-ListVals $root 'URLBlocklist' | Where-Object { $_ -ne '*' }) }
     Log 'WEBONLY OFF: removed the block-all rule (no backup to restore from).'
+    Restart-Browsers
+}
+# Trinh duyet doc chinh sach luc khoi dong va giu trang loi da tai: dong chung lai de mo mang la vao duoc ngay, khong phai tu tat/mo lai
+function Restart-Browsers {
+    Get-Process -Name chrome, msedge, brave, browser, chromium -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+}
+# Mo mang hoan toan: go ca luat tuong lua lan chinh sach trinh duyet (bat ke truoc do dung che do nao), xoa bo nho DNS
+function Net-Open([switch]$Force) {
+    Remove-Rules
+    if ($Force -or (Test-Path -LiteralPath $pageBackup)) { Page-Stop }   # khong dung vao chinh sach cua nha truong neu KhoaVeyon chua tung bat
+    try { ipconfig /flushdns | Out-Null } catch {}
 }
 
 # ---------- modes ----------
@@ -1695,21 +1707,22 @@ switch ($mode) {
     }
 
     'blockall' {
+        if (Test-Path -LiteralPath $pageBackup) { Page-Stop }   # doi che do: go luat trinh duyet cu de mot nut mo la du
         Apply-Block @()
         Log 'Internet BLOCKED (LAN allowed)'
     }
 
-    'webonly' { Page-Start }
-    'weboff'  { Page-Stop }
+    'webonly' { Remove-Rules; Page-Start }
+    'weboff'  { Net-Open -Force; Log 'Internet ALLOWED (weboff)' }
 
     'allowall' {
-        Remove-Rules
-        # -webonly khoa bang chinh sach trinh duyet chu khong phai tuong lua, nen "Cho phep internet" cung phai go no (chi khi chinh KhoaVeyon da bat: co file sao luu)
-        if (Test-Path -LiteralPath $pageBackup) { Page-Stop }
+        # Hai nut "Cho phep internet" va "Bo chi-trang-cho-phep" deu mo hoan toan, khong can bam them nut nao
+        Net-Open
         Log 'Internet ALLOWED'
     }
 
     'allowpage' {
+        if (Test-Path -LiteralPath $pageBackup) { Page-Stop }
         Remove-Rules   # so DNS works while we look the sites up
         $items = @(Read-ColumnA (Join-Path $list 'AllowPage.xlsx'))
         $names = @()

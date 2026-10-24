@@ -29,9 +29,11 @@ class WebOnlyUnlockTest(unittest.TestCase):
 
     def test_allowall_also_lifts_browser_policy(self):
         b = _block(self.s, "    'allowall' {", "    'allowpage' {")
-        self.assertIn('Remove-Rules', b)
-        self.assertIn('Test-Path -LiteralPath $pageBackup', b)   # chỉ gỡ khi chính KhoaVeyon đã khóa (có file sao lưu)
-        self.assertIn('Page-Stop', b)
+        self.assertIn('Net-Open', b)
+        n = _block(self.s, 'function Net-Open', '# ---------- modes ----------')
+        self.assertIn('Remove-Rules', n)
+        self.assertIn('Test-Path -LiteralPath $pageBackup', n)   # chỉ gỡ khi chính KhoaVeyon đã khóa (có file sao lưu)
+        self.assertIn('Page-Stop', n)
 
     def test_second_lock_keeps_original_backup(self):
         b = _block(self.s, 'function Page-Start', 'function Page-Stop')
