@@ -216,8 +216,8 @@ function privacyRow() {
 
 
 /* Nhật ký dùng máy trong ~5 phút trước và lúc vi phạm (do script giám sát trên máy học sinh ghi kèm ảnh) */
-function recentLog(e) {
+function recentLog(e, open) {
   const r = e.recent || []; if (!r.length) return '';
   const fd = d => d < 60 ? d + 's' : Math.round(d / 60) + ' phút';
-  return `<details class="rlog"><summary>🕘 Em đã làm gì trong 5 phút trước (${r.length} mục)</summary><table class="tbl"><tbody>${r.slice().reverse().map(x => `<tr><td>${esc(x.t)}</td><td><b>${esc(x.p)}</b></td><td>${esc(x.w)}</td><td class="muted">${esc(fd(x.d))}</td></tr>`).join('')}</tbody></table></details>`;
+  return `<details class="rlog"${open ? ' open' : ''}><summary>🕘 Em đã làm gì trong 5 phút trước (${r.length} mục)</summary><table class="tbl"><tbody>${r.slice().reverse().map(x => `<tr><td>${esc(x.t)}</td><td><b>${esc(x.p)}</b>${x.h ? `<div class="muted">${esc(x.h)}</div>` : ''}</td><td>${esc(x.w)}</td><td class="muted">${esc(fd(x.d))}</td></tr>`).join('')}</tbody></table></details>`;
 }

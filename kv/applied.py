@@ -15,6 +15,7 @@ APPLY_CATS = {   # lệnh -> (nhóm, nhãn khi đang bật, bật?) để biết
     'lockrun-start': ('run', 'Chặn mở app ngoài DS', True), 'lockrun-stop': ('run', '', False),
     'lockapp-start': ('kiosk', 'Kiosk', True), 'lockapp-stop': ('kiosk', '', False),
     'blockall': ('net', 'Chặn internet', True), 'allowpage': ('net', 'Chỉ trang cho phép', True), 'allowall': ('net', '', False),
+    'webonly': ('net', 'Chỉ trang cho phép (trình duyệt)', True), 'weboff': ('net', '', False),
     'blockapp': ('blockapp', 'Chặn ứng dụng', True), 'unblockapp': ('blockapp', '', False),
     'lockdown': ('lockdown', 'Khóa Task Manager', True), 'unlock': ('lockdown', '', False),
     'mute': ('mute', 'Tắt tiếng', True), 'unmute': ('mute', '', False),

@@ -1619,12 +1619,26 @@ function Page-Start {
     $allow = Page-AllowFromList
     if ($allow.Count -eq 0) { Log 'WEBONLY refused: AllowPage.xlsx is empty (would block the whole web).'; return }
     if (-not (Test-Path -LiteralPath $pageDir)) { New-Item -ItemType Directory -Path $pageDir -Force | Out-Null }
+    # Dang o che do webonly roi (bam khoa lan hai, hoac thi + bam tay): GIU ban sao luu GOC. Neu ghi de bang trang thai da khoa thi -weboff chi khoi phuc lai
+    # chinh trang thai khoa va khong the mo lai duoc.
+    $orig = $null
+    if (Test-Path -LiteralPath $pageBackup) { try { $orig = @(Get-Content -LiteralPath $pageBackup -Raw | ConvertFrom-Json) } catch { $orig = $null } }
     $rec = New-Object System.Collections.Generic.List[object]
     foreach ($root in $pageRoots) {
-        $rootExisted = Test-Path -LiteralPath $root
-        $prevBlock = @(Page-ListVals $root 'URLBlocklist')
-        $prevAllow = @(Page-ListVals $root 'URLAllowlist')
-        $rec.Add([pscustomobject]@{ Root = $root; RootExisted = $rootExisted; Block = $prevBlock; Allow = $prevAllow })
+        $o = $null
+        if ($orig) { $o = @($orig | Where-Object { [string]$_.Root -eq $root })[0] }
+        if ($o) {
+            $rootExisted = [bool]$o.RootExisted
+            $prevBlock = @($o.Block | Where-Object { $_ })
+            $prevAllow = @($o.Allow | Where-Object { $_ })
+            $starWas = [bool]$o.StarWasThere
+        } else {
+            $rootExisted = Test-Path -LiteralPath $root
+            $prevBlock = @(Page-ListVals $root 'URLBlocklist')
+            $prevAllow = @(Page-ListVals $root 'URLAllowlist')
+            $starWas = ($prevBlock -contains '*')
+        }
+        $rec.Add([pscustomobject]@{ Root = $root; RootExisted = $rootExisted; Block = $prevBlock; Allow = $prevAllow; StarWasThere = $starWas })
         $nb = New-Object System.Collections.Generic.List[string]; foreach ($e in $prevBlock) { $nb.Add($e) }; if ($nb -notcontains '*') { $nb.Add('*') }
         Page-SetListVals $root 'URLBlocklist' $nb.ToArray()
         $na = New-Object System.Collections.Generic.List[string]; foreach ($e in $prevAllow) { $na.Add($e) }; foreach ($d in $allow) { if ($na -notcontains $d) { $na.Add($d) } }
@@ -1642,8 +1656,11 @@ function Page-Stop {
         if ($bk) {
             foreach ($r in @($bk)) {
                 if (-not ([string]$r.Root).StartsWith('HKLM:\SOFTWARE\Policies\', [StringComparison]::OrdinalIgnoreCase)) { continue }
-                Page-SetListVals $r.Root 'URLBlocklist' @($r.Block)
-                Page-SetListVals $r.Root 'URLAllowlist' @($r.Allow)
+                # '*' la do KhoaVeyon them. Ban sao luu cu (tu phien ban truoc) co the da bi ghi de bang trang thai da khoa nen luon bo '*', tru khi truoc do da co san (StarWasThere).
+                $blk = @($r.Block | Where-Object { $_ })
+                if (-not $r.StarWasThere) { $blk = @($blk | Where-Object { $_ -ne '*' }) }
+                Page-SetListVals $r.Root 'URLBlocklist' $blk
+                Page-SetListVals $r.Root 'URLAllowlist' @($r.Allow | Where-Object { $_ })
                 if (-not $r.RootExisted -and (Test-Path -LiteralPath $r.Root)) {
                     $k = Get-Item -LiteralPath $r.Root; if ($k.ValueCount -eq 0 -and $k.SubKeyCount -eq 0) { Remove-Item -LiteralPath $r.Root -Force -ErrorAction SilentlyContinue }
                 }
@@ -1687,6 +1704,8 @@ switch ($mode) {
 
     'allowall' {
         Remove-Rules
+        # -webonly khoa bang chinh sach trinh duyet chu khong phai tuong lua, nen "Cho phep internet" cung phai go no (chi khi chinh KhoaVeyon da bat: co file sao luu)
+        if (Test-Path -LiteralPath $pageBackup) { Page-Stop }
         Log 'Internet ALLOWED'
     }
 

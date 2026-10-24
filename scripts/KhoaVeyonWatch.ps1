@@ -123,19 +123,34 @@ function App-Allowed($n, $path) {
     if ($path) { foreach ($kp in $keepPaths) { if ($path -like "$kp*") { return $true } } }
     return $false
 }
-# Tra ve ten mien dang mo, '' neu la trang noi bo (newtab...), $null neu khong doc duoc thanh dia chi
+# Tra ve ten mien dang mo; '' neu la trang noi bo (newtab...) hoac o dia chi dang trong; $null neu khong doc duoc; '*keep*' neu hoc sinh dang go chu (giu ket qua lan truoc).
+# CHI doc dung thanh dia chi (Chromium: o Edit co ClassName OmniboxViewViews). Truoc day script quet MOI o Edit trong cua so, nen cac thao tac binh thuong trong Chrome bi tinh nham la vao trang cam:
+#  - hop thoai Luu/Mo tep: o "Ten tep" nhu bai-tap.docx giong mot ten mien
+#  - o nhap lieu cua trang web (vi du dap an 3.14) cung giong ten mien
+#  - dang go dia chi do (vi du wikipedia.or truoc khi go xong .org) bi doc nhu mot trang that
 function Get-BrowserHost($hwnd) {
     try {
         $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
-        $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
-        foreach ($e in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond)) {
+        $cls = [string]$root.Current.ClassName
+        if ($cls -eq '#32770') { return $null }   # hop thoai he thong (Luu/Mo tep, In...) khong phai trang web
+        $ctEdit = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
+        $omni = $null
+        if ($cls -like 'Chrome_WidgetWin*') {
+            $cOmni = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ClassNameProperty, 'OmniboxViewViews')
+            $omni = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.AndCondition($ctEdit, $cOmni)))
+        }
+        if ($omni) { $cands = @($omni) } else { $cands = @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $ctEdit)) }   # khong thay o dia chi (trinh duyet khac / phien ban khac): quet nhu cu
+        foreach ($e in $cands) {
             $vp = $null
-            if ($e.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$vp)) {
-                $v = ([string]$vp.Current.Value).Trim().ToLower()
-                if ($v -match '^(chrome|edge|about|brave|opera|vivaldi)://') { return '' }
-                if ($v -match '^(https?://)?([a-z0-9-]+\.)+[a-z0-9-]{2,}(:\d+)?([/?#].*)?$') {
-                    return (($v -replace '^[a-z]+://', '') -replace '[/?#:].*$', '') -replace '^www\.', ''
-                }
+            if (-not $e.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$vp)) { continue }
+            $v = ([string]$vp.Current.Value).Trim().ToLower()
+            if ($e.Current.HasKeyboardFocus) {   # dang go chu: chua phai trang that
+                if ($omni -and $v -eq '') { return '' }   # tab moi: o dia chi dang trong
+                return '*keep*'
+            }
+            if ($v -match '^(chrome|edge|about|brave|opera|vivaldi)://') { return '' }
+            if ($v -match '^(https?://)?([a-z0-9-]+\.)+[a-z0-9-]{2,}(:\d+)?([/?#].*)?$') {
+                return (($v -replace '^[a-z]+://', '') -replace '[/?#:].*$', '') -replace '^www\.', ''
             }
         }
     } catch {}
@@ -152,11 +167,11 @@ function Note-Active($proc, $title) {
 }
 function Recent-Log {
     $out = @()
-    $from = $hist.Count - 30; if ($from -lt 0) { $from = 0 }
+    $from = $hist.Count - 60; if ($from -lt 0) { $from = 0 }   # toi da 60 muc (du phu 5 phut ke ca khi em doi cua so lien tuc)
     for ($i = $from; $i -lt $hist.Count; $i++) {
         $x = $hist[$i]
         $w = [string]$x.w; if ($w.Length -gt 100) { $w = $w.Substring(0, 100) }
-        $out += [ordered]@{ p = $x.p; w = $w; t = $x.s.ToString('HH:mm:ss'); d = [int][Math]::Max(1, ($x.e - $x.s).TotalSeconds) }
+        $out += [ordered]@{ p = $x.p; w = $w; h = [string]$x.h; t = $x.s.ToString('HH:mm:ss'); d = [int][Math]::Max(1, ($x.e - $x.s).TotalSeconds) }
     }
     return ,$out
 }
@@ -305,8 +320,9 @@ while (-not (StopRequested)) {
             if ($browsers -contains $n) {
                 # doc thanh dia chi (UI Automation) ton thoi gian: chi doc lai khi doi cua so / tieu de, hoac sau 3 giay
                 $bk = "$h|$title"
-                if ($bk -ne $script:siteKey -or ((Get-Date) - $script:siteAt).TotalSeconds -ge 3) { $script:siteVal = Get-BrowserHost $h; $script:siteKey = $bk; $script:siteAt = Get-Date }
+                if ($bk -ne $script:siteKey -or ((Get-Date) - $script:siteAt).TotalSeconds -ge 3) { $r = Get-BrowserHost $h; if ($r -ne '*keep*') { $script:siteVal = $r }; $script:siteKey = $bk; $script:siteAt = Get-Date }
                 $site = $script:siteVal
+                if ($site -and $hist.Count -gt 0) { Add-Member -InputObject $hist[$hist.Count - 1] -NotePropertyName h -NotePropertyValue $site -Force }   # nhat ky ghi ca ten mien dang mo, khong chi tieu de tab
                 if ($site -and (Site-IsAi $site)) { $kind = 'ai'; $name = $site }
                 elseif ($site -and $allowDomains.Count -gt 0 -and -not (Site-Allowed $site)) { $kind = 'site'; $name = $site }
             } elseif ($aiApps -contains $n) {

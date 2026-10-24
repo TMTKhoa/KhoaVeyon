@@ -46,7 +46,8 @@ function viewReport() {
 function lightbox(e) {
   const el = document.createElement('div');
   el.className = 'lightbox';
-  el.innerHTML = `<img src="${imgUrl(e)}" alt=""><div class="cap">${e.student ? `🎓 <b>${esc(e.student)}</b>${e.cls ? ' · Lớp ' + esc(e.cls) : ''} · ` : (e.cls ? 'Lớp ' + esc(e.cls) + ' · ' : '')}<b>${esc(hn(e.host))}</b> · ${esc(e.text)}<br>${esc(e.date)} ${esc(e.time)}${e.user ? ' · ' + esc(e.user) : ''}${e.window ? '<br>' + esc(e.window) : ''}</div>`;
+  el.innerHTML = `<img src="${imgUrl(e)}" alt=""><div class="cap">${e.student ? `🎓 <b>${esc(e.student)}</b>${e.cls ? ' · Lớp ' + esc(e.cls) : ''} · ` : (e.cls ? 'Lớp ' + esc(e.cls) + ' · ' : '')}<b>${esc(hn(e.host))}</b> · ${esc(e.text)}<br>${esc(e.date)} ${esc(e.time)}${e.user ? ' · ' + esc(e.user) : ''}${e.window ? '<br>' + esc(e.window) : ''}${(e.recent || []).length ? `<div class="lbrec">${recentLog(e)}</div>` : ''}</div>`;
+  el.querySelector('.lbrec') && (el.querySelector('.lbrec').onclick = ev => ev.stopPropagation());   // bấm vào nhật ký thì không đóng ảnh
   const close = () => { el.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = ev => { if (ev.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);

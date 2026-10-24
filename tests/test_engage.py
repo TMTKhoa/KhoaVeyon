@@ -133,9 +133,9 @@ class ExtrasTest(unittest.TestCase):
 class MonitorTest(unittest.TestCase):
     def test_recent_clean(self):
         from kv import alerts
-        r = alerts._recent_clean([{'p': 'chrome', 'w': 'x' * 500, 't': '10:00:01', 'd': 99999999}, 'bad'] + [{}] * 60)
-        self.assertEqual(len(r), 30 - 1 + 0 if False else len(r)); self.assertLessEqual(len(r), 30)
+        r = alerts._recent_clean([{'p': 'chrome', 'w': 'x' * 500, 't': '10:00:01', 'd': 99999999}, 'bad'] + [{}] * 10)
         self.assertEqual(len(r[0]['w']), 100); self.assertEqual(r[0]['d'], 86400)
+        self.assertLessEqual(len(alerts._recent_clean([{}] * 200)), 60)   # tối đa 60 mục, giữ các mục mới nhất
 
     def test_events_act_hello_viol(self):
         from kv import student, alerts

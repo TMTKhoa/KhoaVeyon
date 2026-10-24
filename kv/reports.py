@@ -53,6 +53,18 @@ def report_events(rng):
     return sorted((e for e in seen.values() if e.get('ts', 0) >= lo), key=lambda e: e['ts'])
 
 
+def recent_text(rec, sep=' | '):
+    """Nhật ký 5 phút của học sinh thành một dòng chữ: giờ ứng dụng [trang web] tiêu đề (thời gian), cũ -> mới."""
+    out = []
+    for x in rec or []:
+        if not isinstance(x, dict):
+            continue
+        d = x.get('d') or 0
+        out.append('%s %s%s%s (%s)' % (x.get('t', ''), x.get('p', ''), ' [%s]' % x['h'] if x.get('h') else '',
+                                       ' ' + x['w'] if x.get('w') else '', '%ds' % d if d < 60 else '%d phút' % round(d / 60)))
+    return sep.join(out)
+
+
 def report_episodes(events, gap):
     """Gộp các ảnh liên tiếp của cùng máy + cùng trang/ứng dụng (cách nhau <= gap giây) thành một lần vi phạm."""
     out, last = [], {}
@@ -68,7 +80,7 @@ def report_episodes(events, gap):
         else:
             g = {'host': e['host'], 'type': e['type'], 'name': e['name'], 'user': e.get('user', ''), 'window': e.get('window', ''),
                  'date': e['date'], 'time': e['time'], 'first_ts': e['ts'], 'last_ts': e['ts'], 'shots': 1,
-                 'student': e.get('student', ''), 'cls': e.get('cls', ''), 'seat': e.get('seat', 0), 'imgs': [e['img']] if e.get('img') else []}
+                 'student': e.get('student', ''), 'cls': e.get('cls', ''), 'seat': e.get('seat', 0), 'recent': e.get('recent') or [], 'imgs': [e['img']] if e.get('img') else []}
             out.append(g)
             last[k] = g
     return out
@@ -199,9 +211,9 @@ def report_write_xlsx(rep, path):
           [(x['student'], x['cls'], x['days'], x['count']) for x in rep['repeat_students']], [28, 10, 18, 16])
     sheet(wb.create_sheet('Lặp lại nhiều ngày'), ['Nội dung', 'Loại', 'Số ngày', 'Số lần', 'Số máy'],
           [(x['name'], kind(x['type']), x['days'], x['count'], x['hosts']) for x in rep.get('chronic_items', [])], [44, 14, 10, 10, 10])
-    sheet(wb.create_sheet('Chi tiết'), ['Ngày', 'Giờ', 'Học sinh', 'Lớp', 'Máy', 'Tài khoản', 'Loại', 'Nội dung', 'Tiêu đề cửa sổ', 'Ảnh'],
-          [(e['date'], e['time'], e.get('student', ''), e.get('cls', ''), e['host'], e.get('user', ''), kind(e['type']), e['name'], e.get('window', ''), e.get('img', '')) for e in rep['_events']],
-          [12, 10, 26, 8, 16, 16, 12, 36, 60, 60])
+    sheet(wb.create_sheet('Chi tiết'), ['Ngày', 'Giờ', 'Học sinh', 'Lớp', 'Máy', 'Tài khoản', 'Loại', 'Nội dung', 'Tiêu đề cửa sổ', 'Ảnh', '5 phút trước đó (cũ → mới)'],
+          [(e['date'], e['time'], e.get('student', ''), e.get('cls', ''), e['host'], e.get('user', ''), kind(e['type']), e['name'], e.get('window', ''), e.get('img', ''), recent_text(e.get('recent'))) for e in rep['_events']],
+          [12, 10, 26, 8, 16, 16, 12, 36, 60, 60, 120])
     wb.save(path)
 
 
@@ -259,7 +271,8 @@ def report_write_html(rep, path, info=None):
             E(who), E(g['cls'] or ''), E(g['host']), (' · chỗ %d' % g['seat']) if g.get('seat') else '',
             E(g['date']), E(g['time']), kind(g['type']), E(g['name']),
             ('<div class="w">%s</div>' % E(g['window'])) if g.get('window') else '',
-            ('<div class="im">%s</div>' % ''.join(imgs)) if imgs else ''))
+            (('<details class="w"><summary>5 phút trước đó</summary>%s</details>' % E(recent_text(g.get('recent'), ' › '))) if g.get('recent') else '') +
+            (('<div class="im">%s</div>' % ''.join(imgs)) if imgs else '')))
     meta = ' · '.join(x for x in [info.get('cls') and 'Lớp %s' % info['cls'], info.get('subject'), info.get('teacher')] if x)
     html = """<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Báo cáo vi phạm - %(label)s</title><style>
 body{font:14px/1.45 "Segoe UI",Arial,sans-serif;color:#1b2540;margin:24px auto;max-width:900px;padding:0 16px}

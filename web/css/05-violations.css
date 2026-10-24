@@ -25,6 +25,7 @@
 .lightbox{position:fixed;inset:0;background:rgba(5,9,20,.88);z-index:80;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px;animation:fade .15s}
 .lightbox img{max-width:96vw;max-height:82vh;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .lightbox .cap{color:#fff;text-align:center;line-height:1.5;max-width:90vw;word-break:break-word}
+.lightbox .lbrec{margin-top:6px;text-align:left;max-height:30vh;overflow:auto;background:#fff;color:#0f172a;border-radius:8px;padding:6px 10px}.lightbox .lbrec .muted{color:#64748b}
 .bye{position:fixed;inset:0;background:var(--bg);display:grid;place-items:center;text-align:center;z-index:100}
 /* Bộ sưu tập ảnh vi phạm */
 .ghead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 2px 8px;font-size:15px}

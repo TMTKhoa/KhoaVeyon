@@ -171,13 +171,13 @@ def collect_and_beep(cfg, host):
 def _recent_clean(v):
     """Nhật ký 5 phút do máy học sinh gửi kèm: chỉ giữ dạng danh sách ngắn, chuỗi đã cắt độ dài."""
     out = []
-    for x in (v if isinstance(v, list) else [])[:30]:
+    for x in (v if isinstance(v, list) else [])[-60:]:   # giữ 60 mục MỚI nhất
         if isinstance(x, dict):
             try:
                 d = max(0, min(86400, int(x.get('d') or 0)))
             except (TypeError, ValueError):
                 d = 0
-            out.append({'p': _clip(x.get('p'), 40), 'w': _clip(x.get('w'), 100), 't': _clip(x.get('t'), 8), 'd': d})
+            out.append({'p': _clip(x.get('p'), 40), 'w': _clip(x.get('w'), 100), 'h': _clip(x.get('h'), 80), 't': _clip(x.get('t'), 8), 'd': d})
     return out
 
 

@@ -130,7 +130,7 @@ def api_gallery(q):
     page = []
     for e in sel[offset:offset + limit]:
         p = evidence_abs(e['img'])
-        it = {k: e.get(k, '') for k in ('host', 'pc', 'user', 'type', 'name', 'window', 'date', 'time', 'ts', 'img', 'text', 'cls', 'student', 'seat')}
+        it = {k: e.get(k, '') for k in ('host', 'pc', 'user', 'type', 'name', 'window', 'date', 'time', 'ts', 'img', 'text', 'cls', 'student', 'seat', 'recent')}
         it['exists'] = bool(p and os.path.isfile(p))
         page.append(it)
     facets = {
