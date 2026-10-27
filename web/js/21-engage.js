@@ -168,6 +168,11 @@ document.addEventListener('change', async e => {
     try { await api('/api/hand_option', {enabled: on, hosts: hs}); if (hs.length) openLog(); S.interact.hand_enabled = on; toast(on ? 'Đã bật nút giơ tay' : 'Đã tắt nút giơ tay trên máy học sinh', 'ok'); } catch (err) { toast(err.message, 'err'); }
     return;
   }
+  if (t.dataset && t.dataset.ev === 'baropt') {
+    const on = t.checked, hs = S.hosts.slice();
+    try { await api('/api/bar_option', {enabled: on, hosts: hs}); if (hs.length) openLog(); S.interact.bar_enabled = on; toast(on ? 'Đã hiện lại thanh hỗ trợ học sinh' : 'Đã tắt thanh hỗ trợ học sinh trên máy học sinh', 'ok'); } catch (err) { toast(err.message, 'err'); }
+    return;
+  }
   if (t.id === 'wPreset' && t.value) {
     const p = S.wall.presets[t.value]; if (!p) return;
     Object.assign(S.wspec, p); S.wbgData = '';

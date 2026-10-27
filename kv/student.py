@@ -195,7 +195,7 @@ def student_overview(since=0):
         subs = [dict(s) for s in SUBMITS[:60]]
         ev = [dict(e) for e in EVENTS if e['seq'] > since]
         last = SEQ[0]
-    return {'hand_enabled': bool(SCHOOL.get('hand_enabled', True)), 'hands': hands, 'submits': subs, 'events': ev, 'last': last, 'root': submissions_root()}
+    return {'hand_enabled': bool(SCHOOL.get('hand_enabled', True)), 'bar_enabled': bool(SCHOOL.get('bar_enabled', True)), 'hands': hands, 'submits': subs, 'events': ev, 'last': last, 'root': submissions_root()}
 
 
 def api_student(q):

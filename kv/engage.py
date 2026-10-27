@@ -243,6 +243,7 @@ def transition_extras(old, new, hosts, mode_wall):
         follow = SCHOOL.get('wall_follow')
         hand_on = SCHOOL.get('hand_enabled', True)
         act_on = SCHOOL.get('act_enabled', True)
+        bar_on = SCHOOL.get('bar_enabled', True)
     if not hosts:
         return
     if follow and not mode_wall:
@@ -253,8 +254,8 @@ def transition_extras(old, new, hosts, mode_wall):
             with SCHOOL_LOCK:
                 SCHOOL['wall_follow'] = None
             school_save()
-    if not hand_on or not act_on:   # máy bật sau khi giáo viên tắt nút giơ tay / báo cửa sổ vẫn nhận lại cài đặt
-        start_job(send_message, hosts, {'type': 'config', 'hand': hand_on, 'act': act_on})
+    if not hand_on or not act_on or not bar_on:   # máy bật sau khi giáo viên tắt nút giơ tay / báo cửa sổ / thanh hỗ trợ vẫn nhận lại cài đặt
+        start_job(send_message, hosts, {'type': 'config', 'hand': hand_on, 'act': act_on, 'bar': bar_on})
 
 
 # ---------------------------------------------------------------- nút giơ tay
@@ -270,6 +271,19 @@ def api_hand_option(b):
     hosts = clean_hosts(b.get('hosts'))
     if hosts:
         start_job(send_message, hosts, {'type': 'config', 'hand': on})
+    return {'ok': True, 'enabled': on, 'count': len(hosts)}
+
+
+# ---------------------------------------------------------------- thanh hỗ trợ học sinh (nút xanh góc phải dưới)
+def api_bar_option(b):
+    """Ẩn/hiện nút nổi của Trợ lý học sinh trên máy học sinh. Ẩn chỉ là tạm: trợ lý vẫn chạy, vẫn nhận lệnh từ giáo viên."""
+    on = bool(b.get('enabled'))
+    with SCHOOL_LOCK:
+        SCHOOL['bar_enabled'] = on
+    school_save()
+    hosts = clean_hosts(b.get('hosts'))
+    if hosts:
+        start_job(send_message, hosts, {'type': 'config', 'bar': on})
     return {'ok': True, 'enabled': on, 'count': len(hosts)}
 
 

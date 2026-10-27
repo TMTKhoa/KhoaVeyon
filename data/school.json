@@ -40,6 +40,7 @@
  "lock_style": null,
  "hand_enabled": true,
  "act_enabled": true,
+ "bar_enabled": true,
  "attendance": {},
  "attend_notify": true,
  "auto_announce": false,

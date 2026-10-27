@@ -54,7 +54,8 @@ function viewInteract() {
   }
   return `<div class="stack">
     <section class="card"><h3>✋ Học sinh giơ tay <span class="badge">${I.hands.length}</span></h3>
-      <label class="switch" style="margin-bottom:8px"><input type="checkbox" data-ev="handopt" ${I.hand_enabled === false ? '' : 'checked'}><span class="tr"></span><span>Cho phép học sinh giơ tay (tắt thì nút “Giơ tay” biến mất trên máy học sinh, chỉ còn “Nộp bài”)</span></label>${hands}</section>
+      <label class="switch" style="margin-bottom:8px"><input type="checkbox" data-ev="handopt" ${I.hand_enabled === false ? '' : 'checked'}><span class="tr"></span><span>Cho phép học sinh giơ tay (tắt thì nút “Giơ tay” biến mất trên máy học sinh, chỉ còn “Nộp bài”)</span></label>
+      <label class="switch" style="margin-bottom:8px"><input type="checkbox" data-ev="baropt" ${I.bar_enabled === false ? '' : 'checked'}><span class="tr"></span><span>Hiện thanh hỗ trợ học sinh (nút xanh ở góc phải dưới màn hình). Tắt tạm khi nó che bài; học sinh không giơ tay/nộp bài bằng nút được nhưng vẫn nhận tin nhắn, khóa màn hình, bài kiểm tra từ thầy/cô)</span></label>${hands}</section>
     <section class="card"><h3>Nhắn tin và khóa màn hình</h3>
       <p class="sub">Gửi tới các máy đang chọn (không chọn = tất cả). Tin nhắn hiện giữa màn hình học sinh. “Khóa màn hình” phủ kín màn hình kèm lời nhắn cho đến khi bạn bấm “Mở màn hình”; đây là khóa mềm (học sinh có thể tắt bằng Task Manager), cần khóa chắc thì dùng thêm “Khóa toàn bộ” ở trang Điều khiển.</p>
       ${quickChips('#ixText')}

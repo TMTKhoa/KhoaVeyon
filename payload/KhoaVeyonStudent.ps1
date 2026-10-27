@@ -588,13 +588,20 @@ try {
     $CfgFile = Join-Path $Root 'student.cfg.json'
     $script:handOn = $true
     $script:actOn = $true
+    $script:barOn = $true
     $script:liveUntil = [DateTime]::MinValue; $script:liveSec = 5; $script:lastThumb = [DateTime]::MinValue
-    try { if (Test-Path -LiteralPath $CfgFile) { $c0 = Get-Content -LiteralPath $CfgFile -Raw -Encoding UTF8 | ConvertFrom-Json; if ($c0.hand -eq $false) { $script:handOn = $false }; if ($c0.act -eq $false) { $script:actOn = $false } } } catch { }
+    try { if (Test-Path -LiteralPath $CfgFile) { $c0 = Get-Content -LiteralPath $CfgFile -Raw -Encoding UTF8 | ConvertFrom-Json; if ($c0.hand -eq $false) { $script:handOn = $false }; if ($c0.act -eq $false) { $script:actOn = $false }; if ($c0.bar -eq $false) { $script:barOn = $false } } } catch { }
     function Update-Pill {
         $eye = if ($script:liveUntil -gt [DateTime]::Now) { [string][char]0x25CF + ' ' } else { '' }   # chấm tròn báo "giáo viên đang xem màn hình"
         if (-not $script:handOn) { $script:float.BackColor = [System.Drawing.Color]::FromArgb(37, 99, 235); $script:pill.Text = $eye + 'Nộp bài'; return }
         if ($script:raised) { $script:float.BackColor = [System.Drawing.Color]::FromArgb(234, 88, 12); $script:pill.Text = $eye + [string][char]0x270B + ' Đang giơ tay' }
         else { $script:float.BackColor = [System.Drawing.Color]::FromArgb(37, 99, 235); $script:pill.Text = $eye + [string][char]0x270B + ' Giơ tay' }
+    }
+    # ẩn/hiện nút nổi (thanh hỗ trợ). Ẩn chỉ là Hide(): trợ lý vẫn chạy, các cửa sổ khác (tin nhắn, khóa, bài kiểm tra) vẫn hiện bình thường
+    function Apply-Bar {
+        try {
+            if ($script:barOn) { $script:float.Show(); $script:float.TopMost = $true } else { $script:float.Hide() }
+        } catch { Log ('bar: ' + $_.Exception.Message) }
     }
     function Toggle-Hand {
         if (-not $script:handOn) { return }
@@ -620,6 +627,7 @@ try {
     $script:pill.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
     $script:pill.Cursor = [System.Windows.Forms.Cursors]::Hand
     $script:float.Controls.Add($script:pill)
+    $script:float.Add_Shown({ if (-not $script:barOn) { Apply-Bar } })   # Application.Run luôn hiện form lần đầu, nên ẩn lại ngay nếu đang tắt
     Update-Pill
 
     $menu = New-Object System.Windows.Forms.ContextMenuStrip
@@ -862,9 +870,11 @@ try {
                             else { $script:liveUntil = [DateTime]::MinValue }
                             Update-Pill
                         }
-                        if ($msg.hand -ne $null -or $msg.act -ne $null) {
+                        if ($msg.hand -ne $null -or $msg.act -ne $null -or $msg.bar -ne $null) {
                             if ($msg.hand -ne $null) { $script:handOn = ($msg.hand -eq $true) }
-                            [System.IO.File]::WriteAllText($CfgFile, (@{ hand = $script:handOn; act = $script:actOn } | ConvertTo-Json -Compress), $utf8)
+                            if ($msg.bar -ne $null) { $script:barOn = ($msg.bar -eq $true) }
+                            [System.IO.File]::WriteAllText($CfgFile, (@{ hand = $script:handOn; act = $script:actOn; bar = $script:barOn } | ConvertTo-Json -Compress), $utf8)
+                            Apply-Bar
                             $miHand.Visible = $script:handOn
                             if (-not $script:handOn -and $script:raised) { $script:raised = $false; Send-Event @{ t = 'hand'; on = $false } }
                             Update-Pill

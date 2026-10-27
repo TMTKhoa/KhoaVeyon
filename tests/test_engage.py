@@ -115,6 +115,18 @@ class ExtrasTest(unittest.TestCase):
     def test_tokens(self):
         self.assertEqual(engage.fill_tokens('Lớp {lop} - {ten} - {may}', 'An', '10A', 5), 'Lớp 10A - An - 5')
 
+    def test_bar_option(self):
+        with mock.patch.object(engage, 'start_job') as sj, mock.patch.object(engage, 'school_save'), \
+             mock.patch.object(engage, 'clean_hosts', lambda h: list(h or [])), mock.patch.dict(engage.SCHOOL, {'bar_enabled': True, 'hand_enabled': True, 'act_enabled': True, 'wall_follow': None}):
+            r = engage.api_bar_option({'enabled': False, 'hosts': ['h']})
+            self.assertFalse(engage.SCHOOL['bar_enabled']); self.assertEqual(r['count'], 1)
+            self.assertEqual(sj.call_args[0][2], {'type': 'config', 'bar': False})
+            sj.reset_mock()
+            engage.transition_extras('1', '2', ['h'], False)   # máy bật sau đó vẫn nhận lại cài đặt ẩn thanh
+            self.assertEqual(sj.call_args[0][2].get('bar'), False)
+            engage.api_bar_option({'enabled': True, 'hosts': []}); sj.reset_mock()
+            engage.transition_extras('1', '2', ['h'], False); sj.assert_not_called()
+
     def test_hand_option_and_follow(self):
         with mock.patch.object(engage, 'start_job') as sj, mock.patch.object(engage, 'school_save'), \
              mock.patch.object(engage, 'clean_hosts', lambda h: list(h or [])), mock.patch.dict(engage.SCHOOL, {'hand_enabled': True, 'wall_follow': None}):

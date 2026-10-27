@@ -606,3 +606,6 @@ Tối ưu nhỏ, không đổi hành vi: bảng Trạng thái máy dò cổng Ve
 ## 5.3.0
 - Cập nhật không cần GitHub: thả file `KhoaVeyon-x.y.z.zip` bản mới vào thư mục `update/` cạnh chương trình; khi mở chương trình (hoặc bấm kiểm tra bản mới) sẽ hiện hộp thoại cập nhật, bấm là tự thay file và khởi động lại. Máy học sinh tự nhận dịch vụ mới như trước (so sánh mã băm với `payload`).
 - Lưu ý: kho GitHub mặc định `TMTKhoa/KhoaVeyon` là kho của tác giả gốc, không phải kho của bạn; bản cũ hơn 5.3.0 phải chép đè thủ công một lần.
+
+## 5.4.0
+- **Tắt/hiện thanh hỗ trợ học sinh** (trang Tương tác, công tắc "Hiện thanh hỗ trợ học sinh"): ẩn nút xanh ở góc phải dưới màn hình học sinh cho các máy đang chọn (không chọn = tất cả), bật lại bất cứ lúc nào. Trợ lý vẫn chạy nên tin nhắn, khóa màn hình, bài kiểm tra vẫn hiện; chỉ mất nút giơ tay / nộp bài / hướng dẫn. Cài đặt được nhớ trên máy học sinh và tự gửi lại khi máy bật sau. Lưu ý: nút này cũng là chỗ hiện chấm tròn báo "giáo viên đang xem màn hình", nên ẩn thì chấm đó cũng không hiện.
