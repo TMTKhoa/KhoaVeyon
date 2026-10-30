@@ -39,9 +39,7 @@ def _repair():
         with urllib.request.urlopen(req, timeout=60) as r:
             return r.read(80 * 1024 * 1024)
 
-    try:
-        rel = json.loads(get('https://api.github.com/repos/%s/releases/latest' % repo).decode('utf-8'))
-        z = zipfile.ZipFile(io.BytesIO(get(rel['zipball_url'])))
+    def extract(z):
         for n in z.namelist():
             parts = n.replace('\\', '/').split('/')
             if n.startswith(('/', '\\')) or '..' in parts or ':' in parts[0]:
@@ -60,6 +58,23 @@ def _repair():
                 shutil.copyfileobj(src, out)
             os.replace(dst + '.new', dst)
         return True
+
+    # Có sẵn file KhoaVeyon-x.y.z.zip trong thư mục update/ thì dùng luôn (không cần Internet/GitHub)
+    try:
+        updir = os.path.join(APP_DIR, 'update')
+        for name in sorted(os.listdir(updir), reverse=True):
+            if name.lower().endswith('.zip'):
+                try:
+                    with zipfile.ZipFile(os.path.join(updir, name)) as z:
+                        if extract(z):
+                            return True
+                except (OSError, zipfile.BadZipFile):
+                    continue
+    except OSError:
+        pass
+    try:
+        rel = json.loads(get('https://api.github.com/repos/%s/releases/latest' % repo).decode('utf-8'))
+        return extract(zipfile.ZipFile(io.BytesIO(get(rel['zipball_url']))))
     except Exception:  # noqa
         return False
 
@@ -72,7 +87,7 @@ def _fail(msg):
             f.write(msg + '\n')
     except OSError:
         pass
-    if os.name == 'nt':
+    if os.name == 'nt' and not os.environ.get('KHOAVEYON_NO_DIALOG'):
         try:
             import ctypes
             ctypes.windll.user32.MessageBoxW(None, msg, 'KhoaVeyon', 0x10)  # noqa
@@ -93,7 +108,8 @@ def _load():
     if not _repair():
         _fail('Thiếu thư mục kv (bản cập nhật cũ chỉ chép KhoaVeyon.py).\n'
               'Hãy tải bản KhoaVeyon mới nhất từ GitHub, giải nén đè lên thư mục chương trình '
-              '(data, lists, payload giữ nguyên) rồi chạy lại.')
+              '(data, lists, payload giữ nguyên) rồi chạy lại. Máy không có Internet: chép file KhoaVeyon-x.y.z.zip '
+              'vào thư mục update\\ cạnh chương trình rồi chạy lại, chương trình tự bổ sung.')
     from kv.app import run
     return run
 

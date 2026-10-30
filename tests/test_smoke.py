@@ -22,7 +22,8 @@ SKIP = shutil.ignore_patterns('data', 'runtime', 'tests', '__pycache__', '*.pyc'
 
 
 def _py(cwd, code):
-    return subprocess.run([sys.executable, '-c', code], cwd=cwd, capture_output=True, text=True, timeout=60)
+    return subprocess.run([sys.executable, '-c', code], cwd=cwd, capture_output=True, text=True, timeout=60,
+                          env=dict(os.environ, KHOAVEYON_NO_DIALOG='1'))
 
 
 class Base(unittest.TestCase):
