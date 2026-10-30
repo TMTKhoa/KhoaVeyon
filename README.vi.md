@@ -11,6 +11,8 @@
 
 > KhoaVeyon không thay thế Veyon. Nó điều khiển Veyon (và Agent nhỏ của riêng mình) qua giao diện dễ dùng hơn.
 
+**Phiên bản hiện tại: 5.5.0** (xem [kv/paths.py](kv/paths.py), biến `VERSION`, là nguồn số bản chính thức)
+
 ## Tính năng
 
 | | |
@@ -79,3 +81,21 @@ python -m unittest discover -s tests
 Chi tiết: [docs/HUONG-DAN-CHI-TIET.vi.md](docs/HUONG-DAN-CHI-TIET.vi.md) · [README-KhoaVeyon.md](README-KhoaVeyon.md) (lịch sử thay đổi, cấu trúc mã).
 
 > Đã kiểm thử bằng bộ test tự động và giao diện mô phỏng; hoạt động trên máy học sinh thật còn phụ thuộc cài đặt Veyon và mạng của bạn.
+
+## Khóa hình nền và icon Desktop (`-desklock-start` / `-desklock-stop`)
+
+Nút **Khóa hình nền và icon Desktop** (nhóm "Màn hình Desktop"). Tài khoản quản trị (giáo viên, IT) không bị ảnh hưởng.
+
+**Chuẩn bị trên mỗi máy học sinh** (hoặc chép qua trang Phân phối):
+
+- `C:\cmd\desktop\wallpaper.jpg` (hoặc `.png`, `.bmp`): hình nền bắt buộc.
+- `C:\cmd\desktop\icons\`: các shortcut (`.lnk`, `.url`) sẽ là bộ icon chung. Máy nào cũng hiện đúng bộ này, xếp cùng thứ tự theo tên.
+
+**Cách hoạt động**
+
+- Hình nền: chính sách Windows (HKLM) cấm đổi, cộng một tiến trình giữ trong phiên học sinh: ai đổi bằng cách nào (Settings, chuột phải "Set as desktop background", Paint, sửa registry) cũng bị đặt lại trong khoảng 1 giây.
+- Icon: shortcut chung nằm ở `C:\Users\Public\Desktop`; thư mục Desktop riêng của học sinh được dọn sạch (file cũ chuyển vào `Documents\Desktop-cu`) và không cho thêm, xóa, đổi tên. Kéo icon sang chỗ khác thì bị kéo về.
+- Cần chạy lại `-install` trên máy học sinh một lần (cập nhật dịch vụ KhoaVeyonAutoLog); sau khi bấm khóa, tiến trình giữ khởi động trong khoảng 30 giây.
+- Tính năng "hình nền theo tiết" (số máy, tên em) sẽ bị ghi đè khi đang khóa; bấm Mở khóa trước nếu muốn dùng.
+
+**Chưa kiểm chứng trên Windows thật:** chính sách HKLM trên các bản Windows khác nhau, và việc kéo icon về chỗ cũ bằng thông điệp ListView của Explorer (có thể không hiệu quả khi Explorer đang bật "Auto arrange icons").

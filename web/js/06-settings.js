@@ -41,8 +41,9 @@ function viewSettings() {
       <div style="margin-top:14px;display:flex;flex-direction:column;gap:12px">
         <label class="switch"><input type="checkbox" data-set="update_check" ${c.update_check ? 'checked' : ''}><span class="tr"></span><span>Tự kiểm tra bản mới mỗi lần khởi động</span></label>
         <label class="switch"><input type="checkbox" data-set="update_auto" ${c.update_auto ? 'checked' : ''}><span class="tr"></span><span>Tự cài và khởi động lại khi có bản mới (không khuyến khích, nên xem trước rồi bấm cập nhật)</span></label></div>
-      <div class="row" style="margin-top:14px"><button class="btn" data-act="checkupd">Kiểm tra bản mới</button></div>
-      <p class="hint">Bản cập nhật chạy bằng quyền của bạn và có thể gửi lệnh xuống máy học sinh. Chỉ dùng kho của chính bạn và bảo vệ tài khoản GitHub bằng xác thực hai bước.</p></section>
+      <div class="row" style="margin-top:14px"><button class="btn" data-act="checkupd">Kiểm tra bản mới</button> <button class="btn ghost" data-act="updatezip">📦 Cập nhật bằng file zip</button></div>
+      <p class="hint">Bản cập nhật chạy bằng quyền của bạn và có thể gửi lệnh xuống máy học sinh. Chỉ dùng kho của chính bạn và bảo vệ tài khoản GitHub bằng xác thực hai bước.</p>
+      <p class="hint">Máy không có Internet (hoặc không muốn dùng GitHub): tải sẵn file <code>KhoaVeyon-x.y.z.zip</code> ở máy khác rồi bấm <b>📦 Cập nhật bằng file zip</b>, chọn file đó. Chương trình tự đọc số bản trong file, mới hơn bản đang dùng (<b>${esc(S.st.version)}</b>) thì tự cập nhật và khởi động lại ngay; không mới hơn thì báo lỗi, không đụng gì. Cài đặt, danh sách, lớp, sơ đồ chỗ ngồi và Agent cũ luôn được giữ nguyên.</p></section>
     <div class="savebar"><div class="grow hint">Cài đặt lưu tại: ${esc(S.st.config_path)}</div><button class="btn primary" data-act="savesettings">💾 Lưu cài đặt</button></div>
   </div>`;
 }
@@ -112,6 +113,19 @@ async function maybeAskUpdate(u) {
       try { await api('/api/update_apply', {}); openLog(); toast('Đang cập nhật, cửa sổ mới sẽ tự mở sau vài giây', 'ok'); } catch (e) { toast(e.message, 'err'); }
     }
   } finally { updAsking = false; }
+}
+
+/* cập nhật thủ công: chọn 1 file zip, chương trình tự so số bản rồi cập nhật nếu mới hơn */
+async function updateFromZip(f) {
+  if (!/\.zip$/i.test(f.name)) { toast('Chỉ nhận file .zip (KhoaVeyon-x.y.z.zip)', 'err'); return; }
+  if (!(await modal({title: 'Cập nhật bằng file zip?', ok: 'Cập nhật', html: `<p style="margin-top:0">File: <b>${esc(f.name)}</b></p><p class="hint" style="margin-bottom:0">Chương trình kiểm tra số bản trong file. Mới hơn bản đang dùng (v${esc(S.st.version)}) thì thay file chương trình rồi tự khởi động lại; cài đặt, danh sách, lớp, sơ đồ chỗ ngồi và Agent cũ được giữ nguyên, bản cũ sao lưu trong data\\backup-${esc(S.st.version)}.</p>`}))) return;
+  try {
+    const sid = slowStart('/api/update_upload');
+    const r = await fetch('/api/update_upload?name=' + encodeURIComponent(f.name), {method: 'PUT', headers: {'X-Token': TOKEN}, body: f}).finally(() => slowEnd(sid));
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Lỗi cập nhật');
+    openLog(); toast('Đã cập nhật lên ' + d.latest + ', cửa sổ mới sẽ tự mở sau vài giây', 'ok');
+  } catch (e) { toast(e.message, 'err'); }
 }
 
 async function applyUpdate() {

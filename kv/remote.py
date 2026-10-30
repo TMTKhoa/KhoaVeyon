@@ -104,7 +104,7 @@ def action_via_agent(cfg, host):
 
 
 # Lệnh làm việc TRONG phiên của học sinh (HKCU, đóng ứng dụng, tắt tiếng, kiosk...): phải chạy bằng phiên học sinh, chạy bằng SYSTEM thì "xong" nhưng không thấy gì
-SERVICE_MODES = ('blockall', 'allowpage', 'allowall', 'webonly', 'weboff', 'blockapp', 'unblockapp', 'blockai', 'allowai')
+SERVICE_MODES = ('blockall', 'allowpage', 'allowall', 'webonly', 'weboff', 'blockapp', 'unblockapp', 'blockai', 'allowai', 'desklock-start', 'desklock-stop')
 
 
 def run_action(cfg, host, key, feature=None, timeout=30):

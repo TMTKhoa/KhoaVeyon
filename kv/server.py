@@ -206,6 +206,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if tmp:
                 _rm(tmp)
 
+    def _update_upload(self, u, n):
+        """PUT /api/update_upload?name=...: giáo viên tự chọn 1 file zip bản mới (không cần GitHub/Internet).
+        Mới hơn bản đang dùng thì tự cập nhật ngay, giữ nguyên data/, KhoaVeyonAgent.cfg, *.pem."""
+        from .updater import UPDATE_MAX, apply_local_zip, restart_self
+        if n <= 0 or n > UPDATE_MAX:
+            self.rfile.read(min(max(n, 0), MAX_UPLOAD))
+            self._send(400, {'error': 'File không hợp lệ (cần .zip, tối đa %d MB)' % (UPDATE_MAX // (1024 * 1024))})
+            return
+        name = dict(urllib.parse.parse_qsl(u.query)).get('name', '')
+        body = self.rfile.read(n)
+        try:
+            info, files = apply_local_zip(body, name)
+        except ApiError as e:
+            self._send(400, {'error': str(e)})
+            return
+        except Exception as e:  # noqa
+            self._send(400, {'error': 'File zip không hợp lệ (%s)' % type(e).__name__})
+            return
+        STATE['update'] = info
+        log('Đã cập nhật %d file từ file zip giáo viên chọn lên %s, đang khởi động lại...' % (len(files), info['latest']), 'ok')
+        self._send(200, {'ok': True, 'latest': info['latest'], 'files': len(files)})
+        restart_self()
+
     def do_PUT(self):
         """Tải file lên thư mục payload: PUT /api/upload?name=... (nội dung file là phần thân)."""
         if not self._guard():
@@ -214,6 +237,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         n = int(self.headers.get('Content-Length') or 0)
         if u.path == '/api/school_upload' and self._token_ok():
             self._school_upload(u, n)
+            return
+        if u.path == '/api/update_upload' and self._token_ok():
+            self._update_upload(u, n)
             return
         if u.path != '/api/upload' or not self._token_ok():
             self.rfile.read(min(n, MAX_UPLOAD))

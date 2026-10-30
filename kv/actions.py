@@ -22,6 +22,8 @@ ACTIONS = [
     ('unblockapp', 'Bỏ chặn ứng dụng', '-unblockapp', 'Bỏ chặn ứng dụng'),
     ('lockdown', 'Khóa Task Manager / Settings', '-lockdown', 'Khóa (Lockdown)'),
     ('unlock', 'Mở khóa Task Manager / Settings', '-unlock', 'Mở khóa (Unlock)'),
+    ('desklock-start', 'Khóa hình nền và icon Desktop', '-desklock-start', 'Khóa hình nền và icon Desktop'),
+    ('desklock-stop', 'Mở khóa hình nền và icon Desktop', '-desklock-stop', 'Mở khóa hình nền và icon Desktop'),
     ('mute', 'Tắt tiếng loa', '-mute', 'Tắt tiếng'),
     ('unmute', 'Bật tiếng loa', '-unmute', 'Bật tiếng'),
     ('clearhistory', 'Xóa lịch sử Chrome/Firefox', '-clearhistory', 'Xóa lịch sử trình duyệt'),
@@ -30,4 +32,4 @@ ACTIONS = [
 ]
 ACTION_BY_KEY = {a[0]: a for a in ACTIONS}
 # Các lệnh có thể làm mất bài chưa lưu của học sinh, nên hỏi lại trước khi chạy
-CONFIRM_KEYS = {'lockall-start', 'lockrun-start', 'lockapp-start', 'killapp', 'keepapp', 'clearhistory', 'blockai'}
+CONFIRM_KEYS = {'desklock-start', 'lockall-start', 'lockrun-start', 'lockapp-start', 'killapp', 'keepapp', 'clearhistory', 'blockai'}

@@ -75,6 +75,20 @@ def _from_branch(repo):
             'notes': 'Kho chưa có Release: so sánh số VERSION trong mã nguồn nhánh chính (HEAD).', 'page': 'https://github.com/%s' % repo}
 
 
+def _zip_version(fp):
+    """Số bản (chuỗi VERSION) đọc từ kv/paths.py trong 1 file zip, hoặc None nếu không phải bản KhoaVeyon."""
+    try:
+        with zipfile.ZipFile(fp) as z:
+            mains = [x for x in z.namelist() if x.replace('\\', '/').endswith('kv/paths.py')]
+            if not mains:
+                return None
+            txt = z.read(min(mains, key=len)).decode('utf-8', 'replace')
+    except (OSError, zipfile.BadZipFile, KeyError):
+        return None
+    m = re.search(r"VERSION\s*=\s*['\"]([^'\"]+)['\"]", txt)
+    return m.group(1) if m else None
+
+
 def check_local(app_dir=None):
     """Thư mục update/ cạnh chương trình: thả file KhoaVeyon-x.y.z.zip vào đó (không cần GitHub). Trả về thông tin bản mới nhất hơn VERSION, hoặc None."""
     d = os.path.join(app_dir or APP_DIR, 'update')
@@ -87,21 +101,50 @@ def check_local(app_dir=None):
         if not n.lower().endswith('.zip'):
             continue
         fp = os.path.join(d, n)
-        try:
-            with zipfile.ZipFile(fp) as z:
-                mains = [x for x in z.namelist() if x.replace('\\', '/').endswith('kv/paths.py')]
-                if not mains:
-                    continue
-                txt = z.read(min(mains, key=len)).decode('utf-8', 'replace')
-        except (OSError, zipfile.BadZipFile, KeyError):
+        ver = _zip_version(fp)
+        if not ver or _ver(ver) <= _ver(VERSION):
             continue
-        m = re.search(r"VERSION\s*=\s*['\"]([^'\"]+)['\"]", txt)
-        if not m or _ver(m.group(1)) <= _ver(VERSION):
-            continue
-        if best is None or _ver(m.group(1)) > _ver(best['latest']):
-            best = {'current': VERSION, 'latest': m.group(1), 'newer': True, 'url': 'local:' + fp,
+        if best is None or _ver(ver) > _ver(best['latest']):
+            best = {'current': VERSION, 'latest': ver, 'newer': True, 'url': 'local:' + fp,
                     'notes': 'Bản cài từ file %s trong thư mục update/' % n, 'page': ''}
     return best
+
+
+def apply_local_zip(data, name='update.zip', app_dir=None):
+    """Cập nhật thủ công bằng 1 file zip giáo viên tự chọn (không cần GitHub, không cần Internet):
+    lưu vào thư mục update/ cạnh chương trình, kiểm tra số bản (kv/paths.py trong zip) rồi, nếu mới hơn bản đang
+    dùng, tự dùng luôn để cập nhật bằng apply_update() như cơ chế GitHub (xem UPDATE_FILES/UPDATE_DIRS/
+    UPDATE_PAYLOAD_FILES: không đụng data/, KhoaVeyonAgent.cfg, *.pem nên không mất dữ liệu hay khóa Agent cũ).
+    Trả về (info, danh_sách_file_đã_thay); báo ApiError nếu file không phải .zip, hỏng, hoặc không mới hơn."""
+    if len(data) > UPDATE_MAX:
+        raise ApiError('File cập nhật quá lớn')
+    name = os.path.basename(name or 'update.zip')
+    if not name.lower().endswith('.zip'):
+        raise ApiError('Chỉ nhận file .zip (bản KhoaVeyon-x.y.z.zip)')
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name).strip(' .') or 'update.zip'
+    app_dir = app_dir or APP_DIR
+    updir = os.path.join(app_dir, 'update')
+    os.makedirs(updir, exist_ok=True)
+    dest = os.path.join(updir, name)
+    with open(dest, 'wb') as f:
+        f.write(data)
+    ver = _zip_version(dest)
+    if not ver:
+        try:
+            os.remove(dest)
+        except OSError:
+            pass
+        raise ApiError('File này không phải bản zip của KhoaVeyon (thiếu kv/paths.py), chưa cập nhật gì')
+    if _ver(ver) <= _ver(VERSION):
+        try:
+            os.remove(dest)
+        except OSError:
+            pass
+        raise ApiError('File này là bản %s, không mới hơn bản đang dùng (%s). Chưa cập nhật gì' % (ver, VERSION))
+    info = {'current': VERSION, 'latest': ver, 'newer': True, 'url': 'local:' + dest,
+            'notes': 'Bản cài từ file %s bạn vừa chọn' % name, 'page': ''}
+    files = apply_update(info['url'], app_dir)
+    return info, files
 
 
 def check_update(repo, api_base='https://api.github.com', trusted=False):
@@ -269,17 +312,22 @@ def update_check_once():
 
 
 def update_loop():
-    """Chạy nền: kiểm tra khi mở chương trình, rồi định kỳ nếu bật \"Tự kiểm tra bản mới\" và đã điền kho GitHub."""
+    """Chạy nền: kiểm tra khi mở chương trình, rồi định kỳ nếu bật \"Tự kiểm tra bản mới\" và đã điền kho GitHub.
+    Ngủ từng đoạn ngắn (không ngủ nguyên UPDATE_EVERY một lần) để giáo viên bật công tắc hoặc điền kho GitHub
+    giữa lúc chương trình đang chạy thì được nhận ngay, không phải chờ tới 6 giờ mới kiểm tra."""
     time.sleep(8)
+    last = 0.0
     while True:
         with CFG_LOCK:
             on = CFG.get('update_check') and (CFG.get('update_repo') or '').strip()
-        if on:
+        now = time.time()
+        if on and now - last >= UPDATE_EVERY:
+            last = now
             try:
                 update_check_once()
             except Exception:  # noqa
                 pass
-        time.sleep(UPDATE_EVERY)
+        time.sleep(30)
 
 
 def update_brief():

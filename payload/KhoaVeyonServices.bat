@@ -41,6 +41,11 @@ REM  -blockai            BLOCK ALL AI TOOLS: AI websites (browser policy + hosts
 REM                      AI built into the browser (Gemini in Chrome, Copilot in Edge,
 REM                      Firefox AI, Brave Leo) and AI desktop apps. Needs the service
 REM  -allowai            undo -blockai (puts back the settings that were there before)
+REM  -desklock-start     LOCK THE DESKTOP: wallpaper cannot be changed by any means (Settings, right-click
+REM                      "Set as desktop background", Paint, registry...: put back within ~1 second) and every
+REM                      PC shows the SAME desktop icons in the SAME places. Needs the service (-install).
+REM                      Put wallpaper.jpg (or .png/.bmp) in C:\cmd\desktop\ and the shortcuts (.lnk/.url) in C:\cmd\desktop\icons\
+REM  -desklock-stop      undo -desklock-start (Administrators are never affected)
 REM ============================================================
 
 REM ===== SETTINGS =====
@@ -87,6 +92,8 @@ if /i "%ACT%"=="-lockall-start"      set "MODE=lockall-start"
 if /i "%ACT%"=="-lockall-stop"       set "MODE=lockall-stop"
 if /i "%ACT%"=="-blockai"            set "MODE=blockai"
 if /i "%ACT%"=="-allowai"            set "MODE=allowai"
+if /i "%ACT%"=="-desklock-start"     set "MODE=desklock-start"
+if /i "%ACT%"=="-desklock-stop"      set "MODE=desklock-stop"
 if not defined MODE goto HELP
 
 REM These run in the kid's own session, so they need no admin rights and no service
@@ -119,7 +126,7 @@ if errorlevel 1 (
   powershell -NoProfile -Command "Start-Process '%SELF%' -ArgumentList '-install' -Verb RunAs"
   exit /b
 )
-for %%M in (blockall allowpage allowall webonly weboff blockapp unblockapp blockai allowai) do (
+for %%M in (blockall allowpage allowall webonly weboff blockapp unblockapp blockai allowai desklock-start desklock-stop) do (
   sc stop KhoaVeyonService_%%M >nul 2>&1
   sc delete KhoaVeyonService_%%M >nul 2>&1
   sc create KhoaVeyonService_%%M binPath= "cmd.exe /c %SELF% -%%M" start= demand >nul
@@ -180,7 +187,8 @@ call "%SELF%" -activitylog-stop
 call "%SELF%" -lockapp-stop
 call "%SELF%" -lockall-stop
 call "%SELF%" -allowai
-for %%M in (blockall allowpage allowall webonly weboff blockapp unblockapp blockai allowai) do (
+call "%SELF%" -desklock-stop
+for %%M in (blockall allowpage allowall webonly weboff blockapp unblockapp blockai allowai desklock-start desklock-stop) do (
   sc stop KhoaVeyonService_%%M >nul 2>&1
   sc delete KhoaVeyonService_%%M >nul 2>&1
 )
@@ -209,7 +217,7 @@ powershell -NoProfile -Command ^
 exit /b 0
 
 :HELP
-echo Usage: KhoaVeyonServices.bat [-install ^| -uninstall ^| -killapp ^| -blockall ^| -allowpage ^| -allowall ^| -webonly ^| -weboff ^| -blockapp ^| -unblockapp ^| -keepapp ^| -lockdown ^| -unlock ^| -mute ^| -unmute ^| -activitylog-start ^| -activitylog-stop ^| -exportlog ^| -lockapp-start ^| -lockapp-stop ^| -lockrun-start ^| -lockrun-stop ^| -lockall-start ^| -lockall-stop ^| -blockai ^| -allowai ^| -clearhistory]
+echo Usage: KhoaVeyonServices.bat [-install ^| -uninstall ^| -killapp ^| -blockall ^| -allowpage ^| -allowall ^| -webonly ^| -weboff ^| -blockapp ^| -unblockapp ^| -keepapp ^| -lockdown ^| -unlock ^| -mute ^| -unmute ^| -activitylog-start ^| -activitylog-stop ^| -exportlog ^| -lockapp-start ^| -lockapp-stop ^| -lockrun-start ^| -lockrun-stop ^| -lockall-start ^| -lockall-stop ^| -blockai ^| -allowai ^| -desklock-start ^| -desklock-stop ^| -clearhistory]
 exit /b 0
 
 #KVSVCSTART
@@ -415,16 +423,13 @@ public class KvAutoLogService : ServiceBase
     static void EnsureGuards()
     {
         try { EnsureTray(); } catch { }
-        string[] lines;
-        try
-        {
-            if (!File.Exists(GuardFile)) { return; }
-            lines = File.ReadAllLines(GuardFile);
-        }
+        string[] lines = new string[0];
+        try { if (File.Exists(GuardFile)) lines = File.ReadAllLines(GuardFile); }
         catch { return; }
 
         var cmds = new System.Collections.Generic.List<string>();
         foreach (string raw in lines) { string l = (raw ?? "").Trim(); if (l.Length > 0) cmds.Add(l); }
+        try { string dg = DeskGuardCmd(); if (dg != null) cmds.Add(dg); } catch { }
 
         var sessions = ActiveSessions();
         lock (Gate)
@@ -466,6 +471,17 @@ public class KvAutoLogService : ServiceBase
         if (pid <= 0) return false;
         try { Process.GetProcessById(pid); return true; }
         catch { return false; }
+    }
+
+    // Desktop lock (-desklock-start): KhoaVeyonDesk.ps1 keeps the wallpaper and the desktop icons in place in every student session.
+    // Both files sit in Program Files (admin-only); the flag desklock.on is removed by -desklock-stop.
+    static string DeskGuardCmd()
+    {
+        string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "KhoaVeyon");
+        string ps1 = Path.Combine(root, "KhoaVeyonDesk.ps1");
+        if (!File.Exists(Path.Combine(root, "desklock.on")) || !File.Exists(ps1)) return null;
+        string hb = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "KhoaVeyon", "desk");
+        return "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + ps1 + "\" -Out \"" + hb + "\"";
     }
 
     // Is this guard already running? Prefer the watch heartbeat file (-Out ...\alive.txt, refreshed every 10s);
@@ -2007,6 +2023,254 @@ while (-not (Test-Path `$stop)) {
         Remove-Item -Path ($pol + '\RestrictRun') -Recurse -Force -ErrorAction SilentlyContinue
         Restart-UserShell
         Log 'Open-block OFF (RestrictRun removed)'
+    }
+
+    'desklock-start' {
+        # Runs as SYSTEM (service KhoaVeyonService_desklock-start). Wallpaper + desktop icons are locked:
+        #   - wallpaper: Windows policies (HKLM) AND a guard in the student session that puts it back within ~1 s
+        #   - icons: same shortcuts on every PC (C:\Users\Public\Desktop), the students' own Desktop folders are emptied
+        #            (files go to Documents\Desktop-cu) and closed to adding/deleting/renaming; the guard drags icons back
+        $root    = Join-Path $env:ProgramFiles 'KhoaVeyon'
+        $deskSrc = Join-Path $dir 'desktop'
+        $iconSrc = Join-Path $deskSrc 'icons'
+        $wallSrc = Get-ChildItem -LiteralPath $deskSrc -File -ErrorAction SilentlyContinue | Where-Object { $_.BaseName -ieq 'wallpaper' -and $_.Extension -match '^\.(jpg|jpeg|png|bmp)$' } | Select-Object -First 1
+        $icons   = @(Get-ChildItem -LiteralPath $iconSrc -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -ine 'desktop.ini' })
+        if (-not $wallSrc -and $icons.Count -eq 0) {
+            Log ("DESKLOCK: nothing to lock. Put wallpaper.jpg (or .png/.bmp) in {0} and the shortcuts in {1}" -f $deskSrc, $iconSrc)
+        } else {
+            New-Item -ItemType Directory -Path (Join-Path $root 'desk') -Force | Out-Null
+            $pol = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies'
+            $wallDst = ''
+            if ($wallSrc) {
+                Get-ChildItem -LiteralPath (Join-Path $root 'desk') -Filter 'wallpaper.*' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+                $wallDst = Join-Path $root ('desk\wallpaper' + $wallSrc.Extension.ToLower())
+                Copy-Item -LiteralPath $wallSrc.FullName -Destination $wallDst -Force
+                foreach ($k in @("$pol\ActiveDesktop", "$pol\System", "$pol\Explorer")) { if (-not (Test-Path $k)) { New-Item -Path $k -Force | Out-Null } }
+                New-ItemProperty -Path "$pol\ActiveDesktop" -Name NoChangingWallPaper -Value 1 -PropertyType DWord -Force | Out-Null
+                New-ItemProperty -Path "$pol\Explorer" -Name NoThemesTab -Value 1 -PropertyType DWord -Force | Out-Null
+                New-ItemProperty -Path "$pol\System" -Name Wallpaper -Value $wallDst -PropertyType String -Force | Out-Null
+                New-ItemProperty -Path "$pol\System" -Name WallpaperStyle -Value '10' -PropertyType String -Force | Out-Null
+            }
+            $iconNames = @()
+            if ($icons.Count -gt 0) {
+                $iconNames = @($icons | ForEach-Object { $_.Name })
+                $pub = Join-Path $env:PUBLIC 'Desktop'
+                $bak = Join-Path $env:ProgramData 'KhoaVeyon\desk-backup\public'
+                New-Item -ItemType Directory -Path $pub, $bak -Force | Out-Null
+                foreach ($f in @(Get-ChildItem -LiteralPath $pub -Force -ErrorAction SilentlyContinue)) {
+                    if ($f.Name -ieq 'desktop.ini' -or $iconNames -icontains $f.Name) { continue }
+                    Move-Item -LiteralPath $f.FullName -Destination (Join-Path $bak $f.Name) -Force -ErrorAction SilentlyContinue
+                }
+                foreach ($f in $icons) { Copy-Item -LiteralPath $f.FullName -Destination (Join-Path $pub $f.Name) -Force }
+                $admins = @()
+                try { $admins = @(Get-LocalGroupMember -SID 'S-1-5-32-544' -ErrorAction Stop | ForEach-Object { ($_.Name -split '\\')[-1] }) } catch {}
+                foreach ($pr in @(Get-ChildItem (Join-Path $env:SystemDrive 'Users') -Directory -ErrorAction SilentlyContinue)) {
+                    if (@('Public','Default','Default User','All Users') -contains $pr.Name -or $pr.Name -like 'defaultuser*' -or $admins -icontains $pr.Name) { continue }
+                    $d = Join-Path $pr.FullName 'Desktop'
+                    if (-not (Test-Path -LiteralPath $d)) { continue }
+                    $old = Join-Path $pr.FullName 'Documents\Desktop-cu'
+                    foreach ($f in @(Get-ChildItem -LiteralPath $d -Force -ErrorAction SilentlyContinue)) {
+                        if ($f.Name -ieq 'desktop.ini') { continue }
+                        New-Item -ItemType Directory -Path $old -Force | Out-Null
+                        $to = Join-Path $old $f.Name
+                        if (Test-Path -LiteralPath $to) { $to = Join-Path $old ((Get-Date -Format 'yyyyMMdd-HHmmss-') + $f.Name) }
+                        Move-Item -LiteralPath $f.FullName -Destination $to -Force -ErrorAction SilentlyContinue
+                    }
+                    & icacls $d /deny '*S-1-5-4:(OI)(CI)(WD,AD,DC,DE)' /C | Out-Null
+                }
+            }
+            $guardSrc = @'
+# KhoaVeyonDesk.ps1 - chay TRONG PHIEN HOC SINH (do dich vu KhoaVeyonAutoLog giu song). Khong sua tay: -desklock-start ghi de file nay.
+param([string]$Out)
+$ErrorActionPreference = 'SilentlyContinue'
+$created = $false
+$mx = New-Object System.Threading.Mutex($true, 'Local\KhoaVeyonDeskGuard', [ref]$created)
+if (-not $created) { exit }
+$root    = Join-Path $env:ProgramFiles 'KhoaVeyon'
+$isAdmin = [bool]((& whoami /groups 2>$null) -match 'S-1-5-32-544')   # tai khoan quan tri (giao vien, IT) khong bi khoa
+if ($isAdmin) { try { New-Item -ItemType Directory -Path (Join-Path $env:ProgramData 'KhoaVeyon\desk') -Force | Out-Null; Set-Content -LiteralPath (Join-Path $env:ProgramData 'KhoaVeyon\desk\alive.txt') -Value 'admin' } catch {}; exit }
+$cfgPath = Join-Path $root 'desk.json'
+$flag    = Join-Path $root 'desklock.on'
+if (-not $Out) { $Out = Join-Path $env:ProgramData 'KhoaVeyon\desk' }
+New-Item -ItemType Directory -Path $Out -Force | Out-Null
+$alive = Join-Path $Out 'alive.txt'
+
+Add-Type -TypeDefinition @"
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class KvDesk
+{
+    [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindow(string c, string t);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr p, IntPtr a, string c, string t);
+    [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, int m, IntPtr w, IntPtr l);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out RECT r);
+    [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", CharSet = CharSet.Unicode)] public static extern int SetWall(int a, int b, string c, int d);
+    [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint a, bool i, uint pid);
+    [DllImport("kernel32.dll")] static extern IntPtr VirtualAllocEx(IntPtr p, IntPtr a, UIntPtr s, uint t, uint pr);
+    [DllImport("kernel32.dll")] static extern bool VirtualFreeEx(IntPtr p, IntPtr a, UIntPtr s, uint t);
+    [DllImport("kernel32.dll")] static extern bool ReadProcessMemory(IntPtr p, IntPtr a, byte[] b, int n, out int r);
+    [DllImport("kernel32.dll")] static extern bool WriteProcessMemory(IntPtr p, IntPtr a, byte[] b, int n, out int w);
+    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+    [StructLayout(LayoutKind.Sequential)] struct RECT { public int L, T, R, B; }
+
+    static readonly Dictionary<string, int[]> Acc = new Dictionary<string, int[]>();   // ten icon -> {thu tu, x, y} da dat
+
+    static IntPtr DesktopList()
+    {
+        IntPtr def = FindWindowEx(FindWindow("Progman", null), IntPtr.Zero, "SHELLDLL_DefView", null);
+        if (def == IntPtr.Zero)
+        {
+            IntPtr w = IntPtr.Zero;
+            while ((w = FindWindowEx(IntPtr.Zero, w, "WorkerW", null)) != IntPtr.Zero)
+            {
+                def = FindWindowEx(w, IntPtr.Zero, "SHELLDLL_DefView", null);
+                if (def != IntPtr.Zero) break;
+            }
+        }
+        return def == IntPtr.Zero ? IntPtr.Zero : FindWindowEx(def, IntPtr.Zero, "SysListView32", null);
+    }
+
+    static bool GetPos(IntPtr lv, IntPtr hp, IntPtr mem, int idx, out int x, out int y)
+    {
+        x = 0; y = 0;
+        SendMessage(lv, 0x1010, new IntPtr(idx), mem);            // LVM_GETITEMPOSITION
+        byte[] pt = new byte[8]; int r;
+        if (!ReadProcessMemory(hp, mem, pt, 8, out r)) return false;
+        x = BitConverter.ToInt32(pt, 0); y = BitConverter.ToInt32(pt, 4);
+        return true;
+    }
+
+    // Xep icon Desktop theo thu tu ten, cot doc tu goc tren-trai, giong het nhau tren moi may. Tra ve so icon da keo ve cho,
+    // 0 = dung het roi, -1 = chua tim thay Desktop.
+    public static int Arrange()
+    {
+        IntPtr lv = DesktopList(); if (lv == IntPtr.Zero) return -1;
+        uint pid; GetWindowThreadProcessId(lv, out pid);
+        IntPtr hp = OpenProcess(0x38, false, pid);                // VM_OPERATION | VM_READ | VM_WRITE
+        if (hp == IntPtr.Zero) return -1;
+        IntPtr mem = IntPtr.Zero;
+        try
+        {
+            int n = (int)SendMessage(lv, 0x1004, IntPtr.Zero, IntPtr.Zero);   // LVM_GETITEMCOUNT
+            if (n <= 0) return 0;
+            mem = VirtualAllocEx(hp, IntPtr.Zero, (UIntPtr)4096, 0x3000, 4);
+            if (mem == IntPtr.Zero) return -1;
+            int ptr = IntPtr.Size, off = ptr == 8 ? 24 : 20;
+            IntPtr tx = new IntPtr(mem.ToInt64() + 512);
+            var names = new List<KeyValuePair<string, int>>();
+            for (int i = 0; i < n; i++)
+            {
+                byte[] it = new byte[ptr == 8 ? 88 : 60];
+                Array.Copy(BitConverter.GetBytes(tx.ToInt64()), 0, it, off, ptr);    // pszText
+                Array.Copy(BitConverter.GetBytes(256), 0, it, off + ptr, 4);         // cchTextMax
+                int w; WriteProcessMemory(hp, mem, it, it.Length, out w);
+                SendMessage(lv, 0x1073, new IntPtr(i), mem);                         // LVM_GETITEMTEXTW
+                byte[] sb = new byte[512]; int r; ReadProcessMemory(hp, tx, sb, 512, out r);
+                string name = Encoding.Unicode.GetString(sb); int z = name.IndexOf('\0'); if (z >= 0) name = name.Substring(0, z);
+                names.Add(new KeyValuePair<string, int>(name, i));
+            }
+            names.Sort(delegate (KeyValuePair<string, int> a, KeyValuePair<string, int> b) { return string.Compare(a.Key, b.Key, StringComparison.OrdinalIgnoreCase); });
+            int sp = (int)SendMessage(lv, 0x1033, IntPtr.Zero, IntPtr.Zero);         // LVM_GETITEMSPACING
+            int cx = sp & 0xFFFF, cy = (sp >> 16) & 0xFFFF; if (cx < 40) cx = 80; if (cy < 40) cy = 96;
+            RECT rc; GetClientRect(lv, out rc);
+            int rows = Math.Max(1, (rc.B - rc.T) / cy);
+            int moved = 0;
+            for (int k = 0; k < names.Count; k++)
+            {
+                int idx = names[k].Value, x, y;
+                if (!GetPos(lv, hp, mem, idx, out x, out y)) continue;
+                int[] a; bool ok = Acc.TryGetValue(names[k].Key, out a) && a[0] == k && Math.Abs(x - a[1]) <= 2 && Math.Abs(y - a[2]) <= 2;
+                if (ok) continue;
+                int wantX = (k / rows) * cx, wantY = (k % rows) * cy;
+                SendMessage(lv, 0x100F, new IntPtr(idx), new IntPtr((wantY << 16) | (wantX & 0xFFFF)));   // LVM_SETITEMPOSITION
+                if (GetPos(lv, hp, mem, idx, out x, out y)) Acc[names[k].Key] = new int[] { k, x, y };
+                moved++;
+            }
+            return moved;
+        }
+        finally
+        {
+            if (mem != IntPtr.Zero) VirtualFreeEx(hp, mem, UIntPtr.Zero, 0x8000);
+            CloseHandle(hp);
+        }
+    }
+}
+"@
+[KvDesk]::SetProcessDPIAware() | Out-Null
+
+function Set-Reg($path, $name, $val, $type) {
+    if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }
+    $cur = (Get-ItemProperty -Path $path -Name $name).$name
+    if ("$cur" -ne "$val") { New-ItemProperty -Path $path -Name $name -Value $val -PropertyType $type -Force | Out-Null }
+}
+function Read-Cfg { try { Get-Content -LiteralPath $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json } catch { $null } }
+function Move-Stray($dir) {   # moi thu nam tren Desktop cua hoc sinh (tru desktop.ini) duoc chuyen sang Documents\Desktop-cu
+    if (-not (Test-Path -LiteralPath $dir)) { return }
+    $dst = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Desktop-cu'
+    foreach ($f in @(Get-ChildItem -LiteralPath $dir -Force)) {
+        if ($f.Name -ieq 'desktop.ini') { continue }
+        New-Item -ItemType Directory -Path $dst -Force | Out-Null
+        $to = Join-Path $dst $f.Name
+        if (Test-Path -LiteralPath $to) { $to = Join-Path $dst ((Get-Date -Format 'yyyyMMdd-HHmmss-') + $f.Name) }
+        Move-Item -LiteralPath $f.FullName -Destination $to -Force
+    }
+}
+
+$tick = 0
+while (Test-Path -LiteralPath $flag) {
+    $c = Read-Cfg
+    if ($c -and $c.wall -and (Test-Path -LiteralPath $c.wall)) {
+        Set-Reg 'HKCU:\Control Panel\Desktop' 'WallpaperStyle' '10' 'String'
+        Set-Reg 'HKCU:\Control Panel\Desktop' 'TileWallpaper' '0' 'String'
+        Set-Reg 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Wallpapers' 'BackgroundType' 0 'DWord'   # 0 = mot hinh (khong trinh chieu, khong Spotlight)
+        $cur = (Get-ItemProperty 'HKCU:\Control Panel\Desktop').WallPaper
+        if ($cur -ne $c.wall) { [KvDesk]::SetWall(20, 0, [string]$c.wall, 3) | Out-Null }   # ai doi hinh nen bang cach nao cung bi dat lai trong ~1 giay
+    }
+    if ($c -and $c.icons) {
+        if ($tick % 3 -eq 0) { Move-Stray ([Environment]::GetFolderPath('Desktop')) }
+        [KvDesk]::Arrange() | Out-Null
+    }
+    if ($tick % 10 -eq 0) { Set-Content -LiteralPath $alive -Value (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') }
+    $tick++
+    Start-Sleep -Seconds 1
+}
+'@
+            Set-Content -LiteralPath (Join-Path $root 'KhoaVeyonDesk.ps1') -Value $guardSrc -Encoding UTF8
+            ([ordered]@{ wall = $wallDst; icons = $iconNames } | ConvertTo-Json) | Set-Content -LiteralPath (Join-Path $root 'desk.json') -Encoding UTF8
+            Set-Content -LiteralPath (Join-Path $root 'desklock.on') -Value (Get-Date -Format 's')
+            Log ("DESKLOCK ON. Wallpaper: {0}. Icons: {1}. The guard starts in the student session within ~30 s (service KhoaVeyonAutoLog)." -f $(if ($wallDst) { $wallDst } else { '(not locked)' }), ($iconNames -join ', '))
+        }
+    }
+
+    'desklock-stop' {
+        $root = Join-Path $env:ProgramFiles 'KhoaVeyon'
+        Remove-Item -LiteralPath (Join-Path $root 'desklock.on') -Force -ErrorAction SilentlyContinue   # the guard in the student session sees this and exits
+        $cfg = $null
+        try { $cfg = Get-Content -LiteralPath (Join-Path $root 'desk.json') -Raw -Encoding UTF8 | ConvertFrom-Json } catch {}
+        $pol = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies'
+        Remove-ItemProperty -Path "$pol\ActiveDesktop" -Name NoChangingWallPaper -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path "$pol\Explorer" -Name NoThemesTab -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path "$pol\System" -Name Wallpaper, WallpaperStyle -ErrorAction SilentlyContinue
+        if ($cfg -and $cfg.icons) {
+            $pub = Join-Path $env:PUBLIC 'Desktop'
+            $bak = Join-Path $env:ProgramData 'KhoaVeyon\desk-backup\public'
+            foreach ($n in @($cfg.icons)) { Remove-Item -LiteralPath (Join-Path $pub $n) -Force -ErrorAction SilentlyContinue }
+            foreach ($f in @(Get-ChildItem -LiteralPath $bak -Force -ErrorAction SilentlyContinue)) {
+                if (-not (Test-Path -LiteralPath (Join-Path $pub $f.Name))) { Move-Item -LiteralPath $f.FullName -Destination (Join-Path $pub $f.Name) -Force -ErrorAction SilentlyContinue }
+            }
+            foreach ($pr in @(Get-ChildItem (Join-Path $env:SystemDrive 'Users') -Directory -ErrorAction SilentlyContinue)) {
+                $d = Join-Path $pr.FullName 'Desktop'
+                if (Test-Path -LiteralPath $d) { & icacls $d /remove:d '*S-1-5-4' /C | Out-Null }
+            }
+        }
+        Start-Sleep -Seconds 3
+        Remove-Item -LiteralPath (Join-Path $root 'KhoaVeyonDesk.ps1'), (Join-Path $root 'desk.json') -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath (Join-Path $root 'desk') -Recurse -Force -ErrorAction SilentlyContinue
+        Log 'DESKLOCK OFF'
     }
 
     'blockai' {

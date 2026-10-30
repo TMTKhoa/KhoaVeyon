@@ -10,6 +10,8 @@ Chương trình chạy trên **máy giáo viên (máy chủ Veyon)**, giao diệ
 
 > Chương trình không thay thế Veyon. Nó dùng Veyon để ra lệnh, và dùng file `KhoaVeyonServices.bat` đã cài trên các máy học sinh.
 
+**Phiên bản hiện tại: 5.5.0** (xem [kv/paths.py](kv/paths.py), biến `VERSION`, là nguồn số bản chính thức)
+
 ## Thiết lập ban đầu (tự động)
 
 Lần chạy đầu tiên chương trình tự mở trang **Thiết lập ban đầu**. Bấm **Thiết lập máy giáo viên**, chương trình sẽ làm các bước 1 đến 3 dưới đây. Máy học sinh làm riêng bằng nút **Thiết lập máy học sinh** (bước 4, bỏ qua máy đã thiết lập đủ):
@@ -609,3 +611,8 @@ Tối ưu nhỏ, không đổi hành vi: bảng Trạng thái máy dò cổng Ve
 
 ## 5.4.0
 - **Tắt/hiện thanh hỗ trợ học sinh** (trang Tương tác, công tắc "Hiện thanh hỗ trợ học sinh"): ẩn nút xanh ở góc phải dưới màn hình học sinh cho các máy đang chọn (không chọn = tất cả), bật lại bất cứ lúc nào. Trợ lý vẫn chạy nên tin nhắn, khóa màn hình, bài kiểm tra vẫn hiện; chỉ mất nút giơ tay / nộp bài / hướng dẫn. Cài đặt được nhớ trên máy học sinh và tự gửi lại khi máy bật sau. Lưu ý: nút này cũng là chỗ hiện chấm tròn báo "giáo viên đang xem màn hình", nên ẩn thì chấm đó cũng không hiện.
+
+## 5.5.0
+- **Khóa hình nền và icon Desktop** (nhóm *Màn hình Desktop*): `desklock-start` / `desklock-stop`, mọi máy học sinh có cùng hình nền và cùng icon, học sinh không đổi được. Quản trị viên không bị ảnh hưởng. Chưa kiểm chứng trên Windows thật.
+- **Cập nhật thủ công bằng file zip** (Cài đặt, nút *📦 Cập nhật bằng file zip*): chọn file `KhoaVeyon-x.y.z.zip`, chương trình đọc số bản trong file, mới hơn bản đang dùng thì tự cập nhật và khởi động lại; không mới hơn thì báo lỗi và không đụng gì. Giữ nguyên `data/`, cài đặt, danh sách, `KhoaVeyonAgent.cfg` và `*.pem` nên Agent cũ vẫn kết nối.
+- **Sửa lỗi tự kiểm tra bản mới đôi khi không chạy:** vòng kiểm tra nền trước đây ngủ nguyên 6 giờ sau mỗi lần, nên bật công tắc hoặc điền kho GitHub giữa buổi phải chờ rất lâu mới được kiểm tra. Nay ngủ từng đoạn 30 giây.

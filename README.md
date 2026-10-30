@@ -11,6 +11,8 @@
 
 > KhoaVeyon does not replace Veyon. It drives Veyon (and its own small agent) from a friendlier UI. The interface is in Vietnamese.
 
+**Current version: 5.5.0** (see [kv/paths.py](kv/paths.py), the `VERSION` variable, which is the source of truth)
+
 ## Features
 
 | | |

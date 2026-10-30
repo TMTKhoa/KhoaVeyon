@@ -194,6 +194,7 @@ document.addEventListener('click', async e => {
     case 'gosettings': go('settings'); break;
     case 'checkupd': checkUpdate(); break;
     case 'applyupd': applyUpdate(); break;
+    case 'updatezip': pickFile('.zip', false, async files => { await updateFromZip(files[0]); }); break;
     case 'notesupd': modal({title: 'Thay đổi ' + S.st.update.latest, noCancel: true, ok: 'Đóng', html: '<div style="white-space:pre-wrap">' + esc(S.st.update.notes || 'Không có ghi chú.') + '</div>'}); break;
     case 'run': runAction(el.dataset.key); break;
     case 'sorthosts': {   // sắp xếp theo tên hiển thị (số trong tên xếp đúng thứ tự: PC2 trước PC10), bấm lần nữa để đảo chiều
