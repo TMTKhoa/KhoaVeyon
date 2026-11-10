@@ -10,7 +10,7 @@ Chương trình chạy trên **máy giáo viên (máy chủ Veyon)**, giao diệ
 
 > Chương trình không thay thế Veyon. Nó dùng Veyon để ra lệnh, và dùng file `KhoaVeyonServices.bat` đã cài trên các máy học sinh.
 
-**Phiên bản hiện tại: 5.5.0** (xem [kv/paths.py](kv/paths.py), biến `VERSION`, là nguồn số bản chính thức)
+**Phiên bản hiện tại: 5.6.0** (xem [kv/paths.py](kv/paths.py), biến `VERSION`, là nguồn số bản chính thức)
 
 ## Thiết lập ban đầu (tự động)
 
@@ -616,3 +616,10 @@ Tối ưu nhỏ, không đổi hành vi: bảng Trạng thái máy dò cổng Ve
 - **Khóa hình nền và icon Desktop** (nhóm *Màn hình Desktop*): `desklock-start` / `desklock-stop`, mọi máy học sinh có cùng hình nền và cùng icon, học sinh không đổi được. Quản trị viên không bị ảnh hưởng. Chưa kiểm chứng trên Windows thật.
 - **Cập nhật thủ công bằng file zip** (Cài đặt, nút *📦 Cập nhật bằng file zip*): chọn file `KhoaVeyon-x.y.z.zip`, chương trình đọc số bản trong file, mới hơn bản đang dùng thì tự cập nhật và khởi động lại; không mới hơn thì báo lỗi và không đụng gì. Giữ nguyên `data/`, cài đặt, danh sách, `KhoaVeyonAgent.cfg` và `*.pem` nên Agent cũ vẫn kết nối.
 - **Sửa lỗi tự kiểm tra bản mới đôi khi không chạy:** vòng kiểm tra nền trước đây ngủ nguyên 6 giờ sau mỗi lần, nên bật công tắc hoặc điền kho GitHub giữa buổi phải chờ rất lâu mới được kiểm tra. Nay ngủ từng đoạn 30 giây.
+
+## 5.6.0
+- **Giao diện rút gọn / đầy đủ:** nút màu cam ở góc trên phải đổi giữa hai chế độ (được nhớ lại). Rút gọn chỉ còn Trang chính, 3 danh sách ứng dụng/web, Cấu hình Veyon, Desktop học sinh và Cài đặt.
+- **Trang chính có nút KHÓA LỚP / MỞ KHÓA:** khóa = chặn mọi ứng dụng ngoài danh sách + chỉ cho vào trang trong danh sách (chính sách trình duyệt, gồm tên miền con) + khóa Desktop; mở khóa làm ngược lại.
+- **🔧 Sửa máy tính:** tự làm lần lượt quét mạng (nhận lại IP đổi) → chẩn đoán → sửa, rồi chẩn đoán lại để báo kết quả.
+- **Trang Desktop học sinh:** màn hình giả lập để kéo icon, chọn hình nền rồi gửi xuống các máy (`C:\cmd\desktop\layout.json`).
+- **Khóa Desktop đổi cách:** học sinh nay đổi được hình nền và kéo đổi chỗ icon; bộ icon vẫn bị khóa (không thêm, xóa, đổi tên). Hình nền và vị trí của giáo viên chỉ đặt một lần mỗi lần gửi thiết kế mới. Chưa kiểm chứng trên Windows thật.
