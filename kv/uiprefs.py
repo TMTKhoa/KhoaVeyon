@@ -8,7 +8,7 @@ from .runtime import ApiError, CFG, CFG_LOCK
 
 SIDES = ('navy', 'forest', 'plum', 'slate', 'black', 'accent')
 DEFAULTS = {'theme': 'light', 'accent': '#2563eb', 'side': 'navy', 'font': 100, 'zoom': 100, 'radius': 'normal', 'compact_nav': False,
-            'dense': False, 'hidden_pages': [], 'brand': '', 'tile': 'normal', 'anim': True}
+            'dense': False, 'hidden_pages': [], 'brand': '', 'tile': 'normal', 'anim': True, 'mode': 'full'}
 HEX = re.compile(r'^#[0-9a-fA-F]{6}$')
 
 
@@ -28,6 +28,8 @@ def ui_clean(raw):
             pass
     if r.get('radius') in ('sharp', 'normal', 'round'):
         out['radius'] = r['radius']
+    if r.get('mode') in ('full', 'simple'):
+        out['mode'] = r['mode']
     if r.get('tile') in ('small', 'normal', 'large'):
         out['tile'] = r['tile']
     for k in ('compact_nav', 'dense'):

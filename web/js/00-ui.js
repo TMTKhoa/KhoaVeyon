@@ -1,6 +1,6 @@
 // KhoaVeyon - Tùy chỉnh giao diện: áp dụng ngay khi mở trang (không nháy), lưu trên máy chủ và bản sao trong trình duyệt
 const UI_KEY = 'kvUi';
-const UI_DEF = {theme: 'light', accent: '#2563eb', side: 'navy', font: 100, zoom: 100, radius: 'normal', compact_nav: false, dense: false, hidden_pages: [], brand: '', tile: 'normal', anim: true};
+const UI_DEF = {theme: 'light', accent: '#2563eb', side: 'navy', font: 100, zoom: 100, radius: 'normal', compact_nav: false, dense: false, hidden_pages: [], brand: '', tile: 'normal', anim: true, mode: 'full'};
 const UI_SIDES = {navy: ['#0f1b33', '#16264a', 'Xanh đêm'], forest: ['#0f2a22', '#16382d', 'Xanh rừng'], plum: ['#2a1238', '#3a1b4d', 'Tím mận'], slate: ['#1e2430', '#2a3140', 'Xám đá'], black: ['#0b0d12', '#151922', 'Đen'], accent: ['', '', 'Theo màu chủ đạo']};
 const UI_ACCENTS = ['#2563eb', '#0891b2', '#16a34a', '#ca8a04', '#ea580c', '#dc2626', '#db2777', '#7c3aed'];
 let UI = Object.assign({}, UI_DEF);

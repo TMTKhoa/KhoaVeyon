@@ -1,0 +1,56 @@
+/* KhoaVeyon - Giao diện rút gọn, trang chính Khóa/Mở lớp, thiết kế Desktop học sinh */
+.btn.modebtn{background:linear-gradient(135deg,#f59e0b,#ea580c);color:#fff;box-shadow:0 4px 14px rgba(234,88,12,.35);padding:10px 16px}
+.btn.modebtn:hover{background:linear-gradient(135deg,#d97706,#c2410c)}
+.btn.modebtn .mi{font-size:17px}
+.simplemode .btn.modebtn{background:linear-gradient(135deg,#0ea5e9,#2563eb);box-shadow:0 4px 14px rgba(37,99,235,.35)}
+.btn.big{padding:14px 26px;font-size:16px}
+
+/* khối Khóa / Mở lớp */
+.lockhero{padding:26px;border-width:2px}
+.lockhero.is-open{border-color:#86efac;background:linear-gradient(180deg,var(--ok-l),var(--card) 70%)}
+.lockhero.is-locked{border-color:#fca5a5;background:linear-gradient(180deg,var(--err-l),var(--card) 70%)}
+.lh-state{display:flex;align-items:center;gap:18px;margin-bottom:20px}
+.lh-ic{font-size:54px;line-height:1;width:70px;text-align:center}
+.lh-t{font-size:26px;font-weight:800;letter-spacing:.3px}
+.is-locked .lh-t{color:var(--err)}.is-open .lh-t{color:var(--ok)}
+.lh-btns{display:flex;gap:16px;flex-wrap:wrap}
+.bigbtn{flex:1;min-width:220px;border:0;border-radius:16px;padding:22px 18px;font-size:22px;font-weight:800;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center;gap:14px;transition:.15s;letter-spacing:.5px}
+.bigbtn span{font-size:30px}
+.bigbtn.lockb{background:linear-gradient(135deg,#f97316,#dc2626);box-shadow:0 8px 22px rgba(220,38,38,.32)}
+.bigbtn.openb{background:linear-gradient(135deg,#22c55e,#15803d);box-shadow:0 8px 22px rgba(22,163,74,.3)}
+.bigbtn:hover:not(:disabled){transform:translateY(-2px);filter:brightness(1.05)}
+.bigbtn:disabled{opacity:.5;cursor:not-allowed}
+.lh-what{margin:20px 0 0;padding-left:4px;list-style:none;color:var(--muted);font-size:13.5px;display:grid;gap:6px}
+.lh-what a{color:var(--primary);font-weight:600}
+
+/* các bước sửa máy */
+.rpsteps{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:10px}
+.rpsteps li{display:flex;gap:12px;align-items:flex-start;padding:10px 14px;border-radius:12px;background:var(--bg);border:1px solid var(--line)}
+.rpsteps .rpi{width:26px;text-align:center;font-size:18px;line-height:24px}
+.rpsteps li.rp-run{border-color:var(--primary);background:var(--primary-l)}
+.rpsteps li.rp-ok{border-color:#bbf7d0}.rpsteps li.rp-bad{border-color:#fecaca}.rpsteps li.rp-warn{border-color:#fed7aa}
+.rpdet{margin-top:12px;font-size:13.5px}.rpdet summary{cursor:pointer;font-weight:600;color:var(--warn)}
+.rpdet ul{margin:8px 0;padding-left:20px}
+
+.chips2{display:flex;flex-wrap:wrap;gap:6px}
+.chip2{background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:4px 12px;font-size:13px}
+.tiles2{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
+.tile2{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:4px;box-shadow:var(--shadow);transition:.15s;color:var(--text)}
+.tile2:hover{border-color:var(--primary);transform:translateY(-2px)}
+.tile2 span{font-size:28px}.tile2 small{color:var(--muted)}
+
+/* thiết kế Desktop */
+.deskgrid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(280px,1fr);gap:18px;align-items:start}
+@media (max-width:1100px){.deskgrid{grid-template-columns:1fr}}
+.deskscr{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:linear-gradient(135deg,#1d4ed8,#0ea5e9) center/cover no-repeat;box-shadow:0 8px 30px rgba(15,27,51,.3);border:6px solid #1f2937;user-select:none}
+.dk-grid{position:absolute;left:0;top:0;right:0;bottom:6%;background-image:linear-gradient(to right,rgba(255,255,255,.12) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.12) 1px,transparent 1px);background-size:calc(100% / var(--dkc)) calc(100% / var(--dkr))}
+.dk-ic{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:grab;border-radius:6px;border:1px solid transparent;overflow:hidden;touch-action:none}
+.dk-ic:hover{background:rgba(255,255,255,.18)}
+.dk-ic.sel{background:rgba(255,255,255,.3);border-color:rgba(255,255,255,.8)}
+.dk-ic.drag{cursor:grabbing;z-index:5;background:rgba(255,255,255,.35)}
+.dk-ic .e{font-size:clamp(16px,3.2vw,36px);line-height:1;pointer-events:none}
+.dk-ic .n{font-size:clamp(8px,.95vw,12px);color:#fff;text-shadow:0 1px 3px #000,0 0 2px #000;max-width:96%;text-align:center;line-height:1.1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;pointer-events:none}
+.dk-task{position:absolute;left:0;right:0;bottom:0;height:6%;min-height:14px;background:rgba(20,24,35,.88);display:flex;align-items:center;gap:12px;padding:0 12px;color:#e5e7eb;font-size:clamp(8px,.9vw,12px)}
+.dk-task .sp{flex:1}.dk-start{color:#60a5fa;font-size:1.4em}
+.dk-search{background:rgba(255,255,255,.12);border-radius:99px;padding:1px 14px;color:#9ca3af}
+.badge.warn{background:var(--warn-l);color:var(--warn)}

@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="/css/05-violations.css">
 <link rel="stylesheet" href="/css/06-status-auto.css">
 <link rel="stylesheet" href="/css/07-theme.css">
+<link rel="stylesheet" href="/css/08-simple.css">
 </head>
 <body>
 <div class="app">
@@ -34,7 +35,7 @@
   <main class="main" id="main">
     <header class="top">
       <div><h1 id="title"></h1><p id="sub"></p></div>
-      <div class="row" style="gap:10px"><span class="badge clsbadge hidden" id="classBadge" title="Bấm để mở Lớp và lịch dạy"></span><button class="btn ghost" id="lockBtn" title="Khóa màn hình (nhập mật khẩu để mở lại)">🔒 Khóa</button><span class="pill hidden" id="busy"><i class="spin"></i><span id="busyText">Đang thực hiện...</span><span class="pbar" id="busyBar"></span></span></div>
+      <div class="row" style="gap:10px"><span class="badge clsbadge hidden" id="classBadge" title="Bấm để mở Lớp và lịch dạy"></span><button class="btn modebtn" id="modeBtn" title="Đổi giữa giao diện đầy đủ và rút gọn"></button><button class="btn ghost" id="lockBtn" title="Khóa màn hình (nhập mật khẩu để mở lại)">🔒 Khóa</button><span class="pill hidden" id="busy"><i class="spin"></i><span id="busyText">Đang thực hiện...</span><span class="pbar" id="busyBar"></span></span></div>
     </header>
     <div id="updbar" class="note hidden" style="margin-bottom:18px"></div>
     <div id="view"></div>
@@ -80,6 +81,7 @@
 <script src="/js/25-phone.js"></script>
 <script src="/js/26-htest.js"></script>
 <script src="/js/27-guides.js"></script>
+<script src="/js/28-simple.js"></script>
 <script src="/js/99-boot.js"></script>
 </body>
 </html>

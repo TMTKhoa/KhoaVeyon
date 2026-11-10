@@ -148,7 +148,7 @@ document.addEventListener('change', async e => {
 function uiCard() {
   const p = UI, opt = (v, cur, t) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${t}</option>`;
   const hid = new Set(p.hidden_pages || []);
-  const pages = PAGES.filter(x => x.id && !['settings', 'control'].includes(x.id)).map(x => `<label class="chk" style="display:inline-flex;gap:6px;align-items:center;margin:3px 12px 3px 0"><input type="checkbox" data-ui="page" data-id="${x.id}" ${hid.has(x.id) ? '' : 'checked'}> ${x.ic} ${esc(x.name)}</label>`).join('');
+  const pages = PAGES.filter(x => x.id && !['settings', 'control', 'home'].includes(x.id)).map(x => `<label class="chk" style="display:inline-flex;gap:6px;align-items:center;margin:3px 12px 3px 0"><input type="checkbox" data-ui="page" data-id="${x.id}" ${hid.has(x.id) ? '' : 'checked'}> ${x.ic} ${esc(x.name)}</label>`).join('');
   return `<section class="card"><h3>🎨 Giao diện</h3>
     <p class="sub">Đổi ngay khi chọn, tự lưu và đi theo file sao lưu.</p>
     <div class="formgrid">

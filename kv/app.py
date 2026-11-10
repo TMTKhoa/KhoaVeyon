@@ -20,6 +20,7 @@ from .khoalink import kq_load
 from .monitor import alert_loop
 from .paths import abs_path, CONFIG_PATH
 from .applock import applock_load
+from .simple import simple_load
 from .privacy import priv_load
 from .reapply import reapply_loop
 from .runtime import CFG, IDLE_EXIT_SECONDS, log, PAYLOAD_DIR, STATE
@@ -135,6 +136,7 @@ def main(argv=None):
     refresh_agent_cfg()   # tự tạo/cập nhật payload\\KhoaVeyonAgent.cfg, không cần bấm nút
     threading.Thread(target=school_loop, daemon=True).start()
     exam_load()
+    simple_load()
     kq_load()
     from .khoalink import live_loop
     threading.Thread(target=live_loop, daemon=True).start()

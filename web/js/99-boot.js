@@ -16,8 +16,9 @@
   try { applyUi((await api('/api/ui_prefs', undefined, {quiet: true})).prefs); } catch (e) { /* dùng bản lưu trong trình duyệt */ }
   S.hosts = S.st.cfg.hosts.slice();
   S.page = S.st.cfg.setup_done ? 'control' : 'setup';
+  if (S.page === 'control' && UI.mode === 'simple') S.page = 'home';
   if (S.page === 'setup') { try { await loadSetup(); } catch (e) { toast(e.message, 'err'); } }
-  buildNav(); render(true);
+  applyMode(); buildNav(); render(true);
   pollLog();
   pollAlerts(); setInterval(pollAlerts, 1500);
   refreshHostNames(); setInterval(refreshHostNames, 15000);

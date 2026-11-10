@@ -111,6 +111,7 @@ async function api(path, body, opts) {   // opts.quiet: lệnh chạy ngầm the
 }
 
 const PAGES = [
+  {id:'home', ic:'🏠', name:'Trang chính', title:'Trang chính', sub:'Khóa hoặc mở cả lớp và sửa máy tính chỉ bằng một nút.'},
   {id:'setup', ic:'🚀', name:'Thiết lập ban đầu', title:'Thiết lập ban đầu', sub:'Một nút để chuẩn bị mọi thứ cần thiết trước khi dùng lần đầu.'},
   {id:'control', ic:'🎛️', name:'Điều khiển lớp', title:'Điều khiển lớp học', sub:'Chọn máy học sinh rồi bấm một nút để khóa máy, chặn web hoặc chặn ứng dụng.'},
   {id:'exam', ic:'📝', name:'Chế độ thi', title:'Chế độ thi', sub:'Một nút bật hết các bước cho giờ kiểm tra: khóa AI, chỉ trang cho phép, giám sát, nhãn chỗ ngồi. Hết giờ một nút để mở lại.'},
@@ -123,6 +124,7 @@ const PAGES = [
   {id:'viol', ic:'🚨', name:'Vi phạm', title:'Vi phạm của học sinh', sub:'Ảnh và thông tin vi phạm tự động gửi về từ các máy học sinh đang được giám sát.'},
   {id:'report', ic:'📊', name:'Báo cáo', title:'Báo cáo vi phạm', sub:'Thống kê cuối buổi: máy nào, trang nào vi phạm nhiều nhất.'},
   {id:'vcfg', ic:'🛠️', name:'Cấu hình Veyon', title:'Cấu hình Veyon', sub:'Sao lưu, so sánh, khôi phục và đẩy cấu hình xuống máy học sinh, thêm máy vào Veyon Master.'},
+  {id:'desk', ic:'🖼️', name:'Desktop học sinh', title:'Desktop học sinh', sub:'Màn hình giả lập của học sinh: sắp icon, chọn hình nền rồi gửi xuống các máy.'},
   {id:'dist', ic:'📦', name:'Phân phối & chạy', title:'Phân phối và chạy ứng dụng', sub:'Chép file sang máy học sinh rồi chạy ứng dụng chỉ với một nút bấm.'},
   {grp:'Danh sách'},
   {id:'keep', ic:'✅', name:'Ứng dụng được phép', list:'keep'},

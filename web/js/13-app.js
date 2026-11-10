@@ -2,7 +2,8 @@
 /* ---------- điều hướng và vẽ lại ---------- */
 function buildNav() {
   const hid = new Set((typeof UI !== 'undefined' && UI.hidden_pages) || []);
-  const vis = PAGES.filter(p => p.grp || !hid.has(p.id)), pg = vis.filter((p, i) => !p.grp || (vis[i + 1] && !vis[i + 1].grp));
+  const simple = typeof isSimple === 'function' && isSimple();
+  const vis = simple ? PAGES.filter(p => !p.grp && SIMPLE_NAV.includes(p.id)) : PAGES.filter(p => p.id !== 'home' && (p.grp || !hid.has(p.id))), pg = vis.filter((p, i) => !p.grp || (vis[i + 1] && !vis[i + 1].grp));
   $('#nav').innerHTML = pg.map(p => p.grp ? `<div class="grp">${p.grp}</div>`
     : `<button data-page="${p.id}" class="${S.page === p.id ? 'on' : ''}${p.id === 'viol' && S.unseen ? ' alerting' : ''}"><span class="ic">${p.ic}</span><span class="tx">${esc(p.name)}</span>${p.id === 'viol' && S.unseen ? `<span class="nbadge">${S.unseen > 99 ? '99+' : S.unseen}</span>` : ''}${p.id === 'interact' && S.handCount ? `<span class="nbadge">✋${S.handCount}</span>` : ''}</button>`).join('');
 }
@@ -23,6 +24,8 @@ async function go(id) {
     if (id === 'school' || id === 'seats') await loadSchool();
     if (id === 'auto') await loadAuto();
     if (id === 'monitor') { await loadSchool(); await loadMonitor(); await monLiveResume(); }
+    if (id === 'home') await loadHome();
+    if (id === 'desk') await loadDesk();
     if (id === 'settings') S.startup = await api('/api/startup', {});
     if (id === 'exam') { await loadExam(); await examReload(); }
   } catch (e) { toast(e.message, 'err'); }
@@ -53,6 +56,8 @@ function render(top) {
   else if (S.page === 'school') v.innerHTML = viewSchool();
   else if (S.page === 'seats') v.innerHTML = viewSeatsPage();
   else if (S.page === 'report') v.innerHTML = viewReport();
+  else if (S.page === 'home') v.innerHTML = viewHome();
+  else if (S.page === 'desk') v.innerHTML = viewDesk();
   else if (S.page === 'settings') v.innerHTML = viewSettings();
   else v.innerHTML = viewList(p.list);
   if (p.list) applyFilter(p.list);
