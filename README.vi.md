@@ -11,7 +11,7 @@
 
 > KhoaVeyon không thay thế Veyon. Nó điều khiển Veyon (và Agent nhỏ của riêng mình) qua giao diện dễ dùng hơn.
 
-**Phiên bản hiện tại: 5.6.0** (xem [kv/paths.py](kv/paths.py), biến `VERSION`, là nguồn số bản chính thức)
+**Phiên bản hiện tại: 6.0.0** (xem [kv/paths.py](kv/paths.py), biến `VERSION`, là nguồn số bản chính thức)
 
 ## Tính năng
 

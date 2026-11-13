@@ -148,50 +148,72 @@ def apply_local_zip(data, name='update.zip', app_dir=None):
 
 
 def check_update(repo, api_base='https://api.github.com', trusted=False):
-    """Hỏi GitHub xem có bản mới hơn VERSION không (Release mới nhất; không có thì tag; không có nữa thì VERSION trong nhánh chính). Không tải gì về."""
+    """Hỏi GitHub xem có bản mới hơn VERSION không. So sánh CẢ BA nguồn rồi lấy số cao nhất: Release mới nhất, mọi tag
+    (không tin tag đầu tiên vì GitHub không xếp theo số bản), và VERSION trong kv/paths.py của nhánh chính.
+    Trước đây Release/tag cũ (ví dụ tag V5) làm hàm dừng sớm nên không bao giờ thấy bản mới ở nhánh chính. Không tải gì về."""
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo or ''):
         raise ApiError('Chưa điền kho GitHub (dạng chủ-sở-hữu/tên-kho) ở trang Cài đặt')
-    try:
-        data = json.loads(_http_get('%s/repos/%s/releases/latest' % (api_base, repo), trusted=trusted).decode('utf-8'))
-    except ApiError:
-        raise
+
+    def get_json(path):
+        return json.loads(_http_get('%s/repos/%s/%s' % (api_base, repo, path), trusted=trusted).decode('utf-8'))
+
+    cands, errs, repo_missing = [], [], False
+    try:   # 1. Release mới nhất
+        data = get_json('releases/latest')
+        tag = str(data.get('tag_name') or '')
+        url = ''
+        for a in data.get('assets') or []:
+            n = str(a.get('name', ''))
+            if n.lower().endswith('.zip') and 'khoaveyon' in n.lower():
+                url = a.get('browser_download_url', '')
+                break
+        cands.append({'latest': tag, 'url': url or data.get('zipball_url', ''), 'notes': str(data.get('body') or '')[:1500],
+                      'page': data.get('html_url', '')})
     except urllib.error.HTTPError as e:
-        if e.code == 404:
-            # Chưa có Release: thử tag, rồi thử đọc thẳng VERSION trong nhánh chính (kho công khai)
-            try:
-                tags = json.loads(_http_get('%s/repos/%s/tags' % (api_base, repo), trusted=trusted).decode('utf-8'))
-                if tags:
-                    tg = str(tags[0].get('name') or '')
-                    return {'current': VERSION, 'latest': tg, 'newer': _ver(tg) > _ver(VERSION),
-                            'url': 'https://github.com/%s/archive/refs/tags/%s.zip' % (repo, tg) if not trusted else '',
-                            'notes': '', 'page': 'https://github.com/%s/releases/tag/%s' % (repo, tg)}
-            except Exception:  # noqa
-                pass
-            if api_base == 'https://api.github.com':
-                try:
-                    return _from_branch(repo)
-                except urllib.error.HTTPError as e2:
-                    raise ApiError('Không thấy kho %s trên GitHub (mã %s). Kiểm tra tên kho ở trang Cài đặt (mặc định TMTKhoa/KhoaVeyon là kho của tác giả, hãy điền kho CỦA BẠN) và kho phải ở chế độ Public.' % (repo, e2.code))
-                except ApiError:
-                    raise
-                except Exception as e2:  # noqa
-                    raise ApiError('Không kiểm tra được bản mới: %s' % _net_reason(e2))
-            raise ApiError('Kho %s chưa có Release nào (hoặc là kho riêng tư).' % repo)
         if e.code in (403, 429):
             raise ApiError('GitHub giới hạn số lần hỏi của địa chỉ IP này (60 lần/giờ khi chưa đăng nhập, mạng trường dùng chung một IP nên dễ hết). Thử lại sau ít phút.')
-        raise ApiError('GitHub trả lỗi %s khi kiểm tra bản mới' % e.code)
+        if e.code == 404:
+            repo_missing = True   # chưa có Release (hoặc không có kho): các nguồn sau sẽ cho biết
+        else:
+            errs.append('GitHub trả lỗi %s' % e.code)
+    except ApiError:
+        raise
     except Exception as e:  # noqa
         raise ApiError('Không kiểm tra được bản mới, không phải lỗi kho: %s' % _net_reason(e))
-    tag = str(data.get('tag_name') or '')
-    url = ''
-    for a in data.get('assets') or []:
-        n = str(a.get('name', ''))
-        if n.lower().endswith('.zip') and 'khoaveyon' in n.lower():
-            url = a.get('browser_download_url', '')
-            break
-    url = url or data.get('zipball_url', '')
-    return {'current': VERSION, 'latest': tag, 'newer': _ver(tag) > _ver(VERSION), 'url': url,
-            'notes': str(data.get('body') or '')[:1500], 'page': data.get('html_url', '')}
+    try:   # 2. Mọi tag: lấy tag có số bản lớn nhất
+        tags = [str(t.get('name') or '') for t in (get_json('tags?per_page=100') or [])]
+        tags = [t for t in tags if re.search(r'\d', t)]
+        if tags:
+            tg = max(tags, key=_ver)
+            cands.append({'latest': tg, 'url': 'https://github.com/%s/archive/refs/tags/%s.zip' % (repo, tg) if not trusted else '',
+                          'notes': '', 'page': 'https://github.com/%s/releases/tag/%s' % (repo, tg)})
+            repo_missing = False
+    except urllib.error.HTTPError:
+        pass
+    except Exception:  # noqa
+        pass
+    if api_base == 'https://api.github.com':   # 3. VERSION trong nhánh chính (kho công khai)
+        try:
+            cands.append(_from_branch(repo))
+            repo_missing = False
+        except urllib.error.HTTPError as e2:
+            if e2.code == 404 and not cands:
+                raise ApiError('Không thấy kho %s trên GitHub (mã %s). Kiểm tra tên kho ở trang Cài đặt (mặc định TMTKhoa/KhoaVeyon là kho của tác giả, hãy điền kho CỦA BẠN) và kho phải ở chế độ Public.' % (repo, e2.code))
+        except ApiError as e2:
+            if not cands:
+                raise e2
+        except Exception as e2:  # noqa
+            if not cands:
+                raise ApiError('Không kiểm tra được bản mới: %s' % _net_reason(e2))
+    if not cands:
+        if repo_missing:
+            raise ApiError('Kho %s chưa có Release nào (hoặc là kho riêng tư).' % repo)
+        raise ApiError('Không kiểm tra được bản mới: %s' % ('; '.join(errs) or 'không rõ lý do'))
+    best = max(cands, key=lambda c: _ver(c['latest']))
+    if not best.get('url') and not trusted:   # nguồn thắng không có link tải: mượn link của nguồn khác cùng số bản
+        best['url'] = next((c['url'] for c in cands if c.get('url') and _ver(c['latest']) == _ver(best['latest'])), '')
+    return {'current': VERSION, 'latest': best['latest'], 'newer': _ver(best['latest']) > _ver(VERSION), 'url': best.get('url', ''),
+            'notes': best.get('notes', ''), 'page': best.get('page', '')}
 
 
 def apply_update(url, app_dir=None, trusted=False):

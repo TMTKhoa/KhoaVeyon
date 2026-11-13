@@ -294,6 +294,30 @@ except U.ApiError as e: print("rate:", "60 lần/giờ" in str(e))
 ''')
         self.assertEqual(out.splitlines(), ["9.9.9 True https://github.com/abc/KhoaVeyon/archive/HEAD.zip", "repo: True", "ssl: True", "rate: True"])
 
+    def test_update_check_sees_branch_version_even_when_an_old_tag_exists(self):
+        """Lỗi cũ: kho chỉ có tag cũ (V5) thì hàm dừng ở tag, không đọc VERSION nhánh chính, nên luôn báo "đã mới nhất"."""
+        out = self.run_code('''
+import json, urllib.error, kv.updater as U
+def http_error(code): return urllib.error.HTTPError("u", code, "x", {}, None)
+def fake(url, timeout=15, limit=0, trusted=False):
+    if url.endswith("/releases/latest"): raise http_error(404)
+    if "/tags" in url: return json.dumps([{"name": "V5"}, {"name": "v4.9"}]).encode()
+    if url.endswith("kv/paths.py"): return b"VERSION = '99.0.0'\\n"
+    raise AssertionError(url)
+U._http_get = fake
+r = U.check_update("abc/KhoaVeyon")
+print(r["latest"], r["newer"], r["url"])
+def fake_tag_newer(url, timeout=15, limit=0, trusted=False):
+    if url.endswith("/releases/latest"): raise http_error(404)
+    if "/tags" in url: return json.dumps([{"name": "v1.0"}, {"name": "v200.1"}]).encode()
+    if url.endswith("kv/paths.py"): return b"VERSION = '5.0.0'\\n"
+    raise AssertionError(url)
+U._http_get = fake_tag_newer
+r = U.check_update("abc/KhoaVeyon")
+print(r["latest"], r["newer"])
+''')
+        self.assertEqual(out.splitlines(), ["99.0.0 True https://github.com/abc/KhoaVeyon/archive/HEAD.zip", "v200.1 True"])
+
     def test_agent_cfg_is_refreshed_automatically(self):
         out = self.run_code('''
 import kv.runtime as RT, kv.api_core as C

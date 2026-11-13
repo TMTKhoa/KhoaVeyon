@@ -42,8 +42,10 @@ REM                      AI built into the browser (Gemini in Chrome, Copilot in
 REM                      Firefox AI, Brave Leo) and AI desktop apps. Needs the service
 REM  -allowai            undo -blockai (puts back the settings that were there before)
 REM  -desklock-start     LOCK THE DESKTOP: every PC shows the SAME desktop icons (students cannot add, delete or rename them).
-REM                      The teacher's wallpaper and icon positions are applied ONCE per design; students may then change the
-REM                      wallpaper (Set as desktop background) and drag icons anywhere. Needs the service (-install).
+REM                      The teacher's wallpaper and icon positions are LOCKED: the guard in the student session keeps putting the
+REM                      wallpaper and every icon back, blocks "Set as desktop background" and the desktop right-click menu, hides
+REM                      This PC / Recycle Bin / other system icons and moves any icon that is not in the design off the desktop.
+REM                      Needs the service (-install).
 REM                      Source: C:\cmd\desktop\layout.json (KhoaVeyon Desktop designer) or wallpaper.jpg + icons\*.lnk|*.url
 REM  -desklock-stop      undo -desklock-start (Administrators are never affected)
 REM ============================================================
@@ -2029,8 +2031,8 @@ while (-not (Test-Path `$stop)) {
         # Runs as SYSTEM (service KhoaVeyonService_desklock-start). The desktop is set up like this:
         #   - icons: the same shortcuts on every PC (C:\Users\Public\Desktop); students cannot add, delete or rename them
         #            (their own Desktop folders are emptied into Documents\Desktop-cu and closed to adding/deleting)
-        #   - icon POSITIONS: the teacher's layout is applied ONCE per design (stamp); after that students may drag icons anywhere
-        #   - wallpaper: the teacher's wallpaper is applied ONCE per design; students may change it (Settings, "Set as desktop background")
+        #   - icon POSITIONS: the teacher's layout is applied and then KEPT: the guard puts a dragged icon back within ~1 s
+        #   - wallpaper: the teacher's wallpaper is applied and KEPT: changing it is blocked (policy) and re-applied if it changes anyway
         # Source: C:\cmd\desktop\layout.json (made by the teacher's Desktop designer) or, the old way, wallpaper.jpg + icons\*.lnk|*.url
         $root    = Join-Path $env:ProgramFiles 'KhoaVeyon'
         $deskSrc = Join-Path $dir 'desktop'
@@ -2068,10 +2070,31 @@ while (-not (Test-Path `$stop)) {
         } else {
             New-Item -ItemType Directory -Path (Join-Path $root 'desk') -Force | Out-Null
             $pol = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies'
-            # older versions locked the wallpaper by policy: remove it, students may change the wallpaper now
+            # machine-wide (HKLM) wallpaper policies would also hit administrators: remove any left by older versions.
+            # The lock is applied per user by the guard in the student session (the guard skips administrators).
             Remove-ItemProperty -Path "$pol\ActiveDesktop" -Name NoChangingWallPaper -ErrorAction SilentlyContinue
             Remove-ItemProperty -Path "$pol\Explorer" -Name NoThemesTab -ErrorAction SilentlyContinue
             Remove-ItemProperty -Path "$pol\System" -Name Wallpaper, WallpaperStyle -ErrorAction SilentlyContinue
+            # Xoa han muc "Set as desktop background" khoi menu chuot phai cua file anh (ap dung cho moi tai khoan tren may, huy bang -desklock-stop):
+            # (1) chan bo xu ly menu DesktopWallpaper cua Windows, (2) an verb setdesktopwallpaper cua tung loai anh (ProgrammaticAccessOnly).
+            try {
+                $blk = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked'
+                if (-not (Test-Path $blk)) { New-Item -Path $blk -Force | Out-Null }
+                New-ItemProperty -Path $blk -Name '{FFE2A43C-56B9-4bf5-9A79-CC6D4285608A}' -Value 'KhoaVeyon' -PropertyType String -Force | Out-Null
+                foreach ($k in @(Get-ChildItem 'HKLM:\SOFTWARE\Classes\SystemFileAssociations' -ErrorAction SilentlyContinue)) {
+                    $v = Join-Path $k.PSPath 'shell\setdesktopwallpaper'
+                    if (Test-Path -LiteralPath $v) { New-ItemProperty -LiteralPath $v -Name 'ProgrammaticAccessOnly' -Value '' -PropertyType String -Force | Out-Null }
+                }
+            } catch { Log ('DESKLOCK: cannot hide Set-as-background menu: ' + $_.Exception.Message) }
+            try {   # an trang Personalization / Background / Themes trong Cai dat Windows (chi khi chua ai dat chinh sach nay)
+                $spv = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer'
+                $cur = (Get-ItemProperty -Path $spv -Name SettingsPageVisibility -ErrorAction SilentlyContinue).SettingsPageVisibility
+                $ours = 'hide:personalization;personalization-background;themes;personalization-colors'
+                if (-not $cur -or $cur -eq $ours) {
+                    if (-not (Test-Path $spv)) { New-Item -Path $spv -Force | Out-Null }
+                    New-ItemProperty -Path $spv -Name SettingsPageVisibility -Value $ours -PropertyType String -Force | Out-Null
+                }
+            } catch { Log ('DESKLOCK: cannot hide Settings personalization: ' + $_.Exception.Message) }
             $wallDst = ''
             if ($wallSrc) {
                 Get-ChildItem -LiteralPath (Join-Path $root 'desk') -Filter 'wallpaper.*' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
@@ -2105,13 +2128,29 @@ while (-not (Test-Path `$stop)) {
                     }
                     & icacls $d /deny '*S-1-5-4:(OI)(CI)(WD,AD,DC,DE)' /C | Out-Null
                 }
+                # OneDrive keeps its own Desktop folder (known-folder redirection): empty it too, otherwise those icons stay on the screen
+                foreach ($pr in @(Get-ChildItem (Join-Path $env:SystemDrive 'Users') -Directory -ErrorAction SilentlyContinue)) {
+                    if (@('Public','Default','Default User','All Users') -contains $pr.Name -or $pr.Name -like 'defaultuser*' -or $admins -icontains $pr.Name) { continue }
+                    foreach ($od in @(Get-ChildItem -LiteralPath $pr.FullName -Directory -Filter 'OneDrive*' -ErrorAction SilentlyContinue)) {
+                        $d = Join-Path $od.FullName 'Desktop'
+                        if (-not (Test-Path -LiteralPath $d)) { continue }
+                        $old = Join-Path $pr.FullName 'Documents\Desktop-cu'
+                        foreach ($f in @(Get-ChildItem -LiteralPath $d -Force -ErrorAction SilentlyContinue)) {
+                            if ($f.Name -ieq 'desktop.ini') { continue }
+                            New-Item -ItemType Directory -Path $old -Force | Out-Null
+                            $to = Join-Path $old $f.Name
+                            if (Test-Path -LiteralPath $to) { $to = Join-Path $old ((Get-Date -Format 'yyyyMMdd-HHmmss-') + $f.Name) }
+                            Move-Item -LiteralPath $f.FullName -Destination $to -Force -ErrorAction SilentlyContinue
+                        }
+                    }
+                }
             }
             $stamp = ''
             if ($layout -and $layout.stamp) { $stamp = [string]$layout.stamp }
             else { $stamp = 'old-' + $icons.Count + '-' + $(if ($wallSrc) { $wallSrc.LastWriteTimeUtc.Ticks } else { 0 }) }
             $guardSrc = @'
 # KhoaVeyonDesk.ps1 - chay TRONG PHIEN HOC SINH (do dich vu KhoaVeyonAutoLog giu song). Khong sua tay: -desklock-start ghi de file nay.
-# Hinh nen va vi tri icon chi duoc dat MOT LAN cho moi thiet ke (dau mau stamp); sau do hoc sinh doi hinh nen / keo icon thoai mai.
+# Hinh nen va vi tri icon bi KHOA theo thiet ke cua giao vien: hoc sinh doi hinh nen / keo icon thi bi dua ve cho cu.
 param([string]$Out)
 $ErrorActionPreference = 'SilentlyContinue'
 $created = $false
@@ -2142,6 +2181,8 @@ public static class KvDesk
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
     [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out RECT r);
     [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", CharSet = CharSet.Unicode)] public static extern int SetWall(int a, int b, string c, int d);
+    [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW", CharSet = CharSet.Unicode)] static extern int GetWallRaw(int a, int b, StringBuilder c, int d);
+    [DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, int m, IntPtr w, IntPtr l);
     [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint a, bool i, uint pid);
     [DllImport("kernel32.dll")] static extern IntPtr VirtualAllocEx(IntPtr p, IntPtr a, UIntPtr s, uint t, uint pr);
     [DllImport("kernel32.dll")] static extern bool VirtualFreeEx(IntPtr p, IntPtr a, UIntPtr s, uint t);
@@ -2150,7 +2191,30 @@ public static class KvDesk
     [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
     [StructLayout(LayoutKind.Sequential)] struct RECT { public int L, T, R, B; }
 
-    static readonly HashSet<string> Placed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);   // icon da dat roi: khong dat lai nua
+    // Vi tri da khoa cua tung icon (pixel, doc lai sau khi dat de khop voi luoi that cua Windows). Moi lan icon lech khoi day thi dua ve.
+    static readonly Dictionary<string, int[]> Fixed = new Dictionary<string, int[]>(StringComparer.OrdinalIgnoreCase);
+    public static void Reset() { Fixed.Clear(); }
+
+    // Duong dan hinh nen dang dung cua phien nay
+    public static string Wall() { StringBuilder sb = new StringBuilder(520); GetWallRaw(0x73, 520, sb, 0); return sb.ToString(); }
+
+    // Lam moi Desktop (nhu bam F5) de icon he thong vua an bien mat ngay
+    public static void Refresh()
+    {
+        IntPtr lv = DesktopList(); if (lv == IntPtr.Zero) return;
+        PostMessage(lv, 0x100, new IntPtr(0x74), IntPtr.Zero); PostMessage(lv, 0x101, new IntPtr(0x74), IntPtr.Zero);
+    }
+
+    static bool GetPos(IntPtr hp, IntPtr lv, IntPtr mem, int i, out int x, out int y)
+    {
+        x = y = 0;
+        IntPtr pt = new IntPtr(mem.ToInt64() + 1024);
+        if ((int)SendMessage(lv, 0x1010, new IntPtr(i), pt) == 0) return false;     // LVM_GETITEMPOSITION -> POINT
+        byte[] b = new byte[8]; int r;
+        if (!ReadProcessMemory(hp, pt, b, 8, out r)) return false;
+        x = BitConverter.ToInt32(b, 0); y = BitConverter.ToInt32(b, 4);
+        return true;
+    }
 
     static IntPtr DesktopList()
     {
@@ -2167,8 +2231,8 @@ public static class KvDesk
         return def == IntPtr.Zero ? IntPtr.Zero : FindWindowEx(def, IntPtr.Zero, "SysListView32", null);
     }
 
-    // Dat tung icon Desktop vao o (cot, hang) theo thiet ke cua giao vien, MOT LAN cho moi icon. cs/rs < 0: tu xep theo thu tu, cot doc tu goc tren-trai.
-    // Tra ve so icon (trong danh sach want) da co mat tren Desktop, -1 = chua tim thay Desktop.
+    // Dat tung icon Desktop vao o (cot, hang) theo thiet ke cua giao vien roi KHOA vi tri do: goi lai moi giay se dua icon bi keo di ve cho cu.
+    // cs/rs < 0: tu xep theo thu tu, cot doc tu goc tren-trai. Tra ve so icon (trong danh sach want) da co mat tren Desktop, -1 = chua tim thay Desktop.
     public static int Place(string[] want, int[] cs, int[] rs)
     {
         IntPtr lv = DesktopList(); if (lv == IntPtr.Zero) return -1;
@@ -2188,6 +2252,7 @@ public static class KvDesk
             int cx = sp & 0xFFFF, cy = (sp >> 16) & 0xFFFF; if (cx < 40) cx = 80; if (cy < 40) cy = 96;
             RECT rc; GetClientRect(lv, out rc);
             int rows = Math.Max(1, (rc.B - rc.T) / cy);
+            int cols = Math.Max(1, (rc.R - rc.L) / cx);
             int good = 0;
             for (int i = 0; i < n; i++)
             {
@@ -2202,12 +2267,19 @@ public static class KvDesk
                 for (int j = 0; j < want.Length; j++) { if (string.Equals(want[j], name, StringComparison.OrdinalIgnoreCase)) { k = j; break; } }
                 if (k < 0) continue;
                 good++;
-                if (Placed.Contains(name)) continue;
+                int[] fx; int px, py;
+                if (Fixed.TryGetValue(name, out fx))
+                {
+                    if (GetPos(hp, lv, mem, i, out px, out py) && (px != fx[0] || py != fx[1]))
+                        SendMessage(lv, 0x100F, new IntPtr(i), new IntPtr((fx[1] << 16) | (fx[0] & 0xFFFF)));   // hoc sinh keo di: dua ve
+                    continue;
+                }
                 int col = cs[k], row = rs[k];
                 if (col < 0 || row < 0) { col = k / rows; row = k % rows; }
                 if (row >= rows) row = rows - 1;
+                if (col >= cols) col = cols - 1;
                 SendMessage(lv, 0x100F, new IntPtr(i), new IntPtr(((row * cy) << 16) | ((col * cx) & 0xFFFF)));   // LVM_SETITEMPOSITION
-                Placed.Add(name);
+                if (GetPos(hp, lv, mem, i, out px, out py)) Fixed[name] = new int[] { px, py };
             }
             return good;
         }
@@ -2239,23 +2311,52 @@ function Move-Stray($dir) {   # moi thu nam tren Desktop cua hoc sinh (tru deskt
     }
 }
 
-$tick = 0; $tries = 0; $wallDone = $false
-while (Test-Path -LiteralPath $flag) {
-    $c = Read-Cfg
-    $stamp = ''
-    if ($c -and $c.stamp) { $stamp = [string]$c.stamp }
-    $applied = $false
-    try { $applied = (((Get-Content -LiteralPath $mark -Raw -ErrorAction Stop) + '').Trim() -eq $stamp) } catch {}
-    if ($c -and $stamp -and -not $applied) {
-        $ok = $true
-        if ($c.wall -and (Test-Path -LiteralPath $c.wall) -and -not $wallDone) {   # hinh nen cua giao vien: dat MOT LAN, sau do hoc sinh doi tuy y
-            Set-Reg 'HKCU:\Control Panel\Desktop' 'WallpaperStyle' '10' 'String'
-            Set-Reg 'HKCU:\Control Panel\Desktop' 'TileWallpaper' '0' 'String'
-            Set-Reg 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Wallpapers' 'BackgroundType' 0 'DWord'   # 0 = mot hinh (khong trinh chieu, khong Spotlight)
-            [KvDesk]::SetWall(20, 0, [string]$c.wall, 3) | Out-Null
-            $wallDone = $true
+# Chinh sach theo tung nguoi dung (HKCU; tai khoan quan tri khong chay den day): khong cho doi hinh nen, khong cho bam chuot phai len Desktop
+# (nen khong Set as background / Personalize / View > Auto arrange duoc), an cac icon he thong (This PC, Recycle Bin...) vi giao vien khong dat chung.
+$polx = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies'
+$hideKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons'
+$hideGuids = @('{20D04FE0-3AEA-1069-A2D8-08002B30309D}', '{645FF040-5081-101B-9F08-00AA002F954E}', '{59031a47-3f72-44a7-89c5-5595fe6b30ee}', '{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}', '{5399E694-6CE5-4D6D-8DCE-D0E2E5A5E5E4}')
+function Apply-Pol {
+    Set-Reg "$polx\ActiveDesktop" 'NoChangingWallPaper' 1 'DWord'
+    Set-Reg "$polx\Explorer" 'NoThemesTab' 1 'DWord'
+    Set-Reg "$polx\System" 'NoDispBackgroundPage' 1 'DWord'   # trang chon nen cua Display
+    Set-Reg "$polx\System" 'NoDispCPL' 1 'DWord'              # tat han Display / Personalization kieu cu
+    Set-Reg "$polx\Explorer" 'NoViewContextMenu' 1 'DWord'
+    foreach ($pn in @('NewStartPanel', 'ClassicStartMenu')) { foreach ($g in $hideGuids) { Set-Reg "$hideKey\$pn" $g 1 'DWord' } }
+}
+function Clear-Pol {
+    Remove-ItemProperty -Path "$polx\ActiveDesktop" -Name NoChangingWallPaper -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path "$polx\Explorer" -Name NoThemesTab, NoViewContextMenu -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path "$polx\System" -Name NoDispBackgroundPage, NoDispCPL -ErrorAction SilentlyContinue
+    foreach ($pn in @('NewStartPanel', 'ClassicStartMenu')) { foreach ($g in $hideGuids) { Remove-ItemProperty -Path "$hideKey\$pn" -Name $g -ErrorAction SilentlyContinue } }
+}
+
+try { [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = [System.Diagnostics.ProcessPriorityClass]::Idle } catch {}   # may hoc sinh yeu: chi chay khi may ranh
+$cfgTime = [datetime]::MinValue; $c = $null; $stamp = ''; $names = $null; $cs = $null; $rs = $null
+$iaFile = Join-Path $env:LOCALAPPDATA 'KhoaVeyon\wall-orig.txt'; $iaWall = Join-Path $env:LOCALAPPDATA 'KhoaVeyon\wall.png'
+# Co icon Desktop co dinh (Ctrl + lan chuot hoac View > Large icons deu bi dua ve): 48 px, che do icon. Doi co thi cac o luoi doi theo nen phai dat lai icon.
+$deskShell = $null
+function Fix-IconSize {
+    try {
+        if (-not $script:deskShell) { $script:deskShell = New-Object -ComObject Shell.Application }
+        $doc = $script:deskShell.Windows().FindWindowSW([ref]0, [ref]0, 8, [ref]0, 1).Document
+        if ($doc -and ($doc.IconSize -ne 48 -or $doc.CurrentViewMode -ne 1)) {
+            $doc.CurrentViewMode = 1
+            $doc.IconSize = 48
+            [KvDesk]::Reset()
         }
-        if ($c.icons) {
+    } catch { $script:deskShell = $null }
+}
+$tick = 0; $tries = 0; $wallStamp = ''; $polDone = $false; $lastSvc = [datetime]::MinValue
+while (Test-Path -LiteralPath $flag) {
+    # chi doc lai desk.json va dung lai danh sach icon khi file doi (khong lam moi giay)
+    $ct = (Get-Item -LiteralPath $cfgPath -ErrorAction SilentlyContinue).LastWriteTimeUtc
+    if ($ct -ne $cfgTime) {
+        $cfgTime = $ct; $c = Read-Cfg
+        $stamp = ''
+        if ($c -and $c.stamp) { $stamp = [string]$c.stamp }
+        $names = $null
+        if ($c -and $c.icons) {
             $names = New-Object 'System.Collections.Generic.List[string]'
             $cs = New-Object 'System.Collections.Generic.List[int]'
             $rs = New-Object 'System.Collections.Generic.List[int]'
@@ -2266,17 +2367,53 @@ while (Test-Path -LiteralPath $flag) {
                 $names.Add($base)
                 if ($p -and @($p).Count -ge 2) { $cs.Add([int]@($p)[0]); $rs.Add([int]@($p)[1]) } else { $cs.Add(-1); $rs.Add(-1) }
             }
-            $got = [KvDesk]::Place($names.ToArray(), $cs.ToArray(), $rs.ToArray())
-            if ($got -lt $names.Count) { $ok = $false }
+            $namesArr = $names.ToArray(); $csArr = $cs.ToArray(); $rsArr = $rs.ToArray()
         }
-        $tries++
-        if ($ok -or $tries -ge 90) { Set-Content -LiteralPath $mark -Value $stamp }
     }
+    $applied = $false
+    if ($stamp) { try { $applied = (((Get-Content -LiteralPath $mark -Raw -ErrorAction Stop) + '').Trim() -eq $stamp) } catch {} }
+    if ($c -and -not $polDone) { Apply-Pol; [KvDesk]::Refresh(); $polDone = $true }
+    elseif ($c -and $tick % 10 -eq 3) { Apply-Pol }   # 20 giay mot lan   # tro ly hoc sinh co the go chinh sach hinh nen khi tra hinh nen cu: dat lai
+    if ($c -and $stamp -and -not $applied -and $tries -eq 0) { [KvDesk]::Reset() }   # thiet ke moi: dat va khoa lai tu dau
+    # Hinh nen duoc giu theo thu tu uu tien: (1) hinh nen theo tiet ma trang Tuong tac vua gui (trang tro ly hoc sinh ve ra wall.png va ghi wall-orig.txt
+    # trong luc dang dung), (2) hinh nen trong thiet ke Desktop. Hoc sinh doi bang cach nao cung bi dat lai; hai he thong khong tranh nhau.
+    $wantWall = ''
+    if ((Test-Path -LiteralPath $iaFile) -and (Test-Path -LiteralPath $iaWall)) { $wantWall = $iaWall }
+    elseif ($c -and $c.wall -and (Test-Path -LiteralPath $c.wall)) { $wantWall = [string]$c.wall }
+    if ($wantWall) {
+        if ($wantWall -ne $iaWall -and $wallStamp -ne $stamp) {
+            Set-Reg 'HKCU:\Control Panel\Desktop' 'WallpaperStyle' '10' 'String'
+            Set-Reg 'HKCU:\Control Panel\Desktop' 'TileWallpaper' '0' 'String'
+            Set-Reg 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Wallpapers' 'BackgroundType' 0 'DWord'   # 0 = mot hinh (khong trinh chieu, khong Spotlight)
+            [KvDesk]::SetWall(20, 0, $wantWall, 3) | Out-Null
+            $wallStamp = $stamp
+        } elseif ($tick % 3 -eq 0) {
+            $cw = [KvDesk]::Wall()
+            if (-not $cw -or ($cw -ine $wantWall)) { [KvDesk]::SetWall(20, 0, $wantWall, 3) | Out-Null }
+        }
+    }
+    if ($c -and $c.icons -and $namesArr) {
+        Fix-IconSize
+        $got = [KvDesk]::Place($namesArr, $csArr, $rsArr)   # lan dau dat va ghi nho, cac lan sau dua icon bi keo di ve cho cu
+        if (-not $applied -and $stamp) {
+            $tries++
+            if ($got -ge $namesArr.Count -or $tries -ge 45) { Set-Content -LiteralPath $mark -Value $stamp; $tries = 0 }
+        }
+    } elseif ($c -and $stamp -and -not $applied) { Set-Content -LiteralPath $mark -Value $stamp }
     if ($c -and $c.icons -and $tick % 3 -eq 0) { Move-Stray ([Environment]::GetFolderPath('Desktop')) }
-    if ($tick % 10 -eq 0) { Set-Content -LiteralPath $alive -Value (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') }
+    # Public Desktop: cac phan mem (Edge, Chrome, Zoom...) hay tu them icon moi. Hoc sinh khong xoa duoc, nen nho dich vu SYSTEM don lai (toi da 30 giay mot lan)
+    if ($c -and $c.icons -and $tick % 15 -eq 5 -and ((Get-Date) - $lastSvc).TotalSeconds -gt 60) {
+        $pubd = Join-Path $env:PUBLIC 'Desktop'
+        $extra = @(Get-ChildItem -LiteralPath $pubd -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -ine 'desktop.ini' -and (@($c.icons) -inotcontains $_.Name) })
+        if ($extra.Count -gt 0) { $lastSvc = Get-Date; & sc.exe start 'KhoaVeyonService_desklock-start' | Out-Null }
+    }
+    if ($tick % 5 -eq 0) { Set-Content -LiteralPath $alive -Value (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') }
     $tick++
-    Start-Sleep -Seconds 1
+    Start-Sleep -Seconds 2
 }
+# da mo khoa: tra lai chuot phai, hinh nen doi duoc, icon he thong
+Clear-Pol
+[KvDesk]::Refresh()
 '@
             Set-Content -LiteralPath (Join-Path $root 'KhoaVeyonDesk.ps1') -Value $guardSrc -Encoding UTF8
             ([ordered]@{ wall = $wallDst; icons = $iconNames; pos = $pos; stamp = $stamp } | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath (Join-Path $root 'desk.json') -Encoding UTF8
@@ -2309,9 +2446,48 @@ while (Test-Path -LiteralPath $flag) {
         foreach ($pr in @(Get-ChildItem (Join-Path $env:SystemDrive 'Users') -Directory -ErrorAction SilentlyContinue)) {   # lan khoa sau se dat lai vi tri icon
             Remove-Item -LiteralPath (Join-Path $pr.FullName 'AppData\Local\KhoaVeyon\deskstamp.txt') -Force -ErrorAction SilentlyContinue
         }
+        # Chinh sach theo nguoi dung do guard dat (khoa hinh nen, chuot phai Desktop, an icon he thong): guard tu go khi thoat, nhung hoc sinh da dang xuat
+        # hoac guard bi tat dot ngot thi con sot lai, nen go lai o day cho moi tai khoan: dang dang nhap (HKEY_USERS) va chua dang nhap (nap NTUSER.DAT).
+        $kvPol = {
+            param($hive)
+            $pl = "$hive\Software\Microsoft\Windows\CurrentVersion\Policies"
+            Remove-ItemProperty -Path "$pl\ActiveDesktop" -Name NoChangingWallPaper -ErrorAction SilentlyContinue
+            Remove-ItemProperty -Path "$pl\Explorer" -Name NoThemesTab, NoViewContextMenu -ErrorAction SilentlyContinue
+            Remove-ItemProperty -Path "$pl\System" -Name NoDispBackgroundPage, NoDispCPL -ErrorAction SilentlyContinue
+            foreach ($pn in @('NewStartPanel', 'ClassicStartMenu')) {
+                foreach ($g in @('{20D04FE0-3AEA-1069-A2D8-08002B30309D}', '{645FF040-5081-101B-9F08-00AA002F954E}', '{59031a47-3f72-44a7-89c5-5595fe6b30ee}', '{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}', '{5399E694-6CE5-4D6D-8DCE-D0E2E5A5E5E4}')) {
+                    Remove-ItemProperty -Path "$hive\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\$pn" -Name $g -ErrorAction SilentlyContinue
+                }
+            }
+        }
+        $loadedSids = @()
+        foreach ($u in @(Get-ChildItem 'Registry::HKEY_USERS' -ErrorAction SilentlyContinue)) {
+            if ($u.PSChildName -match '^S-1-5-21-[\d-]+$') { $loadedSids += $u.PSChildName; try { & $kvPol ('Registry::HKEY_USERS\' + $u.PSChildName) } catch {} }
+        }
+        foreach ($pr in @(Get-ChildItem (Join-Path $env:SystemDrive 'Users') -Directory -ErrorAction SilentlyContinue)) {
+            $nt = Join-Path $pr.FullName 'NTUSER.DAT'
+            if (-not (Test-Path -LiteralPath $nt)) { continue }
+            & reg.exe load 'HKU\KVTMPHIVE' $nt 2>$null | Out-Null
+            if ($LASTEXITCODE -ne 0) { continue }   # dang duoc dung (da xu ly o tren) hoac khong nap duoc
+            try { & $kvPol 'Registry::HKEY_USERS\KVTMPHIVE' } catch {}
+            [gc]::Collect(); [gc]::WaitForPendingFinalizers()
+            & reg.exe unload 'HKU\KVTMPHIVE' 2>$null | Out-Null
+        }
         Start-Sleep -Seconds 3
         Remove-Item -LiteralPath (Join-Path $root 'KhoaVeyonDesk.ps1'), (Join-Path $root 'desk.json') -Force -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath (Join-Path $root 'desk') -Recurse -Force -ErrorAction SilentlyContinue
+        try {   # tra lai trang Personalization trong Cai dat (chi go neu gia tri do chinh KhoaVeyon dat)
+            $spv = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer'
+            $cur = (Get-ItemProperty -Path $spv -Name SettingsPageVisibility -ErrorAction SilentlyContinue).SettingsPageVisibility
+            if ($cur -eq 'hide:personalization;personalization-background;themes;personalization-colors') { Remove-ItemProperty -Path $spv -Name SettingsPageVisibility -ErrorAction SilentlyContinue }
+        } catch {}
+        try {   # tra lai muc "Set as desktop background" trong menu chuot phai
+            Remove-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Shell Extensions\Blocked' -Name '{FFE2A43C-56B9-4bf5-9A79-CC6D4285608A}' -ErrorAction SilentlyContinue
+            foreach ($k in @(Get-ChildItem 'HKLM:\SOFTWARE\Classes\SystemFileAssociations' -ErrorAction SilentlyContinue)) {
+                $v = Join-Path $k.PSPath 'shell\setdesktopwallpaper'
+                if (Test-Path -LiteralPath $v) { Remove-ItemProperty -LiteralPath $v -Name 'ProgrammaticAccessOnly' -ErrorAction SilentlyContinue }
+            }
+        } catch {}
         Log 'DESKLOCK OFF'
     }
 

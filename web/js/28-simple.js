@@ -32,7 +32,7 @@ async function loadHome() {
 const STEP_ICON = {wait: '○', run: '⏳', ok: '✅', warn: '⚠️', bad: '❌'};
 
 function viewHome() {
-  const s = S.simple, r = S.repair, n = S.hosts.length, locked = !!s.locked, busy = s.busy;
+  const s = S.simple, r = S.repair, n = S.hosts.length, locked = !!s.locked, busy = s.busy, opts = Object.assign({apps: true, web: true, desk: true}, s.opts || {});
   const since = s.since ? new Date(s.since * 1000).toLocaleTimeString('vi-VN', {hour: '2-digit', minute: '2-digit'}) : '';
   const steps = (r.steps || []).map(x => `<li class="rp-${x.state}"><span class="rpi">${x.state === 'run' ? '<i class="spin"></i>' : STEP_ICON[x.state] || '○'}</span><div><b>${esc(x.label)}</b>${x.detail ? `<div class="muted">${esc(x.detail)}</div>` : ''}</div></li>`).join('');
   const rep = (r.report || []).filter(x => !x.ok).map(x => `<li><b>${esc(x.host === 'Máy giáo viên' || typeof hn !== 'function' ? x.host : hn(x.host))}</b><ul>${x.issues.map(i => `<li>${esc(i)}</li>`).join('')}</ul></li>`).join('');
@@ -48,11 +48,12 @@ function viewHome() {
         <button class="bigbtn lockb" data-sx="lock" ${busy ? 'disabled' : ''}><span>🔒</span>KHÓA LỚP</button>
         <button class="bigbtn openb" data-sx="unlock" ${busy ? 'disabled' : ''}><span>🔓</span>MỞ KHÓA</button>
       </div>
-      <ul class="lh-what">
-        <li>⛔ <b>Ứng dụng:</b> chặn tất cả, chỉ chạy được ứng dụng trong <a href="#" data-page="keep">danh sách được phép</a></li>
-        <li>🌐 <b>Web:</b> chỉ vào được trang trong <a href="#" data-page="allow">danh sách trang được phép</a> (gồm cả tên miền con như <code>abc.example.com</code>)</li>
-        <li>🖼️ <b>Desktop:</b> khóa bộ icon do bạn <a href="#" data-page="desk">thiết kế</a>. Học sinh vẫn đổi được hình nền (tải ảnh về, Set as background) và kéo icon đổi chỗ</li>
-      </ul>
+      <div class="lh-what lh-opts">
+        <div class="muted" style="margin-bottom:6px">Bấm <b>KHÓA LỚP</b> sẽ khóa đúng những mục được tick dưới đây (MỞ KHÓA luôn gỡ tất cả):</div>
+        <label class="lh-opt"><input type="checkbox" data-sxo="apps" ${opts.apps ? 'checked' : ''} ${busy ? 'disabled' : ''}><span>⛔ <b>Ứng dụng:</b> chặn tất cả, chỉ chạy được ứng dụng trong <a href="#" data-page="keep">danh sách được phép</a> (đồng thời tắt Task Manager, Cài đặt, Registry, CMD, PowerShell)</span></label>
+        <label class="lh-opt"><input type="checkbox" data-sxo="web" ${opts.web ? 'checked' : ''} ${busy ? 'disabled' : ''}><span>🌐 <b>Web:</b> chỉ vào được trang trong <a href="#" data-page="allow">danh sách trang được phép</a> (gồm cả tên miền con như <code>abc.example.com</code>)</span></label>
+        <label class="lh-opt"><input type="checkbox" data-sxo="desk" ${opts.desk ? 'checked' : ''} ${busy ? 'disabled' : ''}><span>🖼️ <b>Desktop:</b> giữ nguyên bộ icon, vị trí icon và hình nền do bạn <a href="#" data-page="desk">thiết kế</a>. Học sinh không thêm, xóa, kéo icon hay đổi hình nền được</span></label>
+      </div>
     </section>
     <section class="card">
       <h3>🔧 Sửa máy tính</h3>
@@ -85,12 +86,14 @@ async function refreshHostsFromServer() {
 
 async function homeLock(on) {
   if (!S.hosts.length) { toast('Chưa có máy nào. Thêm máy hoặc bấm “Quét mạng tìm máy”.', 'warn'); return; }
+  const o = Object.assign({apps: true, web: true, desk: true}, S.simple.opts || {});
+  if (on && !(o.apps || o.web || o.desk)) { toast('Hãy tick ít nhất một mục cần khóa.', 'warn'); return; }
   if (on) {
     const ok = await modal({title: 'Khóa cả lớp?', ok: '🔒 Khóa lớp', danger: true,
-      html: `Khóa <b>${S.hosts.length} máy</b>: chặn mọi ứng dụng và trang web ngoài danh sách được phép, khóa Desktop.<br>Ứng dụng khác đang mở của học sinh sẽ bị đóng, bài chưa lưu có thể mất.`});
+      html: `Khóa <b>${S.hosts.length} máy</b>: ${[o.apps && 'chặn mọi ứng dụng ngoài danh sách được phép', o.web && 'chỉ cho vào các trang web được phép', o.desk && 'khóa Desktop (icon, vị trí, hình nền)'].filter(Boolean).join('; ')}.${o.apps ? '<br>Ứng dụng khác đang mở của học sinh sẽ bị đóng, bài chưa lưu có thể mất.' : ''}`});
     if (!ok) return;
   }
-  try { S.simple = await api('/api/simple_lock', {lock: on, hosts: S.hosts}); S.homeWatch = true; openLog(); render(); }
+  try { S.simple = await api('/api/simple_lock', {lock: on, hosts: S.hosts, opts: o}); S.homeWatch = true; openLog(); render(); }
   catch (e) { toast(e.message, 'err'); }
 }
 
@@ -181,7 +184,7 @@ function viewDesk() {
   const appBtns = DESK_APPS.map((a, i) => `<button class="chip" data-dkx="addapp" data-i="${i}">+ ${a[2]} ${esc(a[0])}</button>`).join('');
   const bg = S.deskBg ? `background-image:url('${S.deskBg}')` : '';
   return `<div class="stack deskpage">
-    <div class="note">Đây là <b>màn hình Desktop giả lập</b> của học sinh. Kéo icon đến vị trí muốn, bấm <b>Gửi xuống máy học sinh</b>. Bộ icon bị khóa (học sinh không thêm, xóa, đổi tên được), nhưng <b>học sinh vẫn kéo đổi chỗ icon</b> và <b>vẫn đổi được hình nền</b> (tải ảnh về, chuột phải → Set as desktop background). Hình nền và vị trí do bạn thiết kế chỉ được đặt <b>một lần</b> mỗi khi bạn gửi thiết kế mới.</div>
+    <div class="note">Đây là <b>màn hình Desktop giả lập</b> của học sinh. Kéo icon đến vị trí muốn, bấm <b>Gửi xuống máy học sinh</b>. Khi khóa Desktop, <b>chỉ đúng các icon bạn đặt ở đây</b> hiện trên máy học sinh (icon khác, kể cả This PC / Thùng rác, bị ẩn hoặc dọn đi). Học sinh <b>không thêm, xóa, đổi tên, kéo đổi chỗ icon</b> và <b>không đổi được hình nền</b> (chuột phải Desktop bị tắt, “Set as desktop background” bị chặn; nếu có cách lách thì bị đặt lại trong vài giây). Mở khóa Desktop là mọi thứ trở lại bình thường.</div>
     <div class="deskgrid">
       <section class="card">
         <h3>Màn hình học sinh <span class="badge">${D.items.length} icon</span>${D.dirty ? '<span class="badge warn">chưa lưu</span>' : ''}</h3>
@@ -197,7 +200,8 @@ function viewDesk() {
       <div class="stack">
         <section class="card"><h3>Icon đang chọn</h3><div id="dkSide">${deskSideHtml()}</div></section>
         <section class="card"><h3>Hình nền</h3>
-          <div class="row"><button class="btn sm" data-dkx="wall">🖼 Chọn ảnh nền...</button>${D.wall ? '<button class="btn sm ghost" data-dkx="nowall">Bỏ ảnh nền</button>' : '<span class="muted">Chưa chọn: giữ hình nền hiện tại của máy học sinh</span>'}</div></section>
+          <div class="row"><button class="btn sm" data-dkx="wall">🖼 Chọn ảnh nền...</button>${D.wall ? '<button class="btn sm ghost" data-dkx="nowall">Bỏ ảnh nền</button>' : '<span class="muted">Chưa chọn: giữ hình nền hiện tại của máy học sinh (vẫn không cho học sinh đổi)</span>'}</div>
+          <p class="hint" style="margin:10px 0 0">Muốn hình nền có <b>tiêu đề lớp, số máy và tên em ngồi</b>? Dùng <a href="#" data-page="interact">Hình nền máy học sinh ở trang Tương tác</a>: hình đó được ưu tiên trong lúc đang dùng, bấm “Trả hình nền cũ” thì máy tự quay về hình nền thiết kế ở đây. Hai nơi không còn đè lên nhau.</p></section>
         <section class="card"><h3>Thêm icon</h3>
           <label class="field">Ứng dụng</label><div class="chips">${appBtns}</div>
           <label class="field" style="margin-top:12px">Trang web trong danh sách được phép</label><div class="chips">${siteBtns || '<span class="muted">Danh sách trang được phép đang trống</span>'}</div>
@@ -234,6 +238,11 @@ async function deskPushNow(lock) {
 }
 
 /* ---------- sự kiện ---------- */
+document.addEventListener('change', e => {
+  const t = e.target; if (!t.dataset || !t.dataset.sxo) return;
+  S.simple.opts = Object.assign({apps: true, web: true, desk: true}, S.simple.opts || {}, {[t.dataset.sxo]: t.checked});
+});
+
 document.addEventListener('click', async e => {
   const m = e.target.closest('#modeBtn');
   if (m) { setMode(isSimple() ? 'full' : 'simple'); return; }

@@ -33,6 +33,28 @@ def local_ips():
     return {i for i in ips if i and not i.startswith('127.')}
 
 
+def is_this_pc(host):
+    """Tên máy / IP này chính là máy đang chạy KhoaVeyon (máy giáo viên) không. Dùng để không bao giờ khóa nhầm máy giáo viên khi
+    nó có mặt trong danh sách máy (quét mạng thấy cả máy mình, hoặc giáo viên tự gõ tên máy mình). Địa chỉ loopback (127.x, localhost) không tính:
+    chúng chỉ dùng khi thử nghiệm và không thể là máy học sinh thật."""
+    hh = (split_host_port(host)[0] or '').strip().lower()
+    if not hh or hh.startswith('127.') or hh in ('localhost', '::1'):
+        return False
+    try:
+        mine = {socket.gethostname().lower(), (socket.getfqdn() or '').lower()}
+    except Exception:  # noqa
+        mine = set()
+    if hh in mine or hh.split('.')[0] == socket.gethostname().lower():
+        return True
+    ips = local_ips()
+    if hh in ips:
+        return True
+    try:
+        return socket.gethostbyname(hh) in ips
+    except Exception:  # noqa
+        return False
+
+
 _TCP_CACHE = {}          # (host, port) -> (thời điểm, kết quả); máy tắt chỉ phải chờ một lần mỗi vài giây
 _TCP_CACHE_LOCK = threading.Lock()
 TCP_NEG_TTL = 8          # giây nhớ kết quả "không kết nối được"

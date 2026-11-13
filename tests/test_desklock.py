@@ -44,6 +44,7 @@ class DeskLock(unittest.TestCase):
         self.assertEqual(guard.count('('), guard.count(')'))
         self.assertIn('LVM_SETITEMPOSITION', guard)
         self.assertIn('NoChangingWallPaper', self.bat)
+        self.assertIn('Fixed.TryGetValue', guard)   # icon bị kéo đi thì được đưa về
 
 
 if __name__ == '__main__':

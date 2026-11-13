@@ -10,7 +10,7 @@ Chương trình chạy trên **máy giáo viên (máy chủ Veyon)**, giao diệ
 
 > Chương trình không thay thế Veyon. Nó dùng Veyon để ra lệnh, và dùng file `KhoaVeyonServices.bat` đã cài trên các máy học sinh.
 
-**Phiên bản hiện tại: 5.6.0** (xem [kv/paths.py](kv/paths.py), biến `VERSION`, là nguồn số bản chính thức)
+**Phiên bản hiện tại: 6.0.0** (xem [kv/paths.py](kv/paths.py), biến `VERSION`, là nguồn số bản chính thức)
 
 ## Thiết lập ban đầu (tự động)
 
@@ -623,3 +623,12 @@ Tối ưu nhỏ, không đổi hành vi: bảng Trạng thái máy dò cổng Ve
 - **🔧 Sửa máy tính:** tự làm lần lượt quét mạng (nhận lại IP đổi) → chẩn đoán → sửa, rồi chẩn đoán lại để báo kết quả.
 - **Trang Desktop học sinh:** màn hình giả lập để kéo icon, chọn hình nền rồi gửi xuống các máy (`C:\cmd\desktop\layout.json`).
 - **Khóa Desktop đổi cách:** học sinh nay đổi được hình nền và kéo đổi chỗ icon; bộ icon vẫn bị khóa (không thêm, xóa, đổi tên). Hình nền và vị trí của giáo viên chỉ đặt một lần mỗi lần gửi thiết kế mới. Chưa kiểm chứng trên Windows thật.
+
+## 6.0.0
+- **Sửa lỗi "khóa máy giáo viên, bắt nhập mật khẩu liên tục":** sau khi bấm KHÓA LỚP, API `/api/simple` trả `locked: true` (lớp đang khóa) và giao diện nhầm đó là *khóa màn hình ứng dụng*, nên cứ vài giây lại hiện ô nhập mật khẩu. Giờ chỉ mã HTTP 423 hoặc chính `/api/applock` mới được coi là khóa màn hình ứng dụng. Máy giáo viên (tên máy hoặc IP trùng máy đang chạy KhoaVeyon) cũng không bao giờ bị đưa vào danh sách khóa.
+- **KHÓA LỚP khóa đúng thứ bạn chọn:** ba ô tick *Ứng dụng / Web / Desktop* ngay trên nút; chỉ các mục được tick mới khóa và mới gửi danh sách/thiết kế xuống máy (lựa chọn được nhớ). MỞ KHÓA luôn gỡ cả ba.
+- **Khóa Desktop khóa thật:** học sinh không kéo đổi chỗ icon được (bị đưa về trong ~2 giây), không đổi được hình nền (chuột phải Desktop tắt, "Set as desktop background" bị chặn, bị đổi bằng cách khác thì đặt lại sau ≤6 giây). Chỉ tài khoản học sinh bị ảnh hưởng, tài khoản quản trị thì không. Icon không có trong thiết kế bị dọn: Desktop thường, Desktop OneDrive, Public Desktop (phần mềm tự thêm icon thì dịch vụ dọn lại trong ≤30 giây), cùng This PC / Thùng rác bị ẩn. Mở khóa trả lại nguyên trạng, kể cả với tài khoản đã đăng xuất.
+- **Hình nền theo tiết (trang Tương tác) và hình nền thiết kế Desktop không còn đè nhau:** hình theo tiết (có tiêu đề, số máy, tên em) được ưu tiên trong lúc dùng; "Trả hình nền cũ" thì máy tự về hình nền thiết kế.
+- **Màn hình giả lập Desktop:** icon vẽ đúng tỷ lệ với màn hình (trước đây to quá cỡ vì tính theo chiều rộng cửa sổ trình duyệt).
+- **Sửa lỗi kiểm tra cập nhật luôn báo "đã mới nhất":** khi kho GitHub chưa có Release mà có tag cũ (ví dụ `V5`) thì hàm dừng ở tag và không đọc `VERSION` ở nhánh chính. Giờ so sánh cả Release, mọi tag (lấy số lớn nhất) và `VERSION` trong nhánh chính rồi lấy bản cao nhất.
+- **Khóa Desktop chặt hơn (bổ sung):** xóa mục "Set as desktop background" khỏi menu chuột phải file ảnh, ẩn trang Personalization trong Cài đặt, tắt Display kiểu cũ, cố định cỡ icon 48 px (Ctrl + lăn chuột bị đưa về). Chương trình giữ chạy mức ưu tiên thấp nhất, chu kỳ 2 giây, chỉ đọc lại cấu hình khi file đổi để không làm chậm máy yếu.

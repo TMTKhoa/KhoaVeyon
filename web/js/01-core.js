@@ -102,7 +102,9 @@ async function api(path, body, opts) {   // opts.quiet: lệnh chạy ngầm the
   try {
     try { r = await fetch(path, init); } catch (e) { throw new Error('Mất kết nối với chương trình. Hãy mở lại bằng Chay-KhoaVeyon.bat'); }
     const data = await r.json().catch(() => ({error: 'Phản hồi không hợp lệ'}));
-    if (r.status === 423 || data.locked) { if (typeof showLock === 'function') showLock(data); throw new Error(data.error || 'Ứng dụng đang khóa'); }
+    // Chỉ HTTP 423 (máy chủ chặn vì màn hình ứng dụng đang khóa) hoặc chính /api/applock mới là khóa màn hình ứng dụng.
+    // Trường `locked` ở API khác (vd /api/simple: lớp học đang khóa) KHÔNG được hiểu là khóa ứng dụng, nếu không giáo viên bị bắt nhập mật khẩu liên tục.
+    if (r.status === 423 || (data.locked && String(path).split('?')[0] === '/api/applock')) { if (typeof showLock === 'function') showLock(data); throw new Error(data.error || 'Ứng dụng đang khóa'); }
     if (!r.ok || data.error) throw new Error(data.error || ('Lỗi ' + r.status));
     return data;
   } finally {

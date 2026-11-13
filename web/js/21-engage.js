@@ -12,7 +12,7 @@ function viewEngage() {
       <p class="sub">Chọn ngẫu nhiên một em đang có mặt trong sơ đồ chỗ ngồi của lớp (bỏ qua em vắng và máy tắt); tên em hiện lên máy của em đó. Mỗi vòng không gọi trùng cho đến khi hết lớp.</p>
       <div class="row"><button class="btn primary" data-ev="draw">🎲 Bốc thăm</button></div></section>
     <section class="card"><h3>🖼 Hình nền máy học sinh</h3>
-      <p class="sub">Vẽ hình nền có tiêu đề, số máy và tên em đang ngồi, gửi tới các máy đang chọn (không chọn = tất cả). Có thể gắn mẫu vào từng chế độ ở trang Tự động để đầu tiết tự đổi, hết tiết tự trả lại hình nền cũ của em.</p>
+      <p class="sub">Vẽ hình nền có tiêu đề, số máy và tên em đang ngồi, gửi tới các máy đang chọn (không chọn = tất cả). Nếu Desktop đang khóa (trang <a href="#" data-page="desk">Desktop học sinh</a>), hình này được ưu tiên trong lúc dùng và máy tự về hình nền thiết kế khi bạn bấm “Trả hình nền cũ”. Có thể gắn mẫu vào từng chế độ ở trang Tự động để đầu tiết tự đổi, hết tiết tự trả lại hình nền cũ của em.</p>
       <div class="row" style="flex-wrap:wrap;align-items:flex-start">
         <div style="flex:1;min-width:260px"><canvas id="wallPrev" class="wallprev" width="640" height="360"></canvas></div>
         <div style="flex:1;min-width:260px;display:grid;gap:8px">

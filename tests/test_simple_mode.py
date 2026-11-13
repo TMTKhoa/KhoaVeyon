@@ -67,6 +67,38 @@ class DeskDesign(unittest.TestCase):
         self.assertEqual(lay['items'][0], {'name': 'A', 'kind': 'app', 'target': 'notepad.exe', 'args': '', 'col': 3, 'row': 2})
 
 
+class QuickLockOptions(unittest.TestCase):
+    def test_opts_choose_the_lock_steps(self):
+        from kv.simple import clean_opts, lock_steps_for
+        self.assertEqual(lock_steps_for(clean_opts({})), ('lockall-start', 'webonly', 'desklock-start'))
+        self.assertEqual(lock_steps_for(clean_opts({'apps': False, 'desk': False})), ('webonly',))
+        self.assertEqual(lock_steps_for(clean_opts({'web': False})), ('lockall-start', 'desklock-start'))
+        self.assertEqual(clean_opts('junk'), {'apps': True, 'web': True, 'desk': True})
+
+    def test_lock_needs_at_least_one_option(self):
+        from kv.runtime import ApiError
+        from kv.simple import api_simple_lock
+        with self.assertRaises(ApiError):
+            api_simple_lock({'lock': True, 'hosts': ['10.0.0.5'], 'opts': {'apps': False, 'web': False, 'desk': False}})
+
+    def test_teacher_pc_is_never_a_target(self):
+        import socket
+        from kv.network import is_this_pc, local_ips
+        self.assertTrue(is_this_pc(socket.gethostname()))
+        for ip in local_ips():
+            self.assertTrue(is_this_pc(ip))
+            self.assertTrue(is_this_pc(ip + ':11100'))
+        self.assertFalse(is_this_pc('127.0.0.1'))
+        self.assertFalse(is_this_pc('may-hoc-sinh-khong-ton-tai-xyz'))
+
+    def test_class_lock_flag_is_not_mistaken_for_app_lock_screen(self):
+        """Lỗi cũ: /api/simple trả locked:true khi lớp đang khóa, giao diện tưởng là khóa màn hình ứng dụng và bắt nhập mật khẩu liên tục."""
+        with open(os.path.join(ROOT, 'web', 'js', '01-core.js'), encoding='utf-8') as f:
+            core = f.read()
+        self.assertNotIn('r.status === 423 || data.locked)', core)
+        self.assertIn("'/api/applock'", core)
+
+
 class Wiring(unittest.TestCase):
     def test_routes_and_ui_pref(self):
         from kv.routes import GET_ROUTES, POST_ROUTES
@@ -87,19 +119,32 @@ class Wiring(unittest.TestCase):
         self.assertIn('desklock-start', LOCK_STEPS)
         self.assertEqual(UNLOCK_STEPS[0], 'desklock-stop')
 
-    def test_desklock_script_lets_students_change_wallpaper_and_move_icons(self):
+    def test_desklock_script_locks_wallpaper_and_icon_positions(self):
         with open(os.path.join(ROOT, 'payload', 'KhoaVeyonServices.bat'), encoding='utf-8') as f:
             bat = f.read()
         i = bat.index("'desklock-start' {")
         j = bat.index("'desklock-stop' {")
         start = bat[i:j]
-        self.assertNotIn('New-ItemProperty -Path "$pol\\ActiveDesktop" -Name NoChangingWallPaper', start)   # không còn khóa hình nền
-        self.assertIn('Remove-ItemProperty -Path "$pol\\ActiveDesktop" -Name NoChangingWallPaper', start)   # gỡ khóa của bản cũ
         self.assertIn('layout.json', start)
         guard = start[start.index("$guardSrc = @'"):]
-        self.assertIn('Placed.Contains', guard)                       # mỗi icon chỉ đặt một lần
-        self.assertIn('deskstamp.txt', guard)                         # và chỉ một lần cho mỗi bản thiết kế
-        self.assertNotIn('Arrange()', guard.split('$tick = 0')[1])    # vòng lặp không kéo icon về chỗ cũ mỗi giây
+        loop = guard.split('$tick = 0')[1]
+        self.assertIn('Fixed.TryGetValue', guard)                     # vị trí đã khóa của từng icon
+        self.assertIn('LVM_GETITEMPOSITION', guard)                   # đọc vị trí để phát hiện học sinh kéo icon
+        self.assertIn('NoChangingWallPaper', guard)                   # chặn đổi hình nền bằng chính sách (theo từng học sinh, không đụng quản trị viên)
+        self.assertIn('NoViewContextMenu', guard)                     # tắt chuột phải Desktop (Set as background, Auto arrange)
+        self.assertIn("[KvDesk]::Wall()", loop)                       # hình nền bị đổi thì đặt lại
+        self.assertIn('Clear-Pol', loop)                              # mở khóa thì trả lại như cũ
+        self.assertIn('Fix-IconSize', guard)                          # Ctrl + lăn chuột / View > Large icons bị đưa về cỡ cố định
+        self.assertNotIn('Placed.Contains', guard)                    # không còn "đặt một lần rồi mặc kệ"
+        stop = bat[j:bat.index("'blockai' {")]
+        self.assertIn('KVTMPHIVE', stop)                              # mở khóa dọn cả chính sách của tài khoản đã đăng xuất
+
+    def test_interact_wallpaper_and_design_wallpaper_do_not_fight(self):
+        with open(os.path.join(ROOT, 'payload', 'KhoaVeyonServices.bat'), encoding='utf-8') as f:
+            bat = f.read()
+        guard = bat[bat.index("$guardSrc = @'"):bat.index("'desklock-stop' {")]
+        self.assertIn('wall-orig.txt', guard)     # hình nền theo tiết của trang Tương tác đang dùng thì guard giữ đúng hình đó
+        self.assertIn('$wantWall', guard)
 
     def test_front_end_hooks(self):
         def rd(p):
